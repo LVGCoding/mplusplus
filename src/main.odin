@@ -1,6 +1,6 @@
 package main
 
-import orui "../lib/orui/src"
+import orui "../libs/orui/src"
 import rl "vendor:raylib"
 
 import "core:fmt"
@@ -8,6 +8,8 @@ import "core:os"
 
 main :: proc() {
     // Sample taken from Raylib repo
+    rl.SetConfigFlags({.WINDOW_RESIZABLE})
+
     rl.InitWindow(800, 600, "Test Window")
     for !rl.WindowShouldClose() {
         rl.BeginDrawing()
