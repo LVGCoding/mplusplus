@@ -10,12 +10,7 @@
 #include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
 
-// Font Table
-enum FontId : uint16_t { 
-  FONT_BODY = 0,
-  FONT_BOLD = 1, 
-  FONT_COUNT 
-};
+#include "font.h"
 
 // Clay error handling
 static void HandleClayError(Clay_ErrorData error) {
@@ -63,11 +58,7 @@ static void Layout(const std::string& EditorText) {
   }
 }
 
-// Load the font table with selected fonts
-static void LoadFontTable(Font fonts[]){
-  fonts[FONT_BODY] = LoadFontEx("assets/font/LiberationSans-Regular.ttf", 32, nullptr, 0);
-  fonts[FONT_BOLD] = LoadFontEx("assets/font/LiberationSans-Bold.ttf", 32, nullptr, 0);
-}
+
 
 int main(int argc, char* argv[]) {
   // Open the application window with set parameters
@@ -79,6 +70,7 @@ int main(int argc, char* argv[]) {
   // Load the font tables
   Font fonts[FONT_COUNT];
   LoadFontTable(fonts);
+  defer(UnloadFontTable(fonts));
 
   // Allocate Clay's memory arena, deferring deallocation until main terminates
   uint32_t memorySize = Clay_MinMemorySize();

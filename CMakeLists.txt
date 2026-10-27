@@ -40,6 +40,7 @@ target_include_directories(clay SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
 
 add_executable(mplusplus
   src/main.cpp
+  src/font.cpp
   src/ui/clay_impl.cpp
   src/ui/clay_renderer_raylib.cpp
 )
