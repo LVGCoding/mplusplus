@@ -1,3 +1,6 @@
+// THIS MAIN FILE CURRENTLY ACTS AS A PROTOTYPE, AND CONTAINS MANY FEATURES THAT WILL
+// BE BROKEN OFF LATER!
+
 #include <cstdio>
 #include <cstdlib>
 #include <string>
