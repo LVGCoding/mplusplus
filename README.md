@@ -12,6 +12,7 @@ Blank
 
 - [raylib](https://www.raylib.com/) 5.5 (CMake downloads and builds it automatically)
 - [clay](https://github.com/nicbarker/clay) 0.14 (vendored in `src/lib/clay.h`)
+- [Native File Dialog - Extended](https://github.com/btzy/nativefiledialog-extended) 1.4.1
 
 ## Building
 
