@@ -32,6 +32,13 @@ if(NOT raylib_FOUND)
   FetchContent_MakeAvailable(raylib)
 endif()
 
+FetchContent_Declare(
+  nativefiledialog
+  URL https://github.com/btzy/nativefiledialog-extended/archive/refs/tags/v1.2.1.tar.gz
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(nativefiledialog)
+
 # Clay is a single-header library vendored in src/lib.
 add_library(clay INTERFACE)
 target_include_directories(clay SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
@@ -40,15 +47,17 @@ target_include_directories(clay SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src
 
 add_executable(mplusplus
   src/main.cpp
-  src/font.cpp
-  src/layout.cpp
-  src/input.cpp
-  # stc/file.cpp
+  src/ui/font.cpp
+  src/ui/file_dialog.cpp
+  src/editor/editor.cpp
+  src/ui/layout.cpp
+  src/editor/input.cpp
+  src/editor/file.cpp
   src/ui/clay_impl.cpp
   src/ui/clay_renderer_raylib.cpp
 )
 target_include_directories(mplusplus PRIVATE src)
-target_link_libraries(mplusplus PRIVATE raylib clay)
+target_link_libraries(mplusplus PRIVATE raylib clay nfd)
 
 if(MSVC)
   # /Zc:preprocessor gives MSVC a standard-conforming preprocessor, which

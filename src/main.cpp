@@ -1,6 +1,3 @@
-// THIS MAIN FILE CURRENTLY ACTS AS A PROTOTYPE, AND CONTAINS MANY FEATURES THAT WILL
-// BE BROKEN OFF LATER!
-
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -10,9 +7,10 @@
 #include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
 
-#include "font.h"
-#include "layout.h"
-#include "input.h"
+#include "ui/font.h"
+#include "editor/editor.h"
+#include "ui/layout.h"
+#include "editor/input.h"
 
 // Clay error handling
 static void HandleClayError(Clay_ErrorData error) {
@@ -49,7 +47,8 @@ int main(int argc, char* argv[]) {
     Clay_SetDebugModeEnabled(true);
   }
 
-  std::string EditorText;
+  Editor editor;
+  editor.NewFile();
 
   // Main render loop
   while (!WindowShouldClose()) {
@@ -62,16 +61,20 @@ int main(int argc, char* argv[]) {
     Clay_UpdateScrollContainers(true, {wheel.x, wheel.y}, GetFrameTime());
 
     // Primitive user input capture
-    HandleInput(EditorText);
+    if (File* file = editor.ActiveFile()) {
+      HandleInput(file->text);
+    }
 
     Clay_BeginLayout();
-    Layout(EditorText);
+    Layout(editor);
     Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
 
     BeginDrawing();
     ClearBackground(BLACK);
     ClayRaylib_Render(commands, fonts);
     EndDrawing();
+
+    ProcessLayoutActions(editor);
   }
   return 0;
 }

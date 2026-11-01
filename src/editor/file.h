@@ -8,7 +8,7 @@ struct File {
     std::string text;
     std::filesystem::path path;
     bool modified = false;
-}
+};
 
 bool LoadFile(File& file,
               const std::filesystem::path& path,
