@@ -2,6 +2,12 @@
 
 M++ (bundled with the M++ Editor) is a work-in-progress programming language written in c++ that combines the visibility of LaTeX with the functionality of raw code.
 
+## Usage
+Blank
+
+### Flags
+- ```--debug | --d``` = Run the program in debug mode.
+
 ## Dependencies
 
 - [raylib](https://www.raylib.com/) 5.5 (CMake downloads and builds it automatically)
@@ -10,6 +16,7 @@ M++ (bundled with the M++ Editor) is a work-in-progress programming language wri
 ## Building
 
 You need CMake 3.20+ and a C++20 compiler (GCC 10+, Clang 12+, or Visual Studio 2022).
+M++ includes an automated build script ```build.sh``` that compiles and runs the program.
 
 ```sh
 cmake --preset debug          # or: cmake --preset release
@@ -32,4 +39,3 @@ cmake --build build --config Release
 - **macOS:** install the Xcode command line tools (`xcode-select --install`) and CMake (`brew install cmake`).
 - **Windows:** open the folder in Visual Studio 2022 (it reads `CMakePresets.json`), or run the commands above from a Developer PowerShell.
 
-Press **F12** in the app to toggle clay's layout debugger.

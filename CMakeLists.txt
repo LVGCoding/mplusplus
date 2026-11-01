@@ -42,6 +42,8 @@ add_executable(mplusplus
   src/main.cpp
   src/font.cpp
   src/layout.cpp
+  src/input.cpp
+  # stc/file.cpp
   src/ui/clay_impl.cpp
   src/ui/clay_renderer_raylib.cpp
 )

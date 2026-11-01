@@ -12,6 +12,7 @@
 
 #include "font.h"
 #include "layout.h"
+#include "input.h"
 
 // Clay error handling
 static void HandleClayError(Clay_ErrorData error) {
@@ -61,18 +62,7 @@ int main(int argc, char* argv[]) {
     Clay_UpdateScrollContainers(true, {wheel.x, wheel.y}, GetFrameTime());
 
     // Primitive user input capture
-    int key = GetCharPressed();
-    while (key > 0) {
-        if (key >= 32 && key <= 126) {
-            EditorText += static_cast<char>(key);
-        }
-        key = GetCharPressed();
-    }
-
-    // Handle deleting characters
-    if (IsKeyPressed(KEY_BACKSPACE) && !EditorText.empty()) {
-        EditorText.pop_back();
-    }
+    HandleInput(EditorText);
 
     Clay_BeginLayout();
     Layout(EditorText);
