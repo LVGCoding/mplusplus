@@ -10,11 +10,13 @@
 
 namespace {
 bool openRequested = false;
+bool saveRequested = false;
 }
 
 void Layout(Editor& editor){
     static const std::string emptyText;
     const File* activeFile = editor.ActiveFile();
+    const bool canSave = activeFile && !activeFile->path.empty();
     const std::string& EditorText = activeFile ? activeFile->text : emptyText;
     const Clay_Color background = {30, 30, 36, 255};
     const Clay_Color panel = {45, 45, 54, 255};
@@ -34,16 +36,40 @@ void Layout(Editor& editor){
             .cornerRadius = CLAY_CORNER_RADIUS(8)}) {
         CLAY_TEXT(CLAY_STRING("M++"),
                     {.textColor = text, .fontId = FONT_BOLD, .fontSize = 32});
-        CLAY(CLAY_ID("OpenButton"),
-             {.layout = {.padding = CLAY_PADDING_ALL(8)},
-              .backgroundColor = {65, 65, 75, 255}}) {
-            CLAY_TEXT(CLAY_STRING("Open file..."),
-                      {.textColor = text,
-                       .fontId = FONT_BODY,
-                       .fontSize = 20});
+        CLAY(CLAY_ID("FileActions"),
+             {.layout = {.childGap = 8,
+                         .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
+            CLAY(CLAY_ID("OpenButton"),
+                 {.layout = {.padding = CLAY_PADDING_ALL(8)},
+                  .backgroundColor = Clay_PointerOver(CLAY_ID("OpenButton"))
+                      ? Clay_Color{80, 80, 94, 255}
+                      : Clay_Color{65, 65, 75, 255},
+                  .cornerRadius = CLAY_CORNER_RADIUS(4)}) {
+                CLAY_TEXT(CLAY_STRING("Open File"),
+                          {.textColor = text,
+                           .fontId = FONT_BODY,
+                           .fontSize = 20});
 
-            if (Clay_Hovered() && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                openRequested = true;
+                if (Clay_Hovered() && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    openRequested = true;
+                }
+            }
+            CLAY(CLAY_ID("SaveButton"),
+                 {.layout = {.padding = CLAY_PADDING_ALL(8)},
+                  .backgroundColor = !canSave
+                      ? Clay_Color{52, 52, 62, 255}
+                      : (Clay_PointerOver(CLAY_ID("SaveButton")) ? Clay_Color{80, 80, 94, 255}
+                                        : Clay_Color{65, 65, 75, 255}),
+                  .cornerRadius = CLAY_CORNER_RADIUS(4)}) {
+                CLAY_TEXT(CLAY_STRING("Save File"),
+                          {.textColor = canSave ? text : Clay_Color{125, 125, 140, 255},
+                           .fontId = FONT_BODY,
+                           .fontSize = 20});
+
+                if (canSave && Clay_Hovered() &&
+                    IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    saveRequested = true;
+                }
             }
         }
         }
@@ -66,18 +92,26 @@ void Layout(Editor& editor){
 }
 
 void ProcessLayoutActions(Editor& editor) {
-    if (!openRequested) {
-        return;
-    }
-    openRequested = false;
-
     std::string error;
-    auto path = ShowOpenFileDialog(error);
-    if (path) {
-        editor.OpenFile(*path, error);
+    if (saveRequested) {
+        saveRequested = false;
+        if (File* file = editor.ActiveFile(); file && !file->path.empty()) {
+            SaveFile(*file, file->path, error);
+        }
+        if (!error.empty()) {
+            std::fprintf(stderr, "%s\n", error.c_str());
+        }
     }
 
-    if (!error.empty()) {
-        std::fprintf(stderr, "%s\n", error.c_str());
+    if (openRequested) {
+        openRequested = false;
+        auto path = ShowOpenFileDialog(error);
+        if (path) {
+            editor.OpenFile(*path, error);
+        }
+
+        if (!error.empty()) {
+            std::fprintf(stderr, "%s\n", error.c_str());
+        }
     }
 }
