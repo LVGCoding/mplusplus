@@ -1,6 +1,3 @@
-// THIS MAIN FILE CURRENTLY ACTS AS A PROTOTYPE, AND CONTAINS MANY FEATURES THAT WILL
-// BE BROKEN OFF LATER!
-
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -10,7 +7,10 @@
 #include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
 
-#include "font.h"
+#include "ui/font.h"
+#include "editor/editor.h"
+#include "ui/layout.h"
+#include "editor/input.h"
 
 // Clay error handling
 static void HandleClayError(Clay_ErrorData error) {
@@ -18,47 +18,6 @@ static void HandleClayError(Clay_ErrorData error) {
     error.errorText.length,
     error.errorText.chars);
 }
-
-// Main app layout
-static void Layout(const std::string& EditorText) {
-  const Clay_Color background = {30, 30, 36, 255};
-  const Clay_Color panel = {45, 45, 54, 255};
-  const Clay_Color text = {230, 230, 235, 255};
-
-  CLAY(CLAY_ID("Root"),
-       {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
-                   .padding = CLAY_PADDING_ALL(16),
-                   .childGap = 16},
-                  .backgroundColor = background}) {
-    CLAY(CLAY_ID("Sidebar"),
-         {.layout = {.sizing = {CLAY_SIZING_FIXED(240), CLAY_SIZING_GROW(0)},
-                     .padding = CLAY_PADDING_ALL(16),
-                     .childGap = 8,
-                     .layoutDirection = CLAY_TOP_TO_BOTTOM},
-          .backgroundColor = panel,
-          .cornerRadius = CLAY_CORNER_RADIUS(8)}) {
-      CLAY_TEXT(CLAY_STRING("M++"),
-                {.textColor = text, .fontId = FONT_BOLD, .fontSize = 32});
-    }
-    CLAY(CLAY_ID("Editor"),
-         {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
-                     .padding = CLAY_PADDING_ALL(16)},
-          .backgroundColor = panel,
-          .cornerRadius = CLAY_CORNER_RADIUS(8)}) {
-      Clay_String clayText = {
-          .isStaticallyAllocated = false,
-          .length = static_cast<int32_t>(EditorText.size()),
-          .chars = EditorText.c_str()
-      };
-      CLAY_TEXT(clayText,
-                {.textColor = text,
-                .fontId = FONT_BODY,
-                .fontSize = 20});
-    }
-  }
-}
-
-
 
 int main(int argc, char* argv[]) {
   // Open the application window with set parameters
@@ -88,7 +47,8 @@ int main(int argc, char* argv[]) {
     Clay_SetDebugModeEnabled(true);
   }
 
-  std::string EditorText;
+  Editor editor;
+  editor.NewFile();
 
   // Main render loop
   while (!WindowShouldClose()) {
@@ -101,27 +61,20 @@ int main(int argc, char* argv[]) {
     Clay_UpdateScrollContainers(true, {wheel.x, wheel.y}, GetFrameTime());
 
     // Primitive user input capture
-    int key = GetCharPressed();
-    while (key > 0) {
-        if (key >= 32 && key <= 126) {
-            EditorText += static_cast<char>(key);
-        }
-        key = GetCharPressed();
-    }
-
-    // Handle deleting characters
-    if (IsKeyPressed(KEY_BACKSPACE) && !EditorText.empty()) {
-        EditorText.pop_back();
+    if (File* file = editor.ActiveFile()) {
+      HandleInput(file->text);
     }
 
     Clay_BeginLayout();
-    Layout(EditorText);
+    Layout(editor);
     Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
 
     BeginDrawing();
     ClearBackground(BLACK);
     ClayRaylib_Render(commands, fonts);
     EndDrawing();
+
+    ProcessLayoutActions(editor);
   }
   return 0;
 }
