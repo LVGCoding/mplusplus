@@ -9,8 +9,8 @@
 #include "font.h"
 
 namespace {
-bool openRequested = false;
-bool saveRequested = false;
+    bool openRequested = false;
+    bool saveRequested = false;
 }
 
 void Layout(Editor& editor){
