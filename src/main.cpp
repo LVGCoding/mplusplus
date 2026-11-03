@@ -30,6 +30,7 @@ int main(int argc, char* argv[]) {
   Font fonts[FONT_COUNT];
   LoadFontTable(fonts);
   defer(UnloadFontTable(fonts));
+  Vector2 fontDpi = GetWindowScaleDPI();
 
   // Allocate Clay's memory arena, deferring deallocation until main terminates
   uint32_t memorySize = Clay_MinMemorySize();
@@ -52,6 +53,14 @@ int main(int argc, char* argv[]) {
 
   // Main render loop
   while (!WindowShouldClose()) {
+    const Vector2 currentDpi = GetWindowScaleDPI();
+    if (currentDpi.x != fontDpi.x || currentDpi.y != fontDpi.y) {
+      UnloadFontTable(fonts);
+      LoadFontTable(fonts);
+      Clay_ResetMeasureTextCache();
+      fontDpi = currentDpi;
+    }
+
     Clay_SetLayoutDimensions(
         {(float)GetScreenWidth(), (float)GetScreenHeight()});
     Vector2 mouse = GetMousePosition();
