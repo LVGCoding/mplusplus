@@ -5,8 +5,8 @@
 #include <cstdio>
 #include <utility>
 
+// Deconstructor, used to cleanup unsaved temp documents at exit
 Editor::~Editor() {
-    // Clean up unsaved temp files at termination
     for (const auto& path : temporaryFiles_) {
         std::error_code error;
         std::filesystem::remove(path, error);
@@ -17,6 +17,7 @@ Editor::~Editor() {
     }
 }
 
+// Create a new file object, becoming the active document
 void Editor::NewFile(const std::filesystem::path& path) {
     File file;
     file.path = path;
@@ -26,6 +27,7 @@ void Editor::NewFile(const std::filesystem::path& path) {
     activeTab_ = files_.size() - 1;
 }
 
+// Creates a new temporary file named "untitled.mpp"
 bool Editor::NewTemporaryFile(std::string& error) {
     error.clear();
     std::error_code filesystemError;
@@ -59,11 +61,13 @@ bool Editor::NewTemporaryFile(std::string& error) {
     return false;
 }
 
+// Check if a file is marked as temporary
 bool Editor::IsTemporaryFile(const File& file) const {
     return std::find(temporaryFiles_.begin(), temporaryFiles_.end(), file.path)
         != temporaryFiles_.end();
 }
 
+// Open a file given a path
 bool Editor::OpenFile(const std::filesystem::path& path,
                       std::string& error) {
     File file;
@@ -77,6 +81,7 @@ bool Editor::OpenFile(const std::filesystem::path& path,
     return true;
 }
 
+// Returns the current active file
 File* Editor::ActiveFile() {
     if (files_.empty()) {
         return nullptr;
