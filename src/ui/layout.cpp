@@ -10,6 +10,7 @@
 #include "clay_renderer_raylib.h"
 
 namespace {
+    bool newRequested = false;
     bool openRequested = false;
     bool saveRequested = false;
     bool fileMenuOpen = false;
@@ -62,7 +63,8 @@ void Layout(Editor& editor) {
     CLAY(CLAY_ID("Root"),
          {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
                      .layoutDirection = CLAY_TOP_TO_BOTTOM},
-          .backgroundColor = {30, 30, 36, 255}}) {
+          .backgroundColor = activeFile ? Clay_Color{30, 30, 36, 255}
+                                        : Clay_Color{255, 255, 255, 255}}) {
         CLAY(CLAY_ID("MenuBar"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(54)},
                          .childGap = 4,
@@ -110,6 +112,7 @@ void Layout(Editor& editor) {
                                                 .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM},
                                .attachTo = CLAY_ATTACH_TO_ELEMENT_WITH_ID},
                   .border = {.color = {205, 205, 205, 255}, .width = CLAY_BORDER_ALL(1)}}) {
+                FileMenuItem(CLAY_ID("NewButton"), CLAY_STRING("New"), true, newRequested);
                 FileMenuItem(CLAY_ID("OpenButton"), CLAY_STRING("Open File"), true, openRequested);
                 FileMenuItem(CLAY_ID("SaveButton"), CLAY_STRING("Save File"), canSave, saveRequested);
             }
@@ -120,7 +123,8 @@ void Layout(Editor& editor) {
             CLAY(CLAY_ID("Editor"),
                  {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
                              .padding = CLAY_PADDING_ALL(16)},
-                  .backgroundColor = {45, 45, 54, 255},
+                  .backgroundColor = activeFile ? Clay_Color{45, 45, 54, 255}
+                                                : Clay_Color{255, 255, 255, 255},
                   .cornerRadius = CLAY_CORNER_RADIUS(8)}) {
                 Clay_String clayText = {
                     .isStaticallyAllocated = false,
@@ -136,10 +140,24 @@ void Layout(Editor& editor) {
 
 void ProcessLayoutActions(Editor& editor) {
     std::string error;
+    if (newRequested) {
+        newRequested = false;
+        if (!editor.NewTemporaryFile(error)) {
+            std::fprintf(stderr, "%s\n", error.c_str());
+        }
+    }
+
     if (saveRequested) {
         saveRequested = false;
         if (File* file = editor.ActiveFile(); file && !file->path.empty()) {
-            SaveFile(*file, file->path, error);
+            if (editor.IsTemporaryFile(*file)) {
+                auto path = ShowSaveFileDialog(file->path.filename(), error);
+                if (path) {
+                    SaveFile(*file, *path, error);
+                }
+            } else {
+                SaveFile(*file, file->path, error);
+            }
         }
         if (!error.empty()) {
             std::fprintf(stderr, "%s\n", error.c_str());

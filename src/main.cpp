@@ -49,7 +49,6 @@ int main(int argc, char* argv[]) {
   }
 
   Editor editor;
-  editor.NewFile();
 
   // Main render loop
   while (!WindowShouldClose()) {

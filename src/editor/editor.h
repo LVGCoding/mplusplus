@@ -7,7 +7,13 @@
 
 class Editor {
 public:
+    ~Editor();
+
     void NewFile(const std::filesystem::path& path = {});
+
+    bool NewTemporaryFile(std::string& error);
+
+    bool IsTemporaryFile(const File& file) const;
 
     bool OpenFile(const std::filesystem::path& path,
                   std::string& error);
@@ -20,5 +26,6 @@ public:
 
 private:
     std::vector<File> files_;
+    std::vector<std::filesystem::path> temporaryFiles_;
     std::size_t activeTab_ = 0;
 };
