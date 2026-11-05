@@ -89,3 +89,15 @@ File* Editor::ActiveFile() {
 
     return &files_[activeTab_];
 }
+
+void Editor::CloseActiveFile() {
+    if (files_.empty()) {
+        return;
+    }
+    files_.erase(files_.begin() + activeTab_);
+    if (files_.empty()) {
+        activeTab_ = 0;
+    } else if (activeTab_ >= files_.size()) {
+        activeTab_ = files_.size() - 1;
+    }
+}

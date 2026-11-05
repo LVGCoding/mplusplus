@@ -20,6 +20,9 @@ public:
 
     File* ActiveFile();
 
+    // Call only after unsaved changes have been handled and rendering is done.
+    void CloseActiveFile();
+
     const std::vector<File>& Files() const {
         return files_;
     }
