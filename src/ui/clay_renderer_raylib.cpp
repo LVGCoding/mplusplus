@@ -154,7 +154,13 @@ void ClayRaylib_Render(Clay_RenderCommandArray commands, Font *fonts) {
     case CLAY_RENDER_COMMAND_TYPE_OVERLAY_COLOR_END:
       overlayColor = {0, 0, 0, 0};
       break;
-    case CLAY_RENDER_COMMAND_TYPE_CUSTOM:
+    case CLAY_RENDER_COMMAND_TYPE_CUSTOM: {
+      const auto* custom = static_cast<const ClayRaylib_CustomDraw*>(
+          cmd->renderData.custom.customData);
+      if (custom && custom->draw)
+        custom->draw(b);
+      break;
+    }
     case CLAY_RENDER_COMMAND_TYPE_NONE:
       break;
     }

@@ -8,6 +8,12 @@ struct File {
     std::string text;
     std::filesystem::path path;
     bool modified = false;
+
+    const std::string& TabName() const;
+
+private:
+    // Keep the label alive until Clay finishes rendering the frame.
+    mutable std::string tabName_;
 };
 
 bool LoadFile(File& file,
