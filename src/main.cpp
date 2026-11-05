@@ -69,8 +69,15 @@ int main(int argc, char* argv[]) {
     Clay_UpdateScrollContainers(true, {wheel.x, wheel.y}, GetFrameTime());
 
     // Primitive user input capture
-    if (File* file = editor.ActiveFile()) {
-      HandleInput(file->text);
+    if (!IsLayoutModalOpen()) {
+      if (File* file = editor.ActiveFile()) {
+        if (HandleInput(file->text)) {
+          file->modified = true;
+        }
+      }
+    } else {
+      // Don't let characters typed over the popup reach the editor later.
+      while (GetCharPressed() > 0) {}
     }
 
     Clay_BeginLayout();

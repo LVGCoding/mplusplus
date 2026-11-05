@@ -3,6 +3,31 @@
 #include <fstream>
 #include <utility>
 
+const std::string& File::TabName() const {
+    tabName_ = path.filename().string();
+    if (tabName_.empty()) {
+        tabName_ = "untitled.mpp";
+    }
+
+    // Count UTF-8 characters so truncation never splits a multibyte character.
+    std::size_t characters = 0;
+    std::size_t ellipsisOffset = 0;
+    for (std::size_t i = 0; i < tabName_.size(); ++i) {
+        if ((static_cast<unsigned char>(tabName_[i]) & 0xC0) == 0x80) {
+            continue;
+        }
+        if (characters == 17) {
+            ellipsisOffset = i;
+        }
+        if (++characters > 20) {
+            tabName_.resize(ellipsisOffset);
+            tabName_ += "...";
+            break;
+        }
+    }
+    return tabName_;
+}
+
 bool LoadFile(File& file,
               const std::filesystem::path& path,
               std::string& error) {

@@ -2,4 +2,5 @@
 
 #include <string>
 
-void HandleInput(std::string& text);
+// Returns true when input changes the text.
+bool HandleInput(std::string& text);
