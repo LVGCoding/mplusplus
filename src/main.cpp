@@ -70,11 +70,11 @@ int main(int argc, char* argv[]) {
 
     // Primitive user input capture
     if (!IsLayoutModalOpen()) {
-      if (File* file = editor.ActiveFile()) {
-        if (HandleInput(file->text)) {
-          file->modified = true;
+        if (File* file = editor.ActiveFile()) {
+            if (HandleInput(file->text, file->cursorPos, file->selectionStart)) {
+                file->modified = true;
+            }
         }
-      }
     } else {
       // Don't let characters typed over the popup reach the editor later.
       while (GetCharPressed() > 0) {}
@@ -87,6 +87,15 @@ int main(int argc, char* argv[]) {
     BeginDrawing();
     ClearBackground(BLACK);
     ClayRaylib_Render(commands, fonts);
+
+    // Draw the blinking text cursor
+    if (!IsLayoutModalOpen()) {
+        if (File* file = editor.ActiveFile()) {
+            DrawEditorSelection(*file, fonts[FONT_BODY]);
+            DrawEditorCursor(*file, fonts[FONT_BODY]);
+        }
+    }
+
     EndDrawing();
 
     ProcessLayoutActions(editor);
