@@ -1,5 +1,6 @@
 #include "layout.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 
@@ -201,6 +202,79 @@ bool IsLayoutModalOpen() {
     return unsavedChangesOpen;
 }
 
+void UpdateLayoutScroll(float wheelX, float wheelY, float deltaTime, bool textChanged) {
+    constexpr float scrollIdleDelay = 0.15f;
+    static float idleTime = scrollIdleDelay;
+    static bool interrupted = false;
+
+    // Trackpads deliver inertia as more wheel events, even with Clay drag scrolling disabled.
+    if (wheelX != 0 || wheelY != 0) {
+        idleTime = 0;
+    } else {
+        idleTime = std::min(idleTime + deltaTime, scrollIdleDelay);
+    }
+    if (textChanged && idleTime < scrollIdleDelay) {
+        interrupted = true;
+    }
+    if (idleTime >= scrollIdleDelay) {
+        interrupted = false;
+    }
+    const bool blocked = interrupted || IsLayoutModalOpen();
+    Clay_UpdateScrollContainers(false,
+        blocked ? Clay_Vector2{0, 0} : Clay_Vector2{wheelX, wheelY}, deltaTime);
+}
+
+bool ScrollEditorCursorIntoView(const File& file, Font* fonts) {
+    auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
+    const auto workspace = Clay_GetElementData(CLAY_ID("Workspace"));
+    const auto editor = Clay_GetElementData(CLAY_ID("Editor"));
+    if (!scroll.found || !workspace.found || !editor.found) {
+        return false;
+    }
+
+    // Input currently appends/deletes at the end of the document.
+    const auto row = std::count(file.text.begin(), file.text.end(), '\n');
+    constexpr float padding = 6;
+    const float cursorTop = editor.boundingBox.y + padding + row * editorLineHeight;
+    const float cursorBottom = cursorTop + editorLineHeight;
+    const float viewportTop = workspace.boundingBox.y + padding;
+    const float viewportBottom = workspace.boundingBox.y + workspace.boundingBox.height - padding;
+    float offset = scroll.scrollPosition->y;
+    if (cursorBottom > viewportBottom) {
+        offset -= cursorBottom - viewportBottom;
+    } else if (cursorTop < viewportTop) {
+        offset += viewportTop - cursorTop;
+    }
+    const float minimumOffset = std::min(0.0f,
+        scroll.scrollContainerDimensions.height - scroll.contentDimensions.height);
+    offset = std::clamp(offset, minimumOffset, 0.0f);
+
+    const auto newline = file.text.rfind('\n');
+    const std::size_t lineStart = newline == std::string::npos ? 0 : newline + 1;
+    Clay_StringSlice lastLine = {.length = static_cast<int32_t>(file.text.size() - lineStart),
+                                 .chars = file.text.c_str() + lineStart,
+                                 .baseChars = file.text.c_str()};
+    Clay_TextElementConfig textConfig = {.fontId = FONT_BODY, .fontSize = editorFontSize};
+    const float columnWidth = ClayRaylib_MeasureText(lastLine, &textConfig, fonts).width;
+    const float cursorX = editor.boundingBox.x + padding + columnWidth;
+    const float viewportLeft = workspace.boundingBox.x + padding;
+    const float viewportRight = workspace.boundingBox.x + workspace.boundingBox.width - padding;
+    float horizontalOffset = scroll.scrollPosition->x;
+    if (cursorX > viewportRight) {
+        horizontalOffset -= cursorX - viewportRight;
+    } else if (cursorX < viewportLeft) {
+        horizontalOffset += viewportLeft - cursorX;
+    }
+    horizontalOffset = std::clamp(horizontalOffset,
+        std::min(0.0f, scroll.scrollContainerDimensions.width - scroll.contentDimensions.width), 0.0f);
+    if (offset == scroll.scrollPosition->y && horizontalOffset == scroll.scrollPosition->x) {
+        return false;
+    }
+    scroll.scrollPosition->y = offset;
+    scroll.scrollPosition->x = horizontalOffset;
+    return true;
+}
+
 void Layout(Editor& editor) {
     static const std::string emptyText;
     const File* activeFile = editor.ActiveFile();
@@ -302,7 +376,9 @@ void Layout(Editor& editor) {
         }
         CLAY(CLAY_ID("Workspace"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}},
-              .clip = {.vertical = true}}) {
+              // One offset keeps the gutter and editor text aligned while scrolling.
+              .clip = {.horizontal = true, .vertical = true,
+                       .childOffset = Clay_GetScrollOffset()}}) {
             // Line-number gutter from the mockup (same font size/line height as the editor text)
             static std::string lineNumbers;
             lineNumbers.clear();
