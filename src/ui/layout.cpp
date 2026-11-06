@@ -1,6 +1,7 @@
 #include "layout.h"
 
 #include <cstdio>
+#include <string>
 
 #include "editor/editor.h"
 #include "clay.h"
@@ -21,7 +22,20 @@ namespace {
     std::string closeError;
 
     constexpr Clay_Color menuText = {20, 20, 20, 255};
-    constexpr Clay_Color menuHover = {220, 220, 220, 255};
+    constexpr Clay_Color menuHover = {205, 205, 205, 255};
+
+    // Look sampled from UIMockup1.pptx
+    constexpr Clay_Color titleBarColor = {78, 167, 46, 255};
+    constexpr Clay_Color menuBarColor = {232, 232, 232, 255};
+    constexpr Clay_Color dropdownColor = {209, 209, 209, 255};
+    constexpr Clay_Color gutterColor = {232, 232, 232, 255};
+    constexpr Clay_Color dividerColor = {209, 209, 209, 255};
+    constexpr Clay_Color editorColor = {255, 255, 255, 255};
+    constexpr uint16_t editorFontSize = 18;
+    constexpr uint16_t editorLineHeight = 23;
+    constexpr float gutterWidth = 46;
+    constexpr Clay_Color terminalBorderColor = {174, 174, 174, 255};
+    constexpr int gutterMinLines = 20;
 
     void DrawChevron(Clay_BoundingBox bounds) {
         const float x = bounds.x;
@@ -65,7 +79,7 @@ namespace {
              {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_GROW(0)},
                          .padding = {12, 4, 0, 0}, .childGap = 12,
                          .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
-              .border = {.color = {0, 0, 0, 255}, .width = {.bottom = 1}}}) {
+              .border = {.color = menuText, .width = {.bottom = 2}}}) {
             Clay_String label = {
                 .isStaticallyAllocated = false,
                 .length = static_cast<int32_t>(name.size()),
@@ -101,12 +115,11 @@ namespace {
     void FileMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
                       bool& requested) {
         CLAY(id,
-             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(36)},
-                         .padding = {12, 12, 0, 0},
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(24)},
+                         .padding = {10, 16, 0, 0},
                          .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
               .backgroundColor = enabled && Clay_PointerOver(id)
-                  ? menuHover : Clay_Color{0, 0, 0, 0},
-              .cornerRadius = CLAY_CORNER_RADIUS(4)}) {
+                  ? menuHover : Clay_Color{0, 0, 0, 0}}) {
             CLAY_TEXT(label, {.textColor = enabled ? menuText : Clay_Color{150, 150, 150, 255},
                               .fontId = FONT_BODY, .fontSize = 18});
             if (enabled && !unsavedChangesOpen && Clay_Hovered() &&
@@ -204,14 +217,34 @@ void Layout(Editor& editor) {
     CLAY(CLAY_ID("Root"),
          {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
                      .layoutDirection = CLAY_TOP_TO_BOTTOM},
-          .backgroundColor = activeFile ? Clay_Color{30, 30, 36, 255}
-                                        : Clay_Color{255, 255, 255, 255}}) {
+          .backgroundColor = editorColor}) {
+        // Green title bar from the mockup
+        static std::string title;
+        title = "M++ Editor";
+        if (activeFile) {
+            title += " - [";
+            title += activeFile->path.empty() ? activeFile->TabName()
+                                              : activeFile->path.string();
+            title += "]";
+        }
+        CLAY(CLAY_ID("TitleBar"),
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(36)},
+                         .padding = {8, 8, 0, 0}, .childGap = 10,
+                         .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
+              .backgroundColor = titleBarColor}) {
+            CLAY_TEXT(CLAY_STRING("M"), {.textColor = menuText, .fontId = FONT_BOLD,
+                                         .fontSize = 26, .wrapMode = CLAY_TEXT_WRAP_NONE});
+            Clay_String titleText = {.isStaticallyAllocated = false,
+                                     .length = static_cast<int32_t>(title.size()),
+                                     .chars = title.c_str()};
+            CLAY_TEXT(titleText, {.textColor = menuText, .fontId = FONT_BODY,
+                                  .fontSize = 20, .wrapMode = CLAY_TEXT_WRAP_NONE});
+        }
         CLAY(CLAY_ID("MenuBar"),
-             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(54)},
-                         .childGap = 4,
-                         .childAlignment = {.x = CLAY_ALIGN_X_CENTER,
-                                            .y = CLAY_ALIGN_Y_CENTER}},
-              .backgroundColor = {238, 238, 238, 255}}) {
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(36)},
+                         .padding = {4, 4, 0, 0}, .childGap = 0,
+                         .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
+              .backgroundColor = menuBarColor}) {
             const Clay_String labels[] = {CLAY_STRING("File"), CLAY_STRING("Edit"),
                                           CLAY_STRING("Insert"), CLAY_STRING("Run"),
                                           CLAY_STRING("Docs")};
@@ -220,16 +253,15 @@ void Layout(Editor& editor) {
                                           CLAY_ID("DocsMenu")};
             for (int i = 0; i < 5; ++i) {
                 CLAY(ids[i],
-                     {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIXED(38)},
-                                 .padding = {12, 12, 0, 0}, .childGap = 16,
+                     {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_GROW(0)},
+                                 .padding = {8, 8, 0, 0}, .childGap = 6,
                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
                       .backgroundColor = Clay_PointerOver(ids[i]) || (i == 0 && fileMenuOpen)
-                          ? menuHover : Clay_Color{0, 0, 0, 0},
-                      .cornerRadius = CLAY_CORNER_RADIUS(4)}) {
+                          ? menuHover : Clay_Color{0, 0, 0, 0}}) {
                     CLAY_TEXT(labels[i], {.textColor = menuText,
                                           .fontId = FONT_BODY, .fontSize = 20,
                                           .wrapMode = CLAY_TEXT_WRAP_NONE});
-                    if (i < 4) {
+                    if (false && i < 4) {  // mockup has no chevrons; change back to (i < 4) to show them
                         CLAY(CLAY_IDI("MenuChevron", i),
                              {.layout = {.sizing = {CLAY_SIZING_FIXED(12), CLAY_SIZING_FIXED(12)}},
                               .custom = {.customData = &chevron}}) {}
@@ -243,48 +275,97 @@ void Layout(Editor& editor) {
         }
         if (activeFile) {
             CLAY(CLAY_ID("FileBar"),
-                 {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(38)},
-                             .padding = {24, 24, 0, 0},
+                 {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(36)},
+                             .padding = {static_cast<uint16_t>(gutterWidth), 24, 0, 0},
                              .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
-                  .backgroundColor = {210, 210, 210, 255},
-                  .clip = {.horizontal = true}}) {
+                  .backgroundColor = editorColor,
+                  .clip = {.horizontal = true},
+                  .border = {.color = dividerColor, .width = {.bottom = 2}}}) {
                 closeRequested = FileTab(*activeFile);
             }
         }
         if (fileMenuOpen) {
             CLAY(CLAY_ID("FileDropdown"),
-                 {.layout = {.sizing = {CLAY_SIZING_FIXED(180), CLAY_SIZING_FIT(0)},
-                             .padding = CLAY_PADDING_ALL(4),
+                 {.layout = {.sizing = {CLAY_SIZING_FIXED(200), CLAY_SIZING_FIT(0)},
+                             .padding = {0, 0, 4, 4},
                              .layoutDirection = CLAY_TOP_TO_BOTTOM},
-                  .backgroundColor = {250, 250, 250, 255},
-                  .cornerRadius = CLAY_CORNER_RADIUS(4),
-                  .floating = {.offset = {0, 8}, .parentId = CLAY_ID("FileMenu").id,
+                  .backgroundColor = dropdownColor,
+                  .floating = {.offset = {0, 0}, .parentId = CLAY_ID("FileMenu").id,
                                .zIndex = 1,
                                .attachPoints = {.element = CLAY_ATTACH_POINT_LEFT_TOP,
                                                 .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM},
-                               .attachTo = CLAY_ATTACH_TO_ELEMENT_WITH_ID},
-                  .border = {.color = {205, 205, 205, 255}, .width = CLAY_BORDER_ALL(1)}}) {
+                               .attachTo = CLAY_ATTACH_TO_ELEMENT_WITH_ID}}) {
                 FileMenuItem(CLAY_ID("NewButton"), CLAY_STRING("New"), true, newRequested);
                 FileMenuItem(CLAY_ID("OpenButton"), CLAY_STRING("Open File"), true, openRequested);
                 FileMenuItem(CLAY_ID("SaveButton"), CLAY_STRING("Save File"), canSave, saveRequested);
             }
         }
         CLAY(CLAY_ID("Workspace"),
-             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
-                         .padding = CLAY_PADDING_ALL(16)}}) {
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}},
+              .clip = {.vertical = true}}) {
+            // Line-number gutter from the mockup (same font size/line height as the editor text)
+            static std::string lineNumbers;
+            lineNumbers.clear();
+            int lineCount = 1;
+            for (char c : editorText) lineCount += c == '\n';
+            if (lineCount < gutterMinLines) lineCount = gutterMinLines;
+            for (int i = 1; i <= lineCount; ++i) {
+                lineNumbers += std::to_string(i);
+                if (i < lineCount) lineNumbers += '\n';
+            }
+            CLAY(CLAY_ID("Gutter"),
+                 {.layout = {.sizing = {CLAY_SIZING_FIXED(gutterWidth), CLAY_SIZING_GROW(0)},
+                             .padding = {10, 0, 6, 0}},
+                  .backgroundColor = gutterColor}) {
+                Clay_String numbersText = {.isStaticallyAllocated = false,
+                                           .length = static_cast<int32_t>(lineNumbers.size()),
+                                           .chars = lineNumbers.c_str()};
+                CLAY_TEXT(numbersText, {.textColor = menuText, .fontId = FONT_BODY,
+                                        .fontSize = editorFontSize, .lineHeight = editorLineHeight,
+                                        .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+            }
             CLAY(CLAY_ID("Editor"),
                  {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
-                             .padding = CLAY_PADDING_ALL(16)},
-                  .backgroundColor = activeFile ? Clay_Color{45, 45, 54, 255}
-                                                : Clay_Color{255, 255, 255, 255},
-                  .cornerRadius = CLAY_CORNER_RADIUS(8)}) {
+                             .padding = {6, 6, 6, 6}},
+                  .backgroundColor = editorColor}) {
                 Clay_String clayText = {
                     .isStaticallyAllocated = false,
                     .length = static_cast<int32_t>(editorText.size()),
                     .chars = editorText.c_str()
                 };
-                CLAY_TEXT(clayText, {.textColor = {230, 230, 235, 255},
-                                     .fontId = FONT_BODY, .fontSize = 20});
+                CLAY_TEXT(clayText, {.textColor = menuText, .fontId = FONT_BODY,
+                                     .fontSize = editorFontSize, .lineHeight = editorLineHeight,
+                                     .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+            }
+        }
+        // Terminal panel from the mockup (placeholder: no input/output wired up yet)
+        CLAY(CLAY_ID("Terminal"),
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(180)},
+                         .layoutDirection = CLAY_TOP_TO_BOTTOM},
+              .backgroundColor = editorColor,
+              .border = {.color = terminalBorderColor, .width = {.top = 2}}}) {
+            CLAY(CLAY_ID("TerminalHeader"),
+                 {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(30)},
+                             .padding = {static_cast<uint16_t>(gutterWidth + 6), 8, 0, 0},
+                             .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
+                  .backgroundColor = menuBarColor}) {
+                CLAY_TEXT(CLAY_STRING("Terminal"), {.textColor = menuText, .fontId = FONT_BODY,
+                                                    .fontSize = 18,
+                                                    .wrapMode = CLAY_TEXT_WRAP_NONE});
+            }
+            CLAY(CLAY_ID("TerminalBody"),
+                 {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}}}) {
+                CLAY(CLAY_ID("TerminalGutter"),
+                     {.layout = {.sizing = {CLAY_SIZING_FIXED(gutterWidth), CLAY_SIZING_GROW(0)}},
+                      .backgroundColor = gutterColor}) {}
+                CLAY(CLAY_ID("TerminalOutput"),
+                     {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
+                                 .padding = {6, 6, 6, 6}},
+                      .clip = {.vertical = true}}) {
+                    CLAY_TEXT(CLAY_STRING(">"), {.textColor = menuText, .fontId = FONT_BODY,
+                                                 .fontSize = editorFontSize,
+                                                 .lineHeight = editorLineHeight});
+                }
             }
         }
         if (unsavedChangesOpen && activeFile) {
