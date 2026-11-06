@@ -4,6 +4,27 @@
 
 #include <algorithm>
 
+namespace {
+    std::size_t PreviousCharacter(const std::string& text, std::size_t position) {
+        if (position == 0) return 0;
+        --position;
+        while (position > 0 && (static_cast<unsigned char>(text[position]) & 0xC0) == 0x80) {
+            --position;
+        }
+        return position;
+    }
+
+    std::size_t NextCharacter(const std::string& text, std::size_t position) {
+        if (position == text.size()) return position;
+        ++position;
+        while (position < text.size() &&
+               (static_cast<unsigned char>(text[position]) & 0xC0) == 0x80) {
+            ++position;
+        }
+        return position;
+    }
+}
+
 bool HandleInput(std::string& text,
                  std::size_t& cursorPos,
                  std::size_t& selectionStart) {
@@ -27,7 +48,7 @@ bool HandleInput(std::string& text,
         if (!shiftHeld && selectionStart != cursorPos) {
             cursorPos = std::min(selectionStart, cursorPos);
         } else if (cursorPos > 0) {
-            cursorPos--;
+            cursorPos = PreviousCharacter(text, cursorPos);
         }
 
         if (!shiftHeld) {
@@ -40,7 +61,7 @@ bool HandleInput(std::string& text,
         if (!shiftHeld && selectionStart != cursorPos) {
             cursorPos = std::max(selectionStart, cursorPos);
         } else if (cursorPos < text.size()) {
-            cursorPos++;
+            cursorPos = NextCharacter(text, cursorPos);
         }
 
         if (!shiftHeld) {
@@ -68,18 +89,28 @@ bool HandleInput(std::string& text,
     int key = GetCharPressed();
 
     while (key > 0) {
-        if (key >= 32 && key <= 126) {
+        if (key >= 32) {
             if (deleteSelection()) {
                 changed = true;
             }
 
-            text.insert(cursorPos, 1, static_cast<char>(key));
-            cursorPos++;
+            int bytes = 0;
+            const char* character = CodepointToUTF8(key, &bytes);
+            text.insert(cursorPos, character, bytes);
+            cursorPos += bytes;
             selectionStart = cursorPos;
             changed = true;
         }
 
         key = GetCharPressed();
+    }
+
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER)) {
+        deleteSelection();
+        text.insert(cursorPos, 1, '\n');
+        ++cursorPos;
+        selectionStart = cursorPos;
+        changed = true;
     }
 
     // Handle Backspace
@@ -89,8 +120,9 @@ bool HandleInput(std::string& text,
         if (deleteSelection()) {
             changed = true;
         } else if (cursorPos > 0) {
-            text.erase(cursorPos - 1, 1);
-            cursorPos--;
+            const auto previous = PreviousCharacter(text, cursorPos);
+            text.erase(previous, cursorPos - previous);
+            cursorPos = previous;
             selectionStart = cursorPos;
             changed = true;
         }
@@ -103,7 +135,7 @@ bool HandleInput(std::string& text,
         if (deleteSelection()) {
             changed = true;
         } else if (cursorPos < text.size()) {
-            text.erase(cursorPos, 1);
+            text.erase(cursorPos, NextCharacter(text, cursorPos) - cursorPos);
             selectionStart = cursorPos;
             changed = true;
         }

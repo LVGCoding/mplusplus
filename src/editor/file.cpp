@@ -54,6 +54,8 @@ bool LoadFile(File& file,
     }
 
     file.text = std::move(text);
+    file.cursorPos = 0;
+    file.selectionStart = 0;
     file.path = path;
     file.modified = false;
     return true;

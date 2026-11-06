@@ -1,8 +1,5 @@
 #pragma once
 
-#include "editor/file.h"
-#include "raylib.h"
-
 class Editor;
 struct File;
 struct Font;
@@ -19,5 +16,7 @@ bool ScrollEditorCursorIntoView(const File& file, Font* fonts);
 
 // Call after EndDrawing(), while layout text references are no longer in use.
 void ProcessLayoutActions(Editor& editor);
+bool HandleEditorMouseInput(File& file, Font font);
+void ResetEditorCursorBlink();
 void DrawEditorCursor(const File& file, Font font);
 void DrawEditorSelection(const File& file, Font font);
