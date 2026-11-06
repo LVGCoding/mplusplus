@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
 
   Editor editor;
   LatexRenderer renderer;
-  MathTexture texture = renderer.RenderLatex("\\alpha+\\beta");
+  MathTexture texture = renderer.RenderLatex("");
   
 
   // Main render loop
@@ -75,24 +75,32 @@ int main(int argc, char* argv[]) {
 
     // Primitive user input capture
     bool textChanged = false;
+    bool cursorActivity = false;
     if (!IsLayoutModalOpen()) {
         if (File* file = editor.ActiveFile()) {
-            if (HandleInput(file->text, file->cursorPos, file->selectionStart)) {
+            cursorActivity = HandleEditorMouseInput(*file, fonts[FONT_BODY]);
+            const auto previousCursor = file->cursorPos;
+            const auto previousAnchor = file->selectionStart;
+            textChanged = HandleInput(file->text, file->cursorPos, file->selectionStart);
+            if (textChanged) {
                 file->modified = true;
             }
+            cursorActivity = cursorActivity || textChanged || previousCursor != file->cursorPos ||
+                previousAnchor != file->selectionStart;
+            if (cursorActivity) ResetEditorCursorBlink();
         }
     } else {
       // Don't let characters typed over the popup reach the editor later.
       while (GetCharPressed() > 0) {}
     }
 
-    UpdateLayoutScroll(wheel.x, wheel.y, GetFrameTime(), textChanged);
+    UpdateLayoutScroll(wheel.x, wheel.y, GetFrameTime(), cursorActivity);
 
     Clay_BeginLayout();
     Layout(editor);
     Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
 
-    if (textChanged && ScrollEditorCursorIntoView(*editor.ActiveFile(), fonts)) {
+    if (cursorActivity && ScrollEditorCursorIntoView(*editor.ActiveFile(), fonts)) {
       // Apply the new offset before drawing so typing is never rendered off-screen.
       Clay_BeginLayout();
       Layout(editor);
