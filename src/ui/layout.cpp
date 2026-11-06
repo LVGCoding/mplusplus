@@ -306,23 +306,27 @@ void Layout(Editor& editor) {
             // Line-number gutter from the mockup (same font size/line height as the editor text)
             static std::string lineNumbers;
             lineNumbers.clear();
-            int lineCount = 1;
-            for (char c : editorText) lineCount += c == '\n';
-            if (lineCount < gutterMinLines) lineCount = gutterMinLines;
-            for (int i = 1; i <= lineCount; ++i) {
-                lineNumbers += std::to_string(i);
-                if (i < lineCount) lineNumbers += '\n';
+            if (activeFile) {
+                int lineCount = 1;
+                for (char c : editorText) lineCount += c == '\n';
+                if (lineCount < gutterMinLines) lineCount = gutterMinLines;
+                for (int i = 1; i <= lineCount; ++i) {
+                    lineNumbers += std::to_string(i);
+                    if (i < lineCount) lineNumbers += '\n';
+                }
             }
             CLAY(CLAY_ID("Gutter"),
                  {.layout = {.sizing = {CLAY_SIZING_FIXED(gutterWidth), CLAY_SIZING_GROW(0)},
                              .padding = {10, 0, 6, 0}},
                   .backgroundColor = gutterColor}) {
-                Clay_String numbersText = {.isStaticallyAllocated = false,
-                                           .length = static_cast<int32_t>(lineNumbers.size()),
-                                           .chars = lineNumbers.c_str()};
-                CLAY_TEXT(numbersText, {.textColor = menuText, .fontId = FONT_BODY,
-                                        .fontSize = editorFontSize, .lineHeight = editorLineHeight,
-                                        .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+                if (activeFile) {
+                    Clay_String numbersText = {.isStaticallyAllocated = false,
+                                               .length = static_cast<int32_t>(lineNumbers.size()),
+                                               .chars = lineNumbers.c_str()};
+                    CLAY_TEXT(numbersText, {.textColor = menuText, .fontId = FONT_BODY,
+                                            .fontSize = editorFontSize, .lineHeight = editorLineHeight,
+                                            .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+                }
             }
             CLAY(CLAY_ID("Editor"),
                  {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
