@@ -511,3 +511,113 @@ void ProcessLayoutActions(Editor& editor) {
         }
     }
 }
+
+void DrawEditorSelection(const File& file, Font font) {
+    if (file.selectionStart == file.cursorPos) {
+        return;
+    }
+
+    Clay_ElementData textElement =
+        Clay_GetElementData(CLAY_ID("EditorText"));
+
+    if (!textElement.found) {
+        return;
+    }
+
+    const std::size_t start =
+        std::min(file.selectionStart, file.cursorPos);
+
+    const std::size_t end =
+        std::max(file.selectionStart, file.cursorPos);
+
+    const std::string beforeSelection =
+        file.text.substr(0, start);
+
+    const std::string selectedText =
+        file.text.substr(start, end - start);
+
+    const float fontSize = 20.0f;
+    const float spacing = 0.0f;
+
+    const float startX =
+        textElement.boundingBox.x +
+        MeasureTextEx(font, beforeSelection.c_str(),
+                      fontSize, spacing).x;
+
+    const float selectionWidth =
+        MeasureTextEx(font, selectedText.c_str(),
+                      fontSize, spacing).x;
+
+    DrawRectangle(
+        static_cast<int>(startX),
+        static_cast<int>(textElement.boundingBox.y),
+        static_cast<int>(selectionWidth),
+        24,
+        Color{65, 105, 168, 140}
+    );
+}
+
+void DrawEditorCursor(const File& file, Font font) {
+    // Get the position of the editor's text from Clay
+    Clay_ElementData textElement =
+        Clay_GetElementData(CLAY_ID("EditorText"));
+
+    if (!textElement.found) {
+        return;
+    }
+
+    // Track when the cursor or text last changed
+    static double lastCursorActivity = 0.0;
+    static std::size_t previousCursorPos = 0;
+    static std::string previousText;
+
+    const double now = GetTime();
+
+    if (file.cursorPos != previousCursorPos || file.text != previousText) {
+        lastCursorActivity = now;
+        previousCursorPos = file.cursorPos;
+        previousText = file.text;
+    }
+
+    // Keep the cursor visible briefly after activity
+    bool recentlyActive = (now - lastCursorActivity) < 0.7;
+
+    // Blink only when idle
+    if (!recentlyActive &&
+        static_cast<int>((now - lastCursorActivity) * 2) % 2 != 0) {
+        return;
+    }
+
+    // Prevent cursor position from exceeding text length
+    const std::size_t position =
+        std::min(file.cursorPos, file.text.size());
+
+    // Measure characters before the cursor
+    const std::string beforeCursor =
+        file.text.substr(0, position);
+
+    const float fontSize = 20.0f;
+    const float spacing = 0.0f;
+
+    Vector2 textWidth = MeasureTextEx(
+        font,
+        beforeCursor.c_str(),
+        fontSize,
+        spacing
+    );
+
+    // Use the actual Clay coordinates
+    const float cursorX =
+        textElement.boundingBox.x + textWidth.x;
+
+    const float cursorY =
+        textElement.boundingBox.y;
+
+    DrawRectangle(
+        static_cast<int>(cursorX),
+        static_cast<int>(cursorY),
+        2,
+        24,
+        WHITE
+    );
+}
