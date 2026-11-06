@@ -12,6 +12,8 @@
 #include "ui/layout.h"
 #include "editor/input.h"
 
+#include "math/latex_renderer.h"
+
 // Clay error handling
 static void HandleClayError(Clay_ErrorData error) {
   std::fprintf(stderr, "Clay Error: %.*s\n", 
@@ -49,9 +51,13 @@ int main(int argc, char* argv[]) {
   }
 
   Editor editor;
+  LatexRenderer renderer;
+  MathTexture texture = renderer.RenderSVG("../test2.svg");
+  
 
   // Main render loop
   while (!WindowShouldClose()) {
+    
     const Vector2 currentDpi = GetWindowScaleDPI();
     if (currentDpi.x != fontDpi.x || currentDpi.y != fontDpi.y) {
       UnloadFontTable(fonts);
@@ -87,9 +93,12 @@ int main(int argc, char* argv[]) {
     BeginDrawing();
     ClearBackground(BLACK);
     ClayRaylib_Render(commands, fonts);
+    renderer.Draw(texture,100,100);
     EndDrawing();
 
     ProcessLayoutActions(editor);
+
   }
+  renderer.Unload(texture);
   return 0;
 }
