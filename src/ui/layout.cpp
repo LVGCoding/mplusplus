@@ -320,9 +320,11 @@ void Layout(Editor& editor) {
                 Clay_String numbersText = {.isStaticallyAllocated = false,
                                            .length = static_cast<int32_t>(lineNumbers.size()),
                                            .chars = lineNumbers.c_str()};
-                CLAY_TEXT(numbersText, {.textColor = menuText, .fontId = FONT_BODY,
-                                        .fontSize = editorFontSize, .lineHeight = editorLineHeight,
-                                        .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+                if (activeFile) {  // only number lines when a file is open
+                    CLAY_TEXT(numbersText, {.textColor = menuText, .fontId = FONT_BODY,
+                                            .fontSize = editorFontSize, .lineHeight = editorLineHeight,
+                                            .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+                }
             }
             CLAY(CLAY_ID("Editor"),
                  {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
@@ -340,7 +342,7 @@ void Layout(Editor& editor) {
         }
         // Terminal panel from the mockup (placeholder: no input/output wired up yet)
         CLAY(CLAY_ID("Terminal"),
-             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(180)},
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(140)},
                          .layoutDirection = CLAY_TOP_TO_BOTTOM},
               .backgroundColor = editorColor,
               .border = {.color = terminalBorderColor, .width = {.top = 2}}}) {
