@@ -403,19 +403,35 @@ void Layout(Editor& editor) {
                 }
             }
             CLAY(CLAY_ID("Editor"),
-                 {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
-                             .padding = {6, 6, 6, 6}},
-                  .backgroundColor = editorColor}) {
+                {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
+                            .padding = {6, 6, 6, 6}},
+                .backgroundColor = editorColor}) {
+
                 Clay_String clayText = {
                     .isStaticallyAllocated = false,
                     .length = static_cast<int32_t>(editorText.size()),
                     .chars = editorText.c_str()
                 };
-                CLAY_TEXT(clayText, {.textColor = menuText, .fontId = FONT_BODY,
-                                     .fontSize = editorFontSize, .lineHeight = editorLineHeight,
-                                     .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+
+                // Give the editor text a stable ID for cursor and selection rendering
+                CLAY(CLAY_ID("EditorText"),
+                    {.layout = {
+                        .sizing = {
+                            CLAY_SIZING_FIT(0),
+                            CLAY_SIZING_FIT(0)
+                        }
+                    }}) {
+
+                    CLAY_TEXT(clayText, {
+                        .textColor = menuText,
+                        .fontId = FONT_BODY,
+                        .fontSize = editorFontSize,
+                        .lineHeight = editorLineHeight,
+                        .wrapMode = CLAY_TEXT_WRAP_NEWLINES
+                    });
+                }
             }
-        }
+            }
         // Terminal panel from the mockup (placeholder: no input/output wired up yet)
         CLAY(CLAY_ID("Terminal"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(140)},
@@ -536,7 +552,7 @@ void DrawEditorSelection(const File& file, Font font) {
     const std::string selectedText =
         file.text.substr(start, end - start);
 
-    const float fontSize = 20.0f;
+    const float fontSize = static_cast<float>(editorFontSize);
     const float spacing = 0.0f;
 
     const float startX =
@@ -563,7 +579,14 @@ void DrawEditorCursor(const File& file, Font font) {
         Clay_GetElementData(CLAY_ID("EditorText"));
 
     if (!textElement.found) {
-        return;
+    static bool warned = false;
+
+    if (!warned) {
+        TraceLog(LOG_WARNING, "EditorText element not found!");
+        warned = true;
+    }
+
+    return;
     }
 
     // Track when the cursor or text last changed
@@ -596,7 +619,7 @@ void DrawEditorCursor(const File& file, Font font) {
     const std::string beforeCursor =
         file.text.substr(0, position);
 
-    const float fontSize = 20.0f;
+    const float fontSize = static_cast<float>(editorFontSize);
     const float spacing = 0.0f;
 
     Vector2 textWidth = MeasureTextEx(
@@ -618,6 +641,6 @@ void DrawEditorCursor(const File& file, Font font) {
         static_cast<int>(cursorY),
         2,
         24,
-        WHITE
+        BLACK
     );
 }
