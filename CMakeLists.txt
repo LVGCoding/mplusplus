@@ -57,6 +57,7 @@ add_executable(mplusplus
   src/ui/clay_renderer_raylib.cpp
   src/math/nanosvg_impl.cpp
   src/math/latex_renderer.cpp
+  src/math/svg_preprocessor.cpp 
 )
 target_include_directories(mplusplus PRIVATE src)
 target_link_libraries(mplusplus PRIVATE raylib clay nfd)

@@ -18,14 +18,12 @@ struct MathTexture {
 class LatexRenderer {
 public:
     //decided on SVG cause we wanted scaleability 
-    //so the pipeline is svg
+    //so the pipeline is the string to tex to svg
     MathTexture RenderSVG(const std::string& path);
 
-    void Draw(
-        const MathTexture& math,
-        float x,
-        float y
-    );
+    MathTexture RenderLatex(const std::string& latex);
+
+    void Draw(const MathTexture& math, float x, float y);
 
     void Unload(MathTexture& math);
 };
