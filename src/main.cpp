@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
     BeginDrawing();
     ClearBackground(BLACK);
     ClayRaylib_Render(commands, fonts);
-    renderer.Draw(texture,100,100);
+    // renderer.Draw(texture,100,100);
     EndDrawing();
 
     ProcessLayoutActions(editor);
