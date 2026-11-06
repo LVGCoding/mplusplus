@@ -12,6 +12,8 @@
 #include "ui/layout.h"
 #include "editor/input.h"
 
+#include "math/latex_renderer.h"
+
 // Clay error handling
 static void HandleClayError(Clay_ErrorData error) {
   std::fprintf(stderr, "Clay Error: %.*s\n", 
@@ -49,9 +51,13 @@ int main(int argc, char* argv[]) {
   }
 
   Editor editor;
+  LatexRenderer renderer;
+  MathTexture texture = renderer.RenderLatex("\\alpha+\\beta");
+  
 
   // Main render loop
   while (!WindowShouldClose()) {
+    
     const Vector2 currentDpi = GetWindowScaleDPI();
     if (currentDpi.x != fontDpi.x || currentDpi.y != fontDpi.y) {
       UnloadFontTable(fonts);
@@ -66,9 +72,9 @@ int main(int argc, char* argv[]) {
     Clay_SetPointerState({mouse.x, mouse.y},
                          IsMouseButtonDown(MOUSE_LEFT_BUTTON));
     Vector2 wheel = GetMouseWheelMoveV();
-    Clay_UpdateScrollContainers(true, {wheel.x, wheel.y}, GetFrameTime());
 
     // Primitive user input capture
+    bool textChanged = false;
     if (!IsLayoutModalOpen()) {
         if (File* file = editor.ActiveFile()) {
             if (HandleInput(file->text, file->cursorPos, file->selectionStart)) {
@@ -80,9 +86,18 @@ int main(int argc, char* argv[]) {
       while (GetCharPressed() > 0) {}
     }
 
+    UpdateLayoutScroll(wheel.x, wheel.y, GetFrameTime(), textChanged);
+
     Clay_BeginLayout();
     Layout(editor);
     Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
+
+    if (textChanged && ScrollEditorCursorIntoView(*editor.ActiveFile(), fonts)) {
+      // Apply the new offset before drawing so typing is never rendered off-screen.
+      Clay_BeginLayout();
+      Layout(editor);
+      commands = Clay_EndLayout(GetFrameTime());
+    }
 
     BeginDrawing();
     ClearBackground(BLACK);
@@ -96,9 +111,12 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    renderer.Draw(texture,100,100);
     EndDrawing();
 
     ProcessLayoutActions(editor);
+
   }
+  renderer.Unload(texture);
   return 0;
 }
