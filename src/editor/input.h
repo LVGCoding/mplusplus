@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 
-// Returns true when input changes the text.
-bool HandleInput(std::string& text);
+bool HandleInput(std::string& text,
+                 std::size_t& cursorPos,
+                 std::size_t& selectionStart);
