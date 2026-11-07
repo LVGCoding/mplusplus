@@ -10,10 +10,7 @@
 
 // Reads an attribute from an SVG element.
 // Supports both single and double quotes.
-static std::string GetAttribute(
-    const std::string& element,
-    const std::string& attribute
-) {
+static std::string GetAttribute(const std::string& element, const std::string& attribute) {
     size_t position = 0;
 
     while (true) {
