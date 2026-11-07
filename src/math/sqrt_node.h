@@ -12,8 +12,10 @@ private:
     std::unique_ptr<LineNode> root;
     std::unique_ptr<LineNode> arguement;
 public:
-    void Render(float fontSize) override;
     
+
+    void Render(float fontSize) override;
+
     void KeyPress() override;
     
     void MouseClick() override;
@@ -25,4 +27,7 @@ public:
     std::pair<float,float> GetSize() override;
     
     bool HasChild() override;
+
+    
+
 };

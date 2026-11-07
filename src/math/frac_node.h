@@ -9,12 +9,12 @@
 
 class FracNode : EditorNode{
 private:
-    std::unique_ptr<LineNode> numerator;
-    std::unique_ptr<LineNode> denominator;
+    EditorNode* numerator;
+    EditorNode* denominator;
 
 public:
     void Render(float fontSize) override;
-    
+
     void KeyPress() override;
     
     void MouseClick() override;
@@ -26,4 +26,6 @@ public:
     std::pair<float,float> GetSize() override;
     
     bool HasChild() override;
+
+    std::pair<std::unique_ptr<EditorNode>,std::unique_ptr<EditorNode>> GetChildren();
 };

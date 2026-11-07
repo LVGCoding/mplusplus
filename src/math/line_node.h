@@ -6,6 +6,8 @@
 #include <vector>
 #include <string>
 
+
+//not important right now
 class LineNode : public EditorNode {
 private:
     std::vector<std::unique_ptr<EditorNode>> children_;
