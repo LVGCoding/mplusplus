@@ -2,6 +2,8 @@
 
 M++ (bundled with the M++ Editor) is a work-in-progress programming language written in c++ that combines the visibility of LaTeX with the functionality of raw code.
 
+See the [project UML diagram](UML.md) for the editor and math-node structure.
+
 ## Usage
 
 

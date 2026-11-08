@@ -1,7 +1,7 @@
 #pragma once
 
 #include "editor_node.h"
-#include "line_node.h"
+
 
 #include <memory>
 #include <vector>
@@ -13,6 +13,10 @@ private:
     EditorNode* denominator;
 
 public:
+    FracNode() {};
+
+    ~FracNode() {};
+
     void Render(float fontSize) override;
 
     void KeyPress() override;
@@ -27,5 +31,7 @@ public:
     
     bool HasChild() override;
 
-    std::pair<std::unique_ptr<EditorNode>,std::unique_ptr<EditorNode>> GetChildren();
+    std::pair<EditorNode*,EditorNode*> GetChildren();
+
+    void SetChildren(EditorNode& numerator, EditorNode& denominator);
 };

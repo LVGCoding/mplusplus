@@ -62,7 +62,7 @@ bool Editor::NewTemporaryFile(std::string& error) {
 }
 
 // Check if a file is marked as temporary
-bool Editor::IsTemporaryFile(const File& file) const {
+bool Editor::IsTemporaryFile(const FileBase& file) const {
     return std::find(temporaryFiles_.begin(), temporaryFiles_.end(), file.path)
         != temporaryFiles_.end();
 }
@@ -82,7 +82,7 @@ bool Editor::OpenFile(const std::filesystem::path& path,
 }
 
 // Returns the current active file
-File* Editor::ActiveFile() {
+FileBase* Editor::ActiveFile() {
     if (files_.empty()) {
         return nullptr;
     }

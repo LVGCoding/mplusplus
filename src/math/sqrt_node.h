@@ -1,7 +1,7 @@
 #pragma once
 
 #include "editor_node.h"
-#include "line_node.h"
+
 
 #include <memory>
 #include <vector>
@@ -9,10 +9,12 @@
 
 class SqrtNode : EditorNode{
 private:
-    std::unique_ptr<LineNode> root;
-    std::unique_ptr<LineNode> arguement;
+    EditorNode* root;
+    EditorNode* arguement;
 public:
-    
+    SqrtNode() {};
+
+    ~SqrtNode() {};
 
     void Render(float fontSize) override;
 
@@ -28,6 +30,8 @@ public:
     
     bool HasChild() override;
 
-    
+    std::pair<EditorNode*,EditorNode*> GetChildren();
+
+    void SetChildren(EditorNode& numerator, EditorNode& denominator);
 
 };

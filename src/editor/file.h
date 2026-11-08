@@ -3,9 +3,11 @@
 #include <cstddef>
 #include <filesystem>
 #include <string>
+#include "fileBase.h"
+
 
 // The file class represents a file currently open in the M++ editor.
-struct File {
+struct File: FileBase {
     std::string text;
     std::filesystem::path path;
     bool modified = false;

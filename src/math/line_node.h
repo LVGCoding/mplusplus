@@ -10,7 +10,7 @@
 //not important right now
 class LineNode : public EditorNode {
 private:
-    std::vector<std::unique_ptr<EditorNode>> children_;
+    std::vector<EditorNode*> children_;
 
     float spacing_ = 0.0f;
 
