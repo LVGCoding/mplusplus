@@ -34,6 +34,29 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
+## Testing
+
+Unit tests use [GoogleTest](https://github.com/google/googletest). CMake uses a system install if it finds one, otherwise it downloads it.
+
+```sh
+./test.sh                 # build and run every test
+./test.sh -R Parser       # only tests whose name matches "Parser"
+```
+
+Or with presets/CMake directly: `ctest --test-dir build --output-on-failure`.
+Tests can be turned off with `-DMPLUSPLUS_BUILD_TESTS=OFF`.
+
+Tests live in `tests/`. To add some, create a `tests/<feature>_test.cpp` file. CMake picks up any `*_test.cpp` automatically.
+Test code links against `mplusplus_core` (the parser, math nodes and file handling), so tests never open a window.
+Anything that should be testable belongs in `mplusplus_core` rather than in the app's raylib/UI code.
+`tests/test_helpers.h` has `test::ParseAndDescribe` and `test::RoundTrip` for checking parser output, for example:
+
+```cpp
+TEST(Parser, Fraction) {
+    EXPECT_EQ(test::ParseAndDescribe("\\frac{a}{b}"), R"(frac(line(text("a")), line(text("b"))))");
+}
+```
+
 ### Platform notes
 
 - **Linux:** raylib needs the X11/Wayland and OpenGL headers. On Debian/Ubuntu:

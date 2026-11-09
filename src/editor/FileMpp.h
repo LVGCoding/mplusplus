@@ -15,7 +15,7 @@ struct FileMpp : FileBase {
   std::string source;
 
   // Parsed document. EditorNode is abstract, so nodes are held by pointer.
-  // TODO: fill this from `source` once the Parser is working.
+  // Filled from `source` by the Parser when the file is loaded.
   std::vector<std::unique_ptr<EditorNode>> content;
 
   // Position where the cursor is located in the node tree.

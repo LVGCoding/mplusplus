@@ -2,40 +2,20 @@
 
 #include "EditorNode.h"
 
-
-#include <memory>
-#include <vector>
+#include <optional>
 #include <string>
+#include <string_view>
 
-
-
-class GreekNode : EditorNode{
-
+// A lowercase Greek letter such as \alpha.
+class GreekNode : public EditorNode {
 public:
-
-    ~GreekNode() {};
-
-    void Render(float fontSize) override;
-
-    void KeyPress() override;
-    
-    void MouseClick() override;
-    
-    void ToText() override;
-    
-    std::pair<float,float> GetNWCorner() override;
-    
-    std::pair<float,float> GetSize() override;
-    
-    bool HasChild() override;
-    
-    enum GreekSymbolType{
+    enum GreekSymbolType {
         alpha,
         beta,
         gamma,
         delta,
         epsilon,
-        zeta, 
+        zeta,
         eta,
         theta,
         iota,
@@ -55,12 +35,33 @@ public:
         psi,
         omega
     };
-    GreekNode(GreekSymbolType symbol) {this->symbol=symbol;};
+
+    explicit GreekNode(GreekSymbolType symbol);
+
+    ~GreekNode() override = default;
+
+    void Render(float fontSize) override;
+
+    void KeyPress() override;
+
+    void MouseClick() override;
+
+    std::string ToText() const override;
+
+    std::pair<float, float> GetNWCorner() override;
+
+    std::pair<float, float> GetSize() override;
+
+    bool HasChild() override;
+
+    GreekSymbolType GetSymbol() const;
+
+    // Name of the symbol without the backslash, e.g. "alpha".
+    static std::string_view SymbolName(GreekSymbolType symbol);
+
+    // Look up a symbol by name without the backslash, e.g. "alpha".
+    static std::optional<GreekSymbolType> SymbolFromName(std::string_view name);
 
 private:
-    GreekNode::GreekSymbolType symbol;
-
-public:
-    GreekSymbolType GetSymbol();
-
+    GreekSymbolType symbol_;
 };

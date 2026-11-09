@@ -4,33 +4,38 @@
 
 #include <memory>
 #include <string>
-#include <vector>
+#include <utility>
 
-class FracNode : EditorNode {
+// \frac{numerator}{denominator}
+class FracNode : public EditorNode {
 private:
-  EditorNode *numerator;
-  EditorNode *denominator;
+    std::unique_ptr<EditorNode> numerator_;
+    std::unique_ptr<EditorNode> denominator_;
 
 public:
-  FracNode() {};
+    FracNode() = default;
 
-  ~FracNode() {};
+    FracNode(std::unique_ptr<EditorNode> numerator, std::unique_ptr<EditorNode> denominator);
 
-  void Render(float fontSize) override;
+    ~FracNode() override = default;
 
-  void KeyPress() override;
+    void Render(float fontSize) override;
 
-  void MouseClick() override;
+    void KeyPress() override;
 
-  void ToText() override;
+    void MouseClick() override;
 
-  std::pair<float, float> GetNWCorner() override;
+    std::string ToText() const override;
 
-  std::pair<float, float> GetSize() override;
+    std::pair<float, float> GetNWCorner() override;
 
-  bool HasChild() override;
+    std::pair<float, float> GetSize() override;
 
-  std::pair<EditorNode *, EditorNode *> GetChildren();
+    bool HasChild() override;
 
-  void SetChildren(EditorNode &numerator, EditorNode &denominator);
+    // {numerator, denominator}; either may be null.
+    std::pair<EditorNode*, EditorNode*> GetChildren() const;
+
+    void SetChildren(std::unique_ptr<EditorNode> numerator,
+                     std::unique_ptr<EditorNode> denominator);
 };

@@ -43,37 +43,59 @@ FetchContent_MakeAvailable(nativefiledialog)
 add_library(clay INTERFACE)
 target_include_directories(clay SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
 
+# --- Warnings ---------------------------------------------------------------
+
+function(mplusplus_set_warnings target)
+  if(MSVC)
+    # /Zc:preprocessor gives MSVC a standard-conforming preprocessor, which
+    # clay's variadic macros need.
+    target_compile_options(${target} PRIVATE /W4 /Zc:preprocessor /utf-8)
+  else()
+    # Clay layouts deliberately leave most config fields default-initialized.
+    target_compile_options(${target} PRIVATE -Wall -Wextra
+      -Wno-missing-field-initializers)
+  endif()
+endfunction()
+
+# --- Core library -----------------------------------------------------------
+# Everything that doesn't need a window (parser, math nodes, file handling).
+# Both the app and the tests link against this, so tests never need raylib.
+
+add_library(mplusplus_core STATIC
+  src/editor/editor.cpp
+  src/editor/fileBase.cpp
+  src/editor/fileText.cpp
+  src/editor/fileMpp.cpp
+  src/math/FracNode.cpp
+  src/math/GreekNode.cpp
+  src/math/LineNode.cpp
+  src/math/MatrixNode.cpp
+  src/math/SqrtNode.cpp
+  src/math/TextNode.cpp
+  src/parser/parser.cpp
+)
+target_include_directories(mplusplus_core PUBLIC src)
+mplusplus_set_warnings(mplusplus_core)
+
 # --- Executable -------------------------------------------------------------
 
 add_executable(mplusplus
   src/main.cpp
   src/ui/font.cpp
   src/ui/file_dialog.cpp
-  src/editor/editor.cpp
   src/ui/layout.cpp
   src/editor/input.cpp
-  src/editor/fileBase.cpp
-  src/editor/fileText.cpp
-  src/editor/fileMpp.cpp
   src/ui/clay_impl.cpp
   src/ui/clay_renderer_raylib.cpp
   src/math/nanosvg_impl.cpp
   src/math/latex_renderer.cpp
   src/math/svg_preprocessor.cpp
-  src/parser/parser.cpp
 )
-target_include_directories(mplusplus PRIVATE src)
-target_link_libraries(mplusplus PRIVATE raylib clay nfd)
+target_link_libraries(mplusplus PRIVATE mplusplus_core raylib clay nfd)
+mplusplus_set_warnings(mplusplus)
 
 if(MSVC)
-  # /Zc:preprocessor gives MSVC a standard-conforming preprocessor, which
-  # clay's variadic macros need.
-  target_compile_options(mplusplus PRIVATE /W4 /Zc:preprocessor /utf-8)
   set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT mplusplus)
-else()
-  # Clay layouts deliberately leave most config fields default-initialized.
-  target_compile_options(mplusplus PRIVATE -Wall -Wextra
-    -Wno-missing-field-initializers)
 endif()
 
 if(APPLE)
@@ -86,4 +108,38 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/assets)
   add_custom_command(TARGET mplusplus POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
       ${CMAKE_CURRENT_SOURCE_DIR}/assets $<TARGET_FILE_DIR:mplusplus>/assets)
+endif()
+
+# --- Tests ------------------------------------------------------------------
+# Run with: ctest --test-dir build --output-on-failure   (or ./test.sh)
+
+option(MPLUSPLUS_BUILD_TESTS "Build the M++ unit tests" ON)
+
+if(MPLUSPLUS_BUILD_TESTS)
+  enable_testing()
+
+  # Use a system GoogleTest if installed, otherwise download it.
+  find_package(GTest QUIET)
+  if(NOT GTest_FOUND)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+      googletest
+      URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    FetchContent_MakeAvailable(googletest)
+  endif()
+
+  # New test files: drop a *_test.cpp file into tests/ and re-run CMake.
+  file(GLOB MPLUSPLUS_TEST_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/*_test.cpp)
+
+  add_executable(mplusplus_tests ${MPLUSPLUS_TEST_SOURCES})
+  target_include_directories(mplusplus_tests PRIVATE tests)
+  target_link_libraries(mplusplus_tests PRIVATE mplusplus_core GTest::gtest_main)
+  mplusplus_set_warnings(mplusplus_tests)
+
+  include(GoogleTest)
+  gtest_discover_tests(mplusplus_tests)
 endif()

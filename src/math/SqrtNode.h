@@ -2,36 +2,40 @@
 
 #include "EditorNode.h"
 
-
 #include <memory>
-#include <vector>
 #include <string>
+#include <utility>
 
-class SqrtNode : EditorNode{
+// \sqrt{argument} or \sqrt[root]{argument}
+class SqrtNode : public EditorNode {
 private:
-    EditorNode* root;
-    EditorNode* arguement;
-public:
-    SqrtNode() {};
+    // Null for a plain square root.
+    std::unique_ptr<EditorNode> root_;
+    std::unique_ptr<EditorNode> argument_;
 
-    ~SqrtNode() {};
+public:
+    SqrtNode() = default;
+
+    SqrtNode(std::unique_ptr<EditorNode> root, std::unique_ptr<EditorNode> argument);
+
+    ~SqrtNode() override = default;
 
     void Render(float fontSize) override;
 
     void KeyPress() override;
-    
+
     void MouseClick() override;
-    
-    void ToText() override;
-    
-    std::pair<float,float> GetNWCorner() override;
-    
-    std::pair<float,float> GetSize() override;
-    
+
+    std::string ToText() const override;
+
+    std::pair<float, float> GetNWCorner() override;
+
+    std::pair<float, float> GetSize() override;
+
     bool HasChild() override;
 
-    std::pair<EditorNode*,EditorNode*> GetChildren();
+    // {root, argument}; root is null for a plain square root.
+    std::pair<EditorNode*, EditorNode*> GetChildren() const;
 
-    void SetChildren(EditorNode& numerator, EditorNode& denominator);
-
+    void SetChildren(std::unique_ptr<EditorNode> root, std::unique_ptr<EditorNode> argument);
 };
