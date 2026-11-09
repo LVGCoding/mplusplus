@@ -19,9 +19,9 @@ Editor::~Editor() {
 
 // Create a new file object, becoming the active document
 void Editor::NewFile(const std::filesystem::path& path) {
-    File file;
-    file.path = path;
-    file.modified = true;
+    auto file = CreateFileForPath(path);
+    file->path = path;
+    file->modified = true;
 
     files_.push_back(std::move(file));
     activeTab_ = files_.size() - 1;
@@ -43,10 +43,9 @@ bool Editor::NewTemporaryFile(std::string& error) {
         const auto directory = temporaryRoot /
             ("mplusplus-" + std::to_string(timestamp) + "-" + std::to_string(attempt));
         if (std::filesystem::create_directory(directory, filesystemError)) {
-            File file;
             const auto path = directory / "untitled.mpp";
             temporaryFiles_.push_back(path);
-            if (!SaveFile(file, path, error)) {
+            if (!CreateFileForPath(path)->Save(path, error)) {
                 return false;
             }
             return OpenFile(path, error);
@@ -70,9 +69,9 @@ bool Editor::IsTemporaryFile(const FileBase& file) const {
 // Open a file given a path
 bool Editor::OpenFile(const std::filesystem::path& path,
                       std::string& error) {
-    File file;
+    auto file = CreateFileForPath(path);
 
-    if (!LoadFile(file, path, error)) {
+    if (!file->Load(path, error)) {
         return false;
     }
 
@@ -87,7 +86,13 @@ FileBase* Editor::ActiveFile() {
         return nullptr;
     }
 
-    return &files_[activeTab_];
+    return files_[activeTab_].get();
+}
+
+void Editor::SetActiveTab(std::size_t index) {
+    if (index < files_.size()) {
+        activeTab_ = index;
+    }
 }
 
 void Editor::CloseActiveFile() {

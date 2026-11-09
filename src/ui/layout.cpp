@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <unordered_map>
 
 #include "editor/editor.h"
 #include "clay.h"
@@ -18,6 +19,11 @@ namespace {
     bool docsRequested = false;
     bool saveRequested = false;
     bool closeRequested = false;
+    // Tab index the user clicked to activate or close this frame (if any).
+    std::size_t selectTabRequested = SIZE_MAX;
+    std::size_t closeTabRequested = SIZE_MAX;
+    // Remember each open file's editor scroll position so switching tabs restores it.
+    std::unordered_map<const FileBase*, Clay_Vector2> tabScroll;
     bool fileMenuOpen = false;
     bool unsavedChangesOpen = false;
     enum class CloseAction { None, Save, Discard, Cancel };
@@ -50,7 +56,7 @@ namespace {
         return ClayRaylib_MeasureText(slice, &config, &font).width;
     }
 
-    Vector2 EditorCursorPosition(const File& file, Font font) {
+    Vector2 EditorCursorPosition(const FileText& file, Font font) {
         const auto bounds = Clay_GetElementData(CLAY_ID("Editor")).boundingBox;
         const auto position = std::min(file.cursorPos, file.text.size());
         const auto newline = position == 0 ? std::string::npos : file.text.rfind('\n', position - 1);
@@ -98,7 +104,7 @@ namespace {
     ClayRaylibCustomDraw closeIcon = {DrawCloseIcon};
 
     bool SaveActiveFile(Editor& editor, std::string& error) {
-        File* file = editor.ActiveFile();
+        FileBase* file = editor.ActiveFile();
         if (!file) {
             return false;
         }
@@ -106,51 +112,89 @@ namespace {
             auto path = ShowSaveFileDialog(
                 file->path.empty() ? std::filesystem::path("untitled.mpp")
                                    : file->path.filename(), error);
-            return path && SaveFile(*file, *path, error);
+            return path && file->Save(*path, error);
         }
-        return SaveFile(*file, file->path, error);
+        return file->Save(file->path, error);
     }
 
-    // Report close clicks; file mutation is deferred until after rendering.
-    bool FileTab(const File& file) {
+    // Report tab clicks; switching/closing is deferred until after rendering.
+    void FileTab(const FileBase& file, std::size_t index, bool active) {
         const std::string& name = file.TabName();
-        bool closeRequested = false;
+        const auto i = static_cast<uint32_t>(index);
+        const Clay_ElementId tabId = CLAY_IDI("FileTab", i);
+        const Clay_ElementId closeId = CLAY_IDI("FileTabCloseButton", i);
+        const bool clickable = !unsavedChangesOpen && !fileMenuOpen;
 
-        CLAY(CLAY_ID("ActiveFileTab"),
+        CLAY(tabId,
              {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_GROW(0)},
                          .padding = {12, 4, 0, 0}, .childGap = 12,
                          .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
-              .border = {.color = menuText, .width = {.bottom = 2}}}) {
+              .backgroundColor = !active && Clay_PointerOver(tabId)
+                  ? Clay_Color{240, 240, 240, 255} : Clay_Color{0, 0, 0, 0},
+              .border = {.color = active ? menuText : dividerColor,
+                         .width = {.right = 1, .bottom = static_cast<uint16_t>(active ? 2 : 0)}}}) {
             Clay_String label = {
                 .isStaticallyAllocated = false,
                 .length = static_cast<int32_t>(name.size()),
                 .chars = name.c_str()
             };
-            CLAY_TEXT(label, {.textColor = {20, 20, 20, 255},
-                              .fontId = FONT_BOLD, .fontSize = 18,
+            CLAY_TEXT(label, {.textColor = active ? Clay_Color{20, 20, 20, 255}
+                                                  : Clay_Color{100, 100, 100, 255},
+                              .fontId = active ? FONT_BOLD : FONT_BODY, .fontSize = 18,
                               .wrapMode = CLAY_TEXT_WRAP_NONE});
 
             if (file.modified) {
-                CLAY(CLAY_ID("FileTabUnsavedDot"),
+                CLAY(CLAY_IDI("FileTabUnsavedDot", i),
                      {.layout = {.sizing = {CLAY_SIZING_FIXED(6), CLAY_SIZING_FIXED(6)}},
                       .backgroundColor = {20, 20, 20, 255},
                       .cornerRadius = CLAY_CORNER_RADIUS(3)}) {}
             }
 
-            CLAY(CLAY_ID("FileTabCloseButton"),
+            CLAY(closeId,
                  {.layout = {.sizing = {CLAY_SIZING_FIXED(28), CLAY_SIZING_FIXED(28)}},
-                  .backgroundColor = Clay_PointerOver(CLAY_ID("FileTabCloseButton"))
+                  .backgroundColor = Clay_PointerOver(closeId)
                       ? Clay_Color{190, 190, 190, 255} : Clay_Color{0, 0, 0, 0},
                   .cornerRadius = CLAY_CORNER_RADIUS(4)}) {
-                closeRequested = !unsavedChangesOpen && Clay_Hovered() &&
-                    IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-                CLAY(CLAY_ID("FileTabCloseIcon"),
+                if (clickable && Clay_Hovered() && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    closeTabRequested = index;
+                }
+                CLAY(CLAY_IDI("FileTabCloseIcon", i),
                      {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}},
                       .custom = {.customData = &closeIcon}}) {}
             }
-        }
 
-        return closeRequested;
+            if (clickable && closeTabRequested != index && Clay_Hovered() &&
+                IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                selectTabRequested = index;
+            }
+        }
+    }
+
+    // Save the current file's scroll offset and restore the newly active file's.
+    void SwitchTab(Editor& editor, std::size_t index) {
+        if (index == editor.ActiveTabIndex()) return;
+        auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
+        if (scroll.found) {
+            if (const FileBase* current = editor.ActiveFile()) {
+                tabScroll[current] = *scroll.scrollPosition;
+            }
+        }
+        editor.SetActiveTab(index);
+        if (scroll.found) {
+            const auto saved = tabScroll.find(editor.ActiveFile());
+            *scroll.scrollPosition = saved != tabScroll.end() ? saved->second : Clay_Vector2{0, 0};
+        }
+    }
+
+    void CloseActiveTab(Editor& editor) {
+        tabScroll.erase(editor.ActiveFile());
+        editor.CloseActiveFile();
+        // The next active file comes in with its own scroll position.
+        auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
+        if (scroll.found) {
+            const auto saved = tabScroll.find(editor.ActiveFile());
+            *scroll.scrollPosition = saved != tabScroll.end() ? saved->second : Clay_Vector2{0, 0};
+        }
     }
 
     void FileMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
@@ -189,7 +233,7 @@ namespace {
         }
     }
 
-    void UnsavedChangesPopup(const File& file) {
+    void UnsavedChangesPopup(const FileBase& file) {
         // Clay uses this message until rendering finishes.
         static std::string message;
         message = file.path.filename().string();
@@ -264,7 +308,7 @@ void UpdateLayoutScroll(float wheelX, float wheelY, float deltaTime, bool textCh
         blocked ? Clay_Vector2{0, 0} : Clay_Vector2{wheelX, wheelY}, deltaTime);
 }
 
-bool ScrollEditorCursorIntoView(const File& file, Font* fonts) {
+bool ScrollEditorCursorIntoView(const FileText& file, Font* fonts) {
     auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
     const auto workspace = Clay_GetElementData(CLAY_ID("Workspace"));
     const auto editor = Clay_GetElementData(CLAY_ID("Editor"));
@@ -305,10 +349,17 @@ bool ScrollEditorCursorIntoView(const File& file, Font* fonts) {
 
 void Layout(Editor& editor) {
     static const std::string emptyText;
-    const File* activeFile = editor.ActiveFile();
+    const FileBase* activeFile = editor.ActiveFile();
     if (!activeFile) ResetEditorCursorBlink();
     const bool canSave = activeFile && !activeFile->path.empty();
-    const std::string& editorText = activeFile ? activeFile->text : emptyText;
+    // TODO: .mpp files show their raw source until node rendering is wired up.
+    const std::string* activeText = &emptyText;
+    if (const auto* textFile = dynamic_cast<const FileText*>(activeFile)) {
+        activeText = &textFile->text;
+    } else if (const auto* mppFile = dynamic_cast<const FileMpp*>(activeFile)) {
+        activeText = &mppFile->source;
+    }
+    const std::string& editorText = *activeText;
 
     if (IsKeyPressed(KEY_ESCAPE) ||
         (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
@@ -387,9 +438,13 @@ void Layout(Editor& editor) {
                              .padding = {static_cast<uint16_t>(gutterWidth), 24, 0, 0},
                              .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
                   .backgroundColor = editorColor,
-                  .clip = {.horizontal = true},
+                  // Scrolls horizontally (trackpad / shift-wheel) when tabs overflow.
+                  .clip = {.horizontal = true, .childOffset = Clay_GetScrollOffset()},
                   .border = {.color = dividerColor, .width = {.bottom = 2}}}) {
-                closeRequested = FileTab(*activeFile);
+                const auto& files = editor.Files();
+                for (std::size_t i = 0; i < files.size(); ++i) {
+                    FileTab(*files[i], i, i == editor.ActiveTabIndex());
+                }
             }
         }
         if (fileMenuOpen) {
@@ -498,21 +553,34 @@ void ProcessLayoutActions(Editor& editor) {
         }
         if (action == CloseAction::Discard ||
             (action == CloseAction::Save && SaveActiveFile(editor, closeError))) {
-            editor.CloseActiveFile();
+            CloseActiveTab(editor);
             unsavedChangesOpen = false;
             closeError.clear();
         }
         return;
     }
+    if (closeTabRequested != SIZE_MAX) {
+        // Closing a background tab brings it to the front first, so the
+        // unsaved-changes popup and the close logic act on the right file.
+        SwitchTab(editor, closeTabRequested);
+        closeTabRequested = SIZE_MAX;
+        selectTabRequested = SIZE_MAX;
+        closeRequested = true;
+    }
+    if (selectTabRequested != SIZE_MAX) {
+        SwitchTab(editor, selectTabRequested);
+        selectTabRequested = SIZE_MAX;
+    }
+
     if (closeRequested) {
         closeRequested = false;
-        if (File* file = editor.ActiveFile()) {
+        if (FileBase* file = editor.ActiveFile()) {
             if (file->modified) {
                 unsavedChangesOpen = true;
                 fileMenuOpen = false;
                 closeError.clear();
             } else {
-                editor.CloseActiveFile();
+                CloseActiveTab(editor);
             }
         }
         return;
@@ -558,8 +626,8 @@ void ProcessLayoutActions(Editor& editor) {
     }
 }
 
-bool HandleEditorMouseInput(File& file, Font font) {
-    static const File* draggingFile = nullptr;
+bool HandleEditorMouseInput(FileText& file, Font font) {
+    static const FileText* draggingFile = nullptr;
     if (IsLayoutModalOpen() || fileMenuOpen || !IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
         draggingFile = nullptr;
         return false;
@@ -606,7 +674,7 @@ void ResetEditorCursorBlink() {
     lastCursorActivity = GetTime();
 }
 
-void DrawEditorSelection(const File& file, Font font) {
+void DrawEditorSelection(const FileText& file, Font font) {
     const auto start = std::min({file.selectionStart, file.cursorPos, file.text.size()});
     const auto end = std::min(std::max(file.selectionStart, file.cursorPos), file.text.size());
     if (start == end || IsLayoutModalOpen() || fileMenuOpen) return;
@@ -636,11 +704,11 @@ void DrawEditorSelection(const File& file, Font font) {
     EndScissorMode();
 }
 
-void DrawEditorCursor(const File& file, Font font) {
+void DrawEditorCursor(const FileText& file, Font font) {
     if (IsLayoutModalOpen() || fileMenuOpen) return;
     const auto viewport = EditorViewport();
     if (viewport.width <= 0 || viewport.height <= 0) return;
-    static const File* previousFile = nullptr;
+    static const FileText* previousFile = nullptr;
     static std::filesystem::path previousPath;
     if (previousFile != &file || previousPath != file.path) {
         previousFile = &file;

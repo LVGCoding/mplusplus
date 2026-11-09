@@ -2,36 +2,35 @@
 
 #include "EditorNode.h"
 
-
 #include <memory>
-#include <vector>
 #include <string>
+#include <vector>
 
-class FracNode : EditorNode{
+class FracNode : EditorNode {
 private:
-    EditorNode* numerator;
-    EditorNode* denominator;
+  EditorNode *numerator;
+  EditorNode *denominator;
 
 public:
-    FracNode() {};
+  FracNode() {};
 
-    ~FracNode() {};
+  ~FracNode() {};
 
-    void Render(float fontSize) override;
+  void Render(float fontSize) override;
 
-    void KeyPress() override;
-    
-    void MouseClick() override;
-    
-    void ToText() override;
-    
-    std::pair<float,float> GetNWCorner() override;
-    
-    std::pair<float,float> GetSize() override;
-    
-    bool HasChild() override;
+  void KeyPress() override;
 
-    std::pair<EditorNode*,EditorNode*> GetChildren();
+  void MouseClick() override;
 
-    void SetChildren(EditorNode& numerator, EditorNode& denominator);
+  void ToText() override;
+
+  std::pair<float, float> GetNWCorner() override;
+
+  std::pair<float, float> GetSize() override;
+
+  bool HasChild() override;
+
+  std::pair<EditorNode *, EditorNode *> GetChildren();
+
+  void SetChildren(EditorNode &numerator, EditorNode &denominator);
 };

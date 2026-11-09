@@ -52,12 +52,15 @@ add_executable(mplusplus
   src/editor/editor.cpp
   src/ui/layout.cpp
   src/editor/input.cpp
-  src/editor/file.cpp
+  src/editor/fileBase.cpp
+  src/editor/fileText.cpp
+  src/editor/fileMpp.cpp
   src/ui/clay_impl.cpp
   src/ui/clay_renderer_raylib.cpp
   src/math/nanosvg_impl.cpp
   src/math/latex_renderer.cpp
-  src/math/svg_preprocessor.cpp 
+  src/math/svg_preprocessor.cpp
+  src/parser/parser.cpp
 )
 target_include_directories(mplusplus PRIVATE src)
 target_link_libraries(mplusplus PRIVATE raylib clay nfd)

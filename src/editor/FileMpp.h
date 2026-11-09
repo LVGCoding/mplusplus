@@ -1,37 +1,30 @@
 #pragma once
 
+#include "fileBase.h"
+#include "math/EditorNode.h"
 #include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <string>
-#include "math/EditorNode.h"
-#include "fileBase.h"
-#include <parser.h>
-// The file class represents a file currently open in the M++ editor.
-struct FileMpp: FileBase {
-    std::vector<EditorNode> content;
-    std::filesystem::path path;
-    bool modified = false;
+#include <vector>
 
-    // Position where the cursor is located in the text.
-    std::vector<size_t> cursorPos = {0};
+// An M++ (.mpp) document currently open in the M++ editor.
+struct FileMpp : FileBase {
+  // Raw LaTeX/M++ source as read from disk. Kept so the file round-trips on
+  // save until the node tree can be serialized back to text.
+  std::string source;
 
-    // Starting position of the selected text.
-    // When selectionStart == cursorPos, nothing is selected.
-    std::vector<size_t> selectionStart = {0};
+  // Parsed document. EditorNode is abstract, so nodes are held by pointer.
+  // TODO: fill this from `source` once the Parser is working.
+  std::vector<std::unique_ptr<EditorNode>> content;
 
-    const std::string& TabName() const;
+  // Position where the cursor is located in the node tree.
+  std::vector<std::size_t> cursorPos = {0};
 
-    const Parser parser();
+  // Starting position of the selected nodes.
+  // When selectionStart == cursorPos, nothing is selected.
+  std::vector<std::size_t> selectionStart = {0};
 
-private:
-    // Keep the label alive until Clay finishes rendering the frame.
-    mutable std::string tabName_;
+  bool Load(const std::filesystem::path &path, std::string &error) override;
+  bool Save(const std::filesystem::path &path, std::string &error) override;
 };
-
-// bool LoadFile(File& file,
-//               const std::filesystem::path& path,
-//               std::string& error);
-
-// bool SaveFile(File& file,
-//               const std::filesystem::path& path,
-//               std::string& error);

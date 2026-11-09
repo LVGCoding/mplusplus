@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 #include "clay.h"
@@ -77,7 +78,8 @@ int main(int argc, char* argv[]) {
     bool textChanged = false;
     bool cursorActivity = false;
     if (!IsLayoutModalOpen()) {
-        if (File* file = editor.ActiveFile()) {
+        // Only plain text files are editable for now; FileMpp input comes later.
+        if (auto* file = dynamic_cast<FileText*>(editor.ActiveFile())) {
             cursorActivity = HandleEditorMouseInput(*file, fonts[FONT_BODY]);
             const auto previousCursor = file->cursorPos;
             const auto previousAnchor = file->selectionStart;
@@ -100,7 +102,8 @@ int main(int argc, char* argv[]) {
     Layout(editor);
     Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
 
-    if (cursorActivity && ScrollEditorCursorIntoView(*editor.ActiveFile(), fonts)) {
+    auto* activeText = dynamic_cast<FileText*>(editor.ActiveFile());
+    if (cursorActivity && activeText && ScrollEditorCursorIntoView(*activeText, fonts)) {
       // Apply the new offset before drawing so typing is never rendered off-screen.
       Clay_BeginLayout();
       Layout(editor);
@@ -113,7 +116,7 @@ int main(int argc, char* argv[]) {
 
     // Draw the blinking text cursor
     if (!IsLayoutModalOpen()) {
-        if (File* file = editor.ActiveFile()) {
+        if (auto* file = dynamic_cast<FileText*>(editor.ActiveFile())) {
             DrawEditorSelection(*file, fonts[FONT_BODY]);
             DrawEditorCursor(*file, fonts[FONT_BODY]);
         }

@@ -4,6 +4,8 @@
 
 class EditorNode{
 public:
+    virtual ~EditorNode() = default;
+
     virtual void Render(float fontSize) = 0;
     virtual void KeyPress() = 0;
     virtual void MouseClick() = 0;
