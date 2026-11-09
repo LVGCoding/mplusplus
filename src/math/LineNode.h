@@ -1,6 +1,6 @@
 #pragma once
 
-#include "editor_node.h"
+#include "EditorNode.h"
 
 #include <memory>
 #include <vector>

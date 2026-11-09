@@ -86,7 +86,7 @@ namespace {
         DrawLineEx({x + 6, y + 2}, {x + 11, y - 3}, 1.5f, color);
     }
 
-    ClayRaylib_CustomDraw chevron = {DrawChevron};
+    ClayRaylibCustomDraw chevron = {DrawChevron};
 
     void DrawCloseIcon(Clay_BoundingBox bounds) {
         const float x = bounds.x + bounds.width / 2;
@@ -95,7 +95,7 @@ namespace {
         DrawLineEx({x - 5, y + 5}, {x + 5, y - 5}, 1.5f, BLACK);
     }
 
-    ClayRaylib_CustomDraw closeIcon = {DrawCloseIcon};
+    ClayRaylibCustomDraw closeIcon = {DrawCloseIcon};
 
     bool SaveActiveFile(Editor& editor, std::string& error) {
         File* file = editor.ActiveFile();

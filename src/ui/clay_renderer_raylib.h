@@ -11,7 +11,7 @@ Clay_Dimensions ClayRaylib_MeasureText(Clay_StringSlice text,
                                        void *userData);
 
 // Custom Clay elements provide a drawing callback for their layout bounds.
-struct ClayRaylib_CustomDraw {
+struct ClayRaylibCustomDraw {
   void (*draw)(Clay_BoundingBox bounds);
 };
 

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "editor_node.h"
+#include "EditorNode.h"
 
-#include "text_node.h"
+#include "TextNode.h"
 
 #include <memory>
 #include <vector>

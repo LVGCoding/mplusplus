@@ -12,7 +12,7 @@
 #include "ui/layout.h"
 #include "editor/input.h"
 
-#include "math/latex_renderer.h"
+#include "math/LatexRenderer.h"
 
 // Clay error handling
 static void HandleClayError(Clay_ErrorData error) {

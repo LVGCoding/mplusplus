@@ -5,8 +5,8 @@
 #include <iostream>
 
 
-#include "latex_renderer.h"
-#include "svg_preprocessor.h"
+#include "LatexRenderer.h"
+#include "SVGPreprocessor.h"
 #include "defer.h"
 
 #include "../lib/nanosvg/nanosvg.h"

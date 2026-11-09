@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <string>
-#include <editor_node.h>
+#include "math/EditorNode.h"
 #include "fileBase.h"
 #include <parser.h>
 // The file class represents a file currently open in the M++ editor.
