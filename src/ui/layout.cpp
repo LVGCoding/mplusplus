@@ -98,7 +98,7 @@ namespace {
     ClayRaylib_CustomDraw closeIcon = {DrawCloseIcon};
 
     bool SaveActiveFile(Editor& editor, std::string& error) {
-        File* file = editor.ActiveFile();
+        File* file = (File*)editor.ActiveFile();
         if (!file) {
             return false;
         }
@@ -305,7 +305,7 @@ bool ScrollEditorCursorIntoView(const File& file, Font* fonts) {
 
 void Layout(Editor& editor) {
     static const std::string emptyText;
-    const File* activeFile = editor.ActiveFile();
+    const File* activeFile = (File*)editor.ActiveFile();
     if (!activeFile) ResetEditorCursorBlink();
     const bool canSave = activeFile && !activeFile->path.empty();
     const std::string& editorText = activeFile ? activeFile->text : emptyText;
@@ -506,7 +506,7 @@ void ProcessLayoutActions(Editor& editor) {
     }
     if (closeRequested) {
         closeRequested = false;
-        if (File* file = editor.ActiveFile()) {
+        if (File* file = (File*)editor.ActiveFile()) {
             if (file->modified) {
                 unsavedChangesOpen = true;
                 fileMenuOpen = false;

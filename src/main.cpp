@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
     bool textChanged = false;
     bool cursorActivity = false;
     if (!IsLayoutModalOpen()) {
-        if (File* file = editor.ActiveFile()) {
+        if (File* file = (File*)editor.ActiveFile()) {
             cursorActivity = HandleEditorMouseInput(*file, fonts[FONT_BODY]);
             const auto previousCursor = file->cursorPos;
             const auto previousAnchor = file->selectionStart;
@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     Layout(editor);
     Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
 
-    if (cursorActivity && ScrollEditorCursorIntoView(*editor.ActiveFile(), fonts)) {
+    if (cursorActivity && ScrollEditorCursorIntoView(*(File*)editor.ActiveFile(), fonts)) {
       // Apply the new offset before drawing so typing is never rendered off-screen.
       Clay_BeginLayout();
       Layout(editor);
@@ -113,7 +113,7 @@ int main(int argc, char* argv[]) {
 
     // Draw the blinking text cursor
     if (!IsLayoutModalOpen()) {
-        if (File* file = editor.ActiveFile()) {
+        if (File* file = (File*)editor.ActiveFile()) {
             DrawEditorSelection(*file, fonts[FONT_BODY]);
             DrawEditorCursor(*file, fonts[FONT_BODY]);
         }
