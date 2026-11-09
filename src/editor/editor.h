@@ -1,34 +1,42 @@
 #pragma once
 
-#include "file.h"
+#include "editor/FileMpp.h"
+#include "fileBase.h"
+#include "fileText.h"
 
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 class Editor {
 public:
-    ~Editor();
+  ~Editor();
 
-    void NewFile(const std::filesystem::path& path = {});
+  void NewFile(const std::filesystem::path &path = {});
 
-    bool NewTemporaryFile(std::string& error);
+  bool NewTemporaryFile(std::string &error);
 
-    bool IsTemporaryFile(const FileBase& file) const;
+  bool IsTemporaryFile(const FileBase &file) const;
 
-    bool OpenFile(const std::filesystem::path& path,
-                  std::string& error);
+  // Opens `path` as a FileMpp if it has the .mpp extension, otherwise as a
+  // FileText.
+  bool OpenFile(const std::filesystem::path &path, std::string &error);
 
-    FileBase* ActiveFile();
+  FileBase *ActiveFile();
 
-    // Call only after unsaved changes have been handled and rendering is done.
-    void CloseActiveFile();
+  std::size_t ActiveTabIndex() const { return activeTab_; }
 
-    const std::vector<FileBase>& Files() const {
-        return files_;
-    }
+  // Make the file at `index` the active tab. Out-of-range indices are ignored.
+  void SetActiveTab(std::size_t index);
+
+  // Call only after unsaved changes have been handled and rendering is done.
+  void CloseActiveFile();
+
+  const std::vector<std::unique_ptr<FileBase>> &Files() const { return files_; }
 
 private:
-    std::vector<FileBase> files_;
-    std::vector<std::filesystem::path> temporaryFiles_;
-    std::size_t activeTab_ = 0;
+  // Held by pointer so FileText/FileMpp aren't sliced down to FileBase.
+  std::vector<std::unique_ptr<FileBase>> files_;
+  std::vector<std::filesystem::path> temporaryFiles_;
+  std::size_t activeTab_ = 0;
 };

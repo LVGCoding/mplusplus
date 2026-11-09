@@ -1,4 +1,4 @@
-#include "svg_preprocessor.h"
+#include "SVGPreprocessor.h"
 
 #include <unordered_map>
 #include <iostream>
