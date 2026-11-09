@@ -492,19 +492,35 @@ void Layout(Editor& editor) {
                 }
             }
             CLAY(CLAY_ID("Editor"),
-                 {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
-                             .padding = {6, 6, 6, 6}},
-                  .backgroundColor = editorColor}) {
+                {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
+                            .padding = {6, 6, 6, 6}},
+                .backgroundColor = editorColor}) {
+
                 Clay_String clayText = {
                     .isStaticallyAllocated = false,
                     .length = static_cast<int32_t>(editorText.size()),
                     .chars = editorText.c_str()
                 };
-                CLAY_TEXT(clayText, {.textColor = menuText, .fontId = FONT_BODY,
-                                     .fontSize = editorFontSize, .lineHeight = editorLineHeight,
-                                     .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+
+                // Give the editor text a stable ID for cursor and selection rendering
+                CLAY(CLAY_ID("EditorText"),
+                    {.layout = {
+                        .sizing = {
+                            CLAY_SIZING_FIT(0),
+                            CLAY_SIZING_FIT(0)
+                        }
+                    }}) {
+
+                    CLAY_TEXT(clayText, {
+                        .textColor = menuText,
+                        .fontId = FONT_BODY,
+                        .fontSize = editorFontSize,
+                        .lineHeight = editorLineHeight,
+                        .wrapMode = CLAY_TEXT_WRAP_NEWLINES
+                    });
+                }
             }
-        }
+            }
         // Terminal panel from the mockup (placeholder: no input/output wired up yet)
         CLAY(CLAY_ID("Terminal"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(140)},
@@ -716,7 +732,7 @@ void DrawEditorCursor(const FileText& file, Font font) {
         ResetEditorCursorBlink();
     }
     const double elapsed = GetTime() - lastCursorActivity;
-    if (elapsed >= 0.7 && static_cast<int>((elapsed - 0.7) / 0.5) % 2 == 1) return;
+    if (elapsed >= 0.3 && static_cast<int>((elapsed - 0.3) / 0.5) % 2 == 1) return;
     const Vector2 cursor = EditorCursorPosition(file, font);
     ClipEditorOverlay(viewport);
     DrawRectangleRec({cursor.x, cursor.y, 2, float(editorLineHeight)}, {20, 20, 20, 255});
