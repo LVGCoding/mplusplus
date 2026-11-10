@@ -1,4 +1,5 @@
 #include "LineNode.h"
+#include "clay.h"
 
 #include <utility>
 
@@ -35,7 +36,9 @@ bool LineNode::IsBraced() const {
 }
 
 // TODO: rendering and input are not implemented yet.
-void LineNode::Render(float /*fontSize*/) {}
+void LineNode::Render(float fontSize) {
+    CLAY
+}
 void LineNode::KeyPress() {}
 void LineNode::MouseClick() {}
 std::pair<float, float> LineNode::GetNWCorner() {

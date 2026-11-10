@@ -23,3 +23,8 @@ bool FileMpp::Save(const std::filesystem::path &path, std::string &error) {
   modified = false;
   return true;
 }
+void FileMpp::LayoutContent() const {
+  for (const auto &item : content) {
+    item->Render(16);
+  }
+}

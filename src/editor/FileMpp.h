@@ -27,4 +27,12 @@ struct FileMpp : FileBase {
 
   bool Load(const std::filesystem::path &path, std::string &error) override;
   bool Save(const std::filesystem::path &path, std::string &error) override;
+
+  // Rendering and input, in fileMppView.cpp. Placeholders for now: the source
+  // is shown read-only until node rendering and editing are written.
+  bool HandleInput(const EditorView &view) override;
+  void LayoutContent() const override;
+  std::size_t LineCount() const override;
+  void DrawOverlay(const EditorView &view) const override;
+  std::optional<Rectangle> CursorBounds(const EditorView &view) const override;
 };

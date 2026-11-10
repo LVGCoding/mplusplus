@@ -12,6 +12,7 @@
 #include "file_dialog.h"
 #include "font.h"
 #include "clay_renderer_raylib.h"
+#include "EditorView.h"
 
 namespace {
     bool newRequested = false;
@@ -40,30 +41,16 @@ namespace {
     constexpr Clay_Color gutterColor = {232, 232, 232, 255};
     constexpr Clay_Color dividerColor = {209, 209, 209, 255};
     constexpr Clay_Color editorColor = {255, 255, 255, 255};
-    constexpr uint16_t editorFontSize = 18;
-    constexpr uint16_t editorLineHeight = 23;
+    constexpr uint16_t editorFontSize = editor_style::fontSize;
+    constexpr uint16_t editorLineHeight = editor_style::lineHeight;
     constexpr float gutterWidth = 46;
     constexpr Clay_Color terminalBorderColor = {174, 174, 174, 255};
     constexpr int gutterMinLines = 20;
-    constexpr float editorPadding = 6;
+    constexpr float editorPadding = editor_style::padding;
     double lastCursorActivity = 0;
 
-    float EditorTextWidth(const std::string& text, std::size_t start,
-                          std::size_t end, Font font) {
-        Clay_StringSlice slice = {.length = static_cast<int32_t>(end - start),
-                                  .chars = text.c_str() + start, .baseChars = text.c_str()};
-        Clay_TextElementConfig config = {.fontId = FONT_BODY, .fontSize = editorFontSize};
-        return ClayRaylib_MeasureText(slice, &config, &font).width;
-    }
-
-    Vector2 EditorCursorPosition(const FileText& file, Font font) {
-        const auto bounds = Clay_GetElementData(CLAY_ID("Editor")).boundingBox;
-        const auto position = std::min(file.cursorPos, file.text.size());
-        const auto newline = position == 0 ? std::string::npos : file.text.rfind('\n', position - 1);
-        const auto start = newline == std::string::npos ? 0 : newline + 1;
-        const auto row = std::count(file.text.begin(), file.text.begin() + position, '\n');
-        return {bounds.x + editorPadding + EditorTextWidth(file.text, start, position, font),
-                bounds.y + editorPadding + row * editorLineHeight};
+    void ResetEditorCursorBlink() {
+        lastCursorActivity = GetTime();
     }
 
     Rectangle EditorViewport() {
@@ -77,11 +64,20 @@ namespace {
                 workspace.boundingBox.height};
     }
 
-    void ClipEditorOverlay(Rectangle viewport) {
-        BeginScissorMode(static_cast<int>(std::ceil(viewport.x)),
-                         static_cast<int>(std::ceil(viewport.y)),
-                         static_cast<int>(std::floor(viewport.width)),
-                         static_cast<int>(std::floor(viewport.height)));
+    // Describe the editor area for the active file's rendering/input methods.
+    EditorView MakeEditorView(Font* fonts) {
+        EditorView view;
+        view.fonts = fonts;
+        const auto editor = Clay_GetElementData(CLAY_ID("Editor"));
+        if (editor.found) {
+            view.content = {editor.boundingBox.x, editor.boundingBox.y,
+                            editor.boundingBox.width, editor.boundingBox.height};
+        }
+        view.viewport = EditorViewport();
+        view.acceptsMouse = !fileMenuOpen;
+        const double elapsed = GetTime() - lastCursorActivity;
+        view.cursorVisible = elapsed < 0.7 || static_cast<int>((elapsed - 0.7) / 0.5) % 2 == 0;
+        return view;
     }
 
     void DrawChevron(Clay_BoundingBox bounds) {
@@ -308,20 +304,41 @@ void UpdateLayoutScroll(float wheelX, float wheelY, float deltaTime, bool textCh
         blocked ? Clay_Vector2{0, 0} : Clay_Vector2{wheelX, wheelY}, deltaTime);
 }
 
-bool ScrollEditorCursorIntoView(const FileText& file, Font* fonts) {
+bool HandleActiveFileInput(Editor& editor, Font* fonts) {
+    if (IsLayoutModalOpen()) {
+        // Don't let characters typed over the popup reach the editor later.
+        while (GetCharPressed() > 0) {}
+        return false;
+    }
+    FileBase* file = editor.ActiveFile();
+    if (!file) {
+        return false;
+    }
+    const bool activity = file->HandleInput(MakeEditorView(fonts));
+    if (activity) {
+        ResetEditorCursorBlink();
+    }
+    return activity;
+}
+
+bool ScrollEditorCursorIntoView(Editor& editor, Font* fonts) {
+    const FileBase* file = editor.ActiveFile();
     auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
     const auto workspace = Clay_GetElementData(CLAY_ID("Workspace"));
-    const auto editor = Clay_GetElementData(CLAY_ID("Editor"));
-    if (!scroll.found || !workspace.found || !editor.found) {
+    if (!file || !scroll.found || !workspace.found) {
         return false;
     }
 
-    const Vector2 cursor = EditorCursorPosition(file, fonts[FONT_BODY]);
+    const auto cursorBounds = file->CursorBounds(MakeEditorView(fonts));
+    if (!cursorBounds) {
+        return false;
+    }
+    const Rectangle cursor = *cursorBounds;
     const float viewportTop = workspace.boundingBox.y + editorPadding;
     const float viewportBottom = workspace.boundingBox.y + workspace.boundingBox.height - editorPadding;
     float offset = scroll.scrollPosition->y;
-    if (cursor.y + editorLineHeight > viewportBottom) {
-        offset -= cursor.y + editorLineHeight - viewportBottom;
+    if (cursor.y + cursor.height > viewportBottom) {
+        offset -= cursor.y + cursor.height - viewportBottom;
     } else if (cursor.y < viewportTop) {
         offset += viewportTop - cursor.y;
     }
@@ -332,8 +349,8 @@ bool ScrollEditorCursorIntoView(const FileText& file, Font* fonts) {
     const float viewportLeft = workspace.boundingBox.x + editorPadding;
     const float viewportRight = workspace.boundingBox.x + workspace.boundingBox.width - editorPadding - 2;
     float horizontalOffset = scroll.scrollPosition->x;
-    if (cursor.x > viewportRight) {
-        horizontalOffset -= cursor.x - viewportRight;
+    if (cursor.x + cursor.width > viewportRight) {
+        horizontalOffset -= cursor.x + cursor.width - viewportRight;
     } else if (cursor.x < viewportLeft) {
         horizontalOffset += viewportLeft - cursor.x;
     }
@@ -348,19 +365,9 @@ bool ScrollEditorCursorIntoView(const FileText& file, Font* fonts) {
 }
 
 void Layout(Editor& editor) {
-    static const std::string emptyText;
     const FileBase* activeFile = editor.ActiveFile();
     if (!activeFile) ResetEditorCursorBlink();
     const bool canSave = activeFile && !activeFile->path.empty();
-    // TODO: .mpp files show their raw source until node rendering is wired up.
-    const std::string* activeText = &emptyText;
-    if (const auto* textFile = dynamic_cast<const FileText*>(activeFile)) {
-        activeText = &textFile->text;
-    } else if (const auto* mppFile = dynamic_cast<const FileMpp*>(activeFile)) {
-        activeText = &mppFile->source;
-    }
-    const std::string& editorText = *activeText;
-
     if (IsKeyPressed(KEY_ESCAPE) ||
         (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
          !Clay_PointerOver(CLAY_ID("FileMenu")) &&
@@ -471,8 +478,7 @@ void Layout(Editor& editor) {
             // Line-number gutter from the mockup (same font size/line height as the editor text)
             static std::string lineNumbers;
             lineNumbers.clear();
-            int lineCount = 1;
-            for (char c : editorText) lineCount += c == '\n';
+            int lineCount = activeFile ? static_cast<int>(activeFile->LineCount()) : 1;
             if (lineCount < gutterMinLines) lineCount = gutterMinLines;
             for (int i = 1; i <= lineCount; ++i) {
                 lineNumbers += std::to_string(i);
@@ -495,14 +501,9 @@ void Layout(Editor& editor) {
                  {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
                              .padding = {6, 6, 6, 6}},
                   .backgroundColor = editorColor}) {
-                Clay_String clayText = {
-                    .isStaticallyAllocated = false,
-                    .length = static_cast<int32_t>(editorText.size()),
-                    .chars = editorText.c_str()
-                };
-                CLAY_TEXT(clayText, {.textColor = menuText, .fontId = FONT_BODY,
-                                     .fontSize = editorFontSize, .lineHeight = editorLineHeight,
-                                     .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
+                if (activeFile) {
+                    activeFile->LayoutContent();
+                }
             }
         }
         // Terminal panel from the mockup (placeholder: no input/output wired up yet)
@@ -626,99 +627,18 @@ void ProcessLayoutActions(Editor& editor) {
     }
 }
 
-bool HandleEditorMouseInput(FileText& file, Font font) {
-    static const FileText* draggingFile = nullptr;
-    if (IsLayoutModalOpen() || fileMenuOpen || !IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-        draggingFile = nullptr;
-        return false;
-    }
-    const auto viewport = EditorViewport();
-    const auto mouse = GetMousePosition();
-    const bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
-        CheckCollisionPointRec(mouse, viewport);
-    if (clicked) draggingFile = &file;
-    if (draggingFile != &file) return false;
-
-    const auto bounds = Clay_GetElementData(CLAY_ID("Editor")).boundingBox;
-    const int row = std::max(0, static_cast<int>(std::floor(
-        (mouse.y - bounds.y - editorPadding) / editorLineHeight)));
-    std::size_t start = 0;
-    for (int i = 0; i < row && start < file.text.size(); ++i) {
-        const auto newline = file.text.find('\n', start);
-        start = newline == std::string::npos ? file.text.size() : newline + 1;
-    }
-    const auto newline = file.text.find('\n', start);
-    const auto end = newline == std::string::npos ? file.text.size() : newline;
-    const float targetX = mouse.x - bounds.x - editorPadding;
-    float x = 0;
-    std::size_t position = start;
-    while (position < end) {
-        int bytes = 0;
-        GetCodepointNext(file.text.c_str() + position, &bytes);
-        const auto next = std::min(position + std::max(bytes, 1), end);
-        const float width = EditorTextWidth(file.text, position, next, font);
-        if (targetX < x + width / 2) break;
-        x += width;
-        position = next;
-    }
-    const auto previousPosition = file.cursorPos;
-    const auto previousAnchor = file.selectionStart;
-    file.cursorPos = position;
-    if (clicked && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT)) {
-        file.selectionStart = position;
-    }
-    return clicked || previousPosition != file.cursorPos || previousAnchor != file.selectionStart;
-}
-
-void ResetEditorCursorBlink() {
-    lastCursorActivity = GetTime();
-}
-
-void DrawEditorSelection(const FileText& file, Font font) {
-    const auto start = std::min({file.selectionStart, file.cursorPos, file.text.size()});
-    const auto end = std::min(std::max(file.selectionStart, file.cursorPos), file.text.size());
-    if (start == end || IsLayoutModalOpen() || fileMenuOpen) return;
-    const auto viewport = EditorViewport();
-    if (viewport.width <= 0 || viewport.height <= 0) return;
-    const auto bounds = Clay_GetElementData(CLAY_ID("Editor")).boundingBox;
-    ClipEditorOverlay(viewport);
-    std::size_t lineStart = 0;
-    std::size_t row = 0;
-    while (lineStart < end) {
-        const auto newline = file.text.find('\n', lineStart);
-        const auto lineEnd = newline == std::string::npos ? file.text.size() : newline;
-        const auto from = std::max(start, lineStart);
-        const auto to = std::min(end, lineEnd);
-        const float y = bounds.y + editorPadding + row * editorLineHeight;
-        if (from <= to && y + editorLineHeight > viewport.y && y < viewport.y + viewport.height) {
-            const float x = bounds.x + editorPadding + EditorTextWidth(file.text, lineStart, from, font);
-            float width = EditorTextWidth(file.text, from, to, font);
-            // Give a selected newline (including blank lines) a visible highlight.
-            if (newline != std::string::npos && end > newline) width += editorFontSize / 2.0f;
-            if (width > 0) DrawRectangleRec({x, y, width, float(editorLineHeight)}, {65, 105, 168, 80});
-        }
-        if (newline == std::string::npos) break;
-        lineStart = newline + 1;
-        ++row;
-    }
-    EndScissorMode();
-}
-
-void DrawEditorCursor(const FileText& file, Font font) {
+void DrawActiveFileOverlay(Editor& editor, Font* fonts) {
     if (IsLayoutModalOpen() || fileMenuOpen) return;
-    const auto viewport = EditorViewport();
-    if (viewport.width <= 0 || viewport.height <= 0) return;
-    static const FileText* previousFile = nullptr;
+    const FileBase* file = editor.ActiveFile();
+    if (!file) return;
+
+    // Show the cursor solid for a moment after switching files.
+    static const FileBase* previousFile = nullptr;
     static std::filesystem::path previousPath;
-    if (previousFile != &file || previousPath != file.path) {
-        previousFile = &file;
-        previousPath = file.path;
+    if (previousFile != file || previousPath != file->path) {
+        previousFile = file;
+        previousPath = file->path;
         ResetEditorCursorBlink();
     }
-    const double elapsed = GetTime() - lastCursorActivity;
-    if (elapsed >= 0.7 && static_cast<int>((elapsed - 0.7) / 0.5) % 2 == 1) return;
-    const Vector2 cursor = EditorCursorPosition(file, font);
-    ClipEditorOverlay(viewport);
-    DrawRectangleRec({cursor.x, cursor.y, 2, float(editorLineHeight)}, {20, 20, 20, 255});
-    EndScissorMode();
+    file->DrawOverlay(MakeEditorView(fonts));
 }

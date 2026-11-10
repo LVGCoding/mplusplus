@@ -11,7 +11,6 @@
 #include "ui/font.h"
 #include "editor/editor.h"
 #include "ui/layout.h"
-#include "editor/input.h"
 
 #include "math/LatexRenderer.h"
 
@@ -74,27 +73,8 @@ int main(int argc, char* argv[]) {
                          IsMouseButtonDown(MOUSE_LEFT_BUTTON));
     Vector2 wheel = GetMouseWheelMoveV();
 
-    // Primitive user input capture
-    bool textChanged = false;
-    bool cursorActivity = false;
-    if (!IsLayoutModalOpen()) {
-        // Only plain text files are editable for now; FileMpp input comes later.
-        if (auto* file = dynamic_cast<FileText*>(editor.ActiveFile())) {
-            cursorActivity = HandleEditorMouseInput(*file, fonts[FONT_BODY]);
-            const auto previousCursor = file->cursorPos;
-            const auto previousAnchor = file->selectionStart;
-            textChanged = HandleInput(file->text, file->cursorPos, file->selectionStart);
-            if (textChanged) {
-                file->modified = true;
-            }
-            cursorActivity = cursorActivity || textChanged || previousCursor != file->cursorPos ||
-                previousAnchor != file->selectionStart;
-            if (cursorActivity) ResetEditorCursorBlink();
-        }
-    } else {
-      // Don't let characters typed over the popup reach the editor later.
-      while (GetCharPressed() > 0) {}
-    }
+    // The active file handles its own keyboard and mouse input.
+    const bool cursorActivity = HandleActiveFileInput(editor, fonts);
 
     UpdateLayoutScroll(wheel.x, wheel.y, GetFrameTime(), cursorActivity);
 
@@ -102,8 +82,7 @@ int main(int argc, char* argv[]) {
     Layout(editor);
     Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
 
-    auto* activeText = dynamic_cast<FileText*>(editor.ActiveFile());
-    if (cursorActivity && activeText && ScrollEditorCursorIntoView(*activeText, fonts)) {
+    if (cursorActivity && ScrollEditorCursorIntoView(editor, fonts)) {
       // Apply the new offset before drawing so typing is never rendered off-screen.
       Clay_BeginLayout();
       Layout(editor);
@@ -114,13 +93,8 @@ int main(int argc, char* argv[]) {
     ClearBackground(BLACK);
     ClayRaylib_Render(commands, fonts);
 
-    // Draw the blinking text cursor
-    if (!IsLayoutModalOpen()) {
-        if (auto* file = dynamic_cast<FileText*>(editor.ActiveFile())) {
-            DrawEditorSelection(*file, fonts[FONT_BODY]);
-            DrawEditorCursor(*file, fonts[FONT_BODY]);
-        }
-    }
+    // Cursor, selection, and anything else the active file draws over Clay
+    DrawActiveFileOverlay(editor, fonts);
 
     renderer.Draw(texture,100,100);
     EndDrawing();
