@@ -28,8 +28,8 @@ struct FileMpp : FileBase {
   bool Load(const std::filesystem::path &path, std::string &error) override;
   bool Save(const std::filesystem::path &path, std::string &error) override;
 
-  // Rendering and input, in fileMppView.cpp. Placeholders for now: the source
-  // is shown read-only until node rendering and editing are written.
+  // Rendering and input, in fileMppView.cpp. The node tree is rendered
+  // read-only; editing is not written yet.
   bool HandleInput(const EditorView &view) override;
   void LayoutContent() const override;
   std::size_t LineCount() const override;

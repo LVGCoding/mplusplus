@@ -1,16 +1,13 @@
 #include "TextNode.h"
 
-#include "clay.h"
-#include "ui/font.h"
+#include "NodeStyle.h"
+
 #include <utility>
 
 TextNode::TextNode(std::string text) : text_(std::move(text)) {}
 
-// TODO: rendering and input are not implemented yet.
-void TextNode::Render(float fontSize) {
-  CLAY_TEXT({.chars = text_.c_str()}, {.fontSize = (uint16_t)fontSize,
-                                       .textColor = {255, 255, 255, 255}});
-}
+// TODO: input is not implemented yet.
+void TextNode::Render(float fontSize) { node_style::Text(text_, fontSize); }
 void TextNode::KeyPress() {}
 void TextNode::MouseClick() {}
 std::pair<float, float> TextNode::GetNWCorner() { return {0.0f, 0.0f}; }

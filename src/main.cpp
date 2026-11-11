@@ -8,20 +8,17 @@
 #include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
 
-#include "ui/font.h"
 #include "editor/editor.h"
+#include "ui/font.h"
 #include "ui/layout.h"
-
-#include "math/LatexRenderer.h"
 
 // Clay error handling
 static void HandleClayError(Clay_ErrorData error) {
-  std::fprintf(stderr, "Clay Error: %.*s\n", 
-    error.errorText.length,
-    error.errorText.chars);
+  std::fprintf(stderr, "Clay Error: %.*s\n", error.errorText.length,
+               error.errorText.chars);
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   // Open the application window with set parameters
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT |
                  FLAG_WINDOW_HIGHDPI);
@@ -44,20 +41,16 @@ int main(int argc, char* argv[]) {
   Clay_SetMeasureTextFunction(ClayRaylib_MeasureText, fonts);
 
   // Active debug mode if ran with the debug flag
-  if (argc > 1 && 
-    (std::strcmp(argv[1], "--debug") == 0 || 
-     std::strcmp(argv[1], "--d") == 0)) {
+  if (argc > 1 && (std::strcmp(argv[1], "--debug") == 0 ||
+                   std::strcmp(argv[1], "--d") == 0)) {
     Clay_SetDebugModeEnabled(true);
   }
 
   Editor editor;
-  LatexRenderer renderer;
-  MathTexture texture = renderer.RenderLatex("");
-  
 
   // Main render loop
   while (!WindowShouldClose()) {
-    
+
     const Vector2 currentDpi = GetWindowScaleDPI();
     if (currentDpi.x != fontDpi.x || currentDpi.y != fontDpi.y) {
       UnloadFontTable(fonts);
@@ -83,7 +76,8 @@ int main(int argc, char* argv[]) {
     Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
 
     if (cursorActivity && ScrollEditorCursorIntoView(editor, fonts)) {
-      // Apply the new offset before drawing so typing is never rendered off-screen.
+      // Apply the new offset before drawing so typing is never rendered
+      // off-screen.
       Clay_BeginLayout();
       Layout(editor);
       commands = Clay_EndLayout(GetFrameTime());
@@ -96,12 +90,9 @@ int main(int argc, char* argv[]) {
     // Cursor, selection, and anything else the active file draws over Clay
     DrawActiveFileOverlay(editor, fonts);
 
-    renderer.Draw(texture,100,100);
     EndDrawing();
 
     ProcessLayoutActions(editor);
-
   }
-  renderer.Unload(texture);
   return 0;
 }

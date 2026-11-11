@@ -73,6 +73,7 @@ add_library(mplusplus_core STATIC
   src/math/GreekNode.cpp
   src/math/LineNode.cpp
   src/math/MatrixNode.cpp
+  src/math/NodeStyle.cpp
   src/math/SqrtNode.cpp
   src/math/TextNode.cpp
   src/parser/parser.cpp
@@ -90,9 +91,6 @@ add_executable(mplusplus
   src/ui/font.cpp
   src/ui/file_dialog.cpp
   src/ui/layout.cpp
-  src/math/nanosvg_impl.cpp
-  src/math/latex_renderer.cpp
-  src/math/svg_preprocessor.cpp
 )
 target_link_libraries(mplusplus PRIVATE mplusplus_core nfd)
 mplusplus_set_warnings(mplusplus)
