@@ -3,6 +3,7 @@
 // Fixed panels of the window: title bar, editor workspace (gutter + text), terminal.
 
 #include "layout_common.h"
+#include "layout_linenum.h"
 #include "layout_style.h"
 
 namespace layout_internal {
@@ -12,8 +13,7 @@ namespace layout_internal {
         title = "M++ Editor";
         if (activeFile) {
             title += " - [";
-            title += activeFile->path.empty() ? activeFile->TabName()
-                                              : activeFile->path.string();
+            title += activeFile->path.empty() ? activeFile->TabName() : activeFile->path.string();
             title += "]";
         }
         CLAY(CLAY_ID("TitleBar"),
@@ -32,39 +32,22 @@ namespace layout_internal {
     }
 
     inline void LayoutWorkspace(const FileBase* activeFile) {
+        const bool variableLineHeight = activeFile && activeFile->LineElementId(0) != 0;
         CLAY(CLAY_ID("Workspace"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}},
               // One offset keeps the gutter and editor text aligned while scrolling.
-              .clip = {.horizontal = true, .vertical = true,
-                       .childOffset = Clay_GetScrollOffset()}}) {
-            // Line-number gutter from the mockup (same font size/line height as the editor text)
-            static std::string lineNumbers;
-            lineNumbers.clear();
-            int lineCount = activeFile ? static_cast<int>(activeFile->LineCount()) : 1;
-            if (lineCount < gutterMinLines) lineCount = gutterMinLines;
-            for (int i = 1; i <= lineCount; ++i) {
-                lineNumbers += std::to_string(i);
-                if (i < lineCount) lineNumbers += '\n';
-            }
-            CLAY(CLAY_ID("Gutter"),
-                 {.layout = {.sizing = {CLAY_SIZING_FIXED(gutterWidth), CLAY_SIZING_GROW(0)},
-                             .padding = {10, 0, 6, 0}},
-                  .backgroundColor = gutterColor}) {
-                Clay_String numbersText = {.isStaticallyAllocated = false,
-                                           .length = static_cast<int32_t>(lineNumbers.size()),
-                                           .chars = lineNumbers.c_str()};
-                if (activeFile) {  // only number lines when a file is open
-                    CLAY_TEXT(numbersText, {.textColor = menuText, .fontId = FONT_BODY,
-                                            .fontSize = editorFontSize, .lineHeight = editorLineHeight,
-                                            .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
-                }
-            }
+              .clip = {
+                  .horizontal = true, .vertical = true, .childOffset = Clay_GetScrollOffset()}}) {
+            LayoutLineNumberGutter(activeFile, variableLineHeight);
             CLAY(CLAY_ID("Editor"),
                  {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
                              .padding = {6, 6, 6, 6}},
                   .backgroundColor = editorColor}) {
                 if (activeFile) {
                     activeFile->LayoutContent();
+                    if (variableLineHeight) {
+                        LayoutRowLineNumbers(*activeFile);
+                    }
                 }
             }
         }

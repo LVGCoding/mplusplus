@@ -9,6 +9,7 @@
 //   layout_menu.h          menu bar and File dropdown
 //   layout_tabs.h          file tab bar, switching/closing tabs
 //   layout_panels.h        title bar, workspace, terminal
+//   layout_linenum.h       line-number gutter and row labels
 //   layout_unsaved_popup.h unsaved-changes modal
 //   layout_actions.h       handling the requested actions
 

@@ -3,6 +3,7 @@
 #include "ui/EditorView.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -44,6 +45,11 @@ struct FileBase {
 
     // Number of lines to show in the line-number gutter.
     virtual std::size_t LineCount() const = 0;
+
+    // A rendered row to anchor its gutter label to. Zero uses fixed-height text lines.
+    virtual uint32_t LineElementId(std::size_t /*line*/) const {
+        return 0;
+    }
 
     // Draw anything Clay can't, like the text cursor and selection highlight.
     // Called after Clay has rendered, with the same view as the layout.
