@@ -142,9 +142,6 @@ void Layout(Editor& editor) {
     const FileBase* activeFile = editor.ActiveFile();
     if (!activeFile) ResetEditorCursorBlink();
     const bool canSave = activeFile && !activeFile->path.empty();
-    const auto* activeMpp = dynamic_cast<const FileMpp*>(activeFile);
-    const bool canUndo = activeMpp && activeMpp->CanUndo();
-    const bool canRedo = activeMpp && activeMpp->CanRedo();
     if (IsKeyPressed(KEY_ESCAPE) ||
         (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
          !Clay_PointerOver(CLAY_ID("FileMenu")) &&
@@ -209,8 +206,6 @@ void ProcessLayoutActions(Editor& editor) {
     ProcessHistoryRequests(editor);
     ProcessMathMenuSelection(editor);
     ProcessMathMenuTriggers();
-
-    ProcessUndoRedoRequests(editor);
 
     std::string error;
     ProcessNewRequest(editor, error);
