@@ -6,13 +6,14 @@
 // cursor itself or reports that it is leaving, and its parent decides where it
 // goes next. The document handles leaving a row.
 //
-// Editing (typing, deleting, the matrix insert wheel) is in fileMppEdit.cpp.
-// TODO: selection is not implemented yet.
+// Editing (typing, deleting, the matrix insert wheel) is in fileMppEdit.cpp,
+// and what a selection covers is in fileMppSelection.cpp.
 
 #include "FileMpp.h"
 
 #include "clay.h"
 #include "math/FracNode.h"
+#include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
 #include "math/TextNode.h"
@@ -28,6 +29,7 @@
 namespace {
 constexpr Color cursorColor = {20, 20, 20, 255};
 constexpr float cursorWidth = 2.0f;
+constexpr Color selectionColor = {65, 105, 168, 80};  // same as plain text files
 
 // Matrix insert wheel.
 constexpr float wheelGap = 6.0f;          // between the cell and the ring
@@ -62,7 +64,7 @@ float DistanceToInterval(float value, float start, float length) {
 // Descend through rendered boxes so a click chooses the correct slot before
 // choosing a text offset. In particular, x alone cannot distinguish fraction
 // slots or matrix rows. All coordinates already include scrolling.
-CursorPath PositionAt(const EditorNode& node, float x, float y, const TextMeasure* measure) {
+CursorPath NodePositionAt(const EditorNode& node, float x, float y, const TextMeasure* measure) {
     if (dynamic_cast<const TextNode*>(&node)) {
         return node.PositionNearX(x, VerticalEntry::FromAbove, measure);
     }
@@ -116,14 +118,53 @@ CursorPath PositionAt(const EditorNode& node, float x, float y, const TextMeasur
         }
     }
     if (!best) return node.FirstPosition();
-    auto position = PositionAt(*best, x, y, measure);
+    auto position = NodePositionAt(*best, x, y, measure);
     if (position.empty()) return {};
     prefix.insert(prefix.end(), position.begin(), position.end());
     return prefix;
 }
+
+// Screen box covering a line from [startIndex, startOffset] to
+// [endIndex, endOffset]: selected text plus whole objects in between. Starts
+// as the (zero-width) caret box at the start, so it is never empty.
+std::optional<Rectangle> RangeBox(const LineNode& line, std::size_t startIndex,
+                                  std::size_t startOffset, std::size_t endIndex,
+                                  std::size_t endOffset, const TextMeasure& measure) {
+    const auto* first = dynamic_cast<const TextNode*>(line.GetChild(startIndex));
+    const auto caret = first ? first->CaretBox(startOffset, &measure) : std::nullopt;
+    if (!caret) {
+        return std::nullopt;
+    }
+    float left = caret->x;
+    float top = caret->y;
+    float right = caret->x;
+    float bottom = caret->y + caret->height;
+    auto add = [&](float x0, float y0, float x1, float y1) {
+        left = std::min(left, x0);
+        top = std::min(top, y0);
+        right = std::max(right, x1);
+        bottom = std::max(bottom, y1);
+    };
+    for (std::size_t i = startIndex; i <= endIndex && i < line.ChildCount(); ++i) {
+        const EditorNode* child = line.GetChild(i);
+        if (const auto* text = dynamic_cast<const TextNode*>(child)) {
+            const std::size_t from = i == startIndex ? startOffset : 0;
+            const std::size_t to = i == endIndex ? endOffset : text->GetText().size();
+            const auto a = text->CaretBox(from, &measure);
+            const auto b = text->CaretBox(to, &measure);
+            if (from < to && a && b) {
+                add(a->x, a->y, b->x, b->y + b->height);
+            }
+        } else if (const auto bounds = LastLayoutBounds(child->GetClayId())) {
+            add(bounds->x, bounds->y, bounds->x + bounds->width, bounds->y + bounds->height);
+        }
+    }
+    return Rectangle{left, top, right - left, bottom - top};
+}
 }  // namespace
 
-bool FileMpp::ClickAt(float x, float y, const TextMeasure* measure) {
+std::optional<CursorPath> FileMpp::PositionAt(float x, float y,
+                                             const TextMeasure* measure) const {
     std::optional<std::size_t> row;
     float distance = std::numeric_limits<float>::max();
     for (std::size_t i = 0; i < content.size(); ++i) {
@@ -135,10 +176,16 @@ bool FileMpp::ClickAt(float x, float y, const TextMeasure* measure) {
             distance = candidate;
         }
     }
-    if (!row) return false;
-    auto position = JoinPath({*row}, PositionAt(*content[*row], x, y, measure));
-    if (!CursorText(position)) return false;
-    cursorPos = std::move(position);
+    if (!row) return std::nullopt;
+    auto position = JoinPath({*row}, NodePositionAt(*content[*row], x, y, measure));
+    if (!CursorText(position)) return std::nullopt;
+    return position;
+}
+
+bool FileMpp::ClickAt(float x, float y, const TextMeasure* measure) {
+    auto position = PositionAt(x, y, measure);
+    if (!position) return false;
+    cursorPos = std::move(*position);
     selectionStart = cursorPos;
     goalX_.reset();
     goalPath_.clear();
@@ -205,12 +252,11 @@ std::optional<Clay_BoundingBox> FileMpp::CaretBox(const TextMeasure* measure) co
 bool FileMpp::HandleInput(const EditorView& view) {
     const TextMeasure measure = MakeMeasure(view.fonts);
     const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    bool changed = false;
-    if (view.acceptsMouse && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        const Vector2 mouse = GetMousePosition();
-        if (CheckCollisionPointRec(mouse, view.viewport)) {
-            changed |= ClickAt(mouse.x, mouse.y, &measure);
-        }
+    const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    bool changed = HandleMouse(view, measure);
+    if (ctrl && IsKeyPressed(KEY_A)) {
+        SelectAll();
+        changed = true;
     }
     for (const int key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE}) {
         if (IsKeyPressed(key) || IsKeyPressedRepeat(key)) {
@@ -231,6 +277,37 @@ bool FileMpp::HandleInput(const EditorView& view) {
     return changed;
 }
 
+// Click to place the cursor, drag or Shift+click to select.
+bool FileMpp::HandleMouse(const EditorView& view, const TextMeasure& measure) {
+    if (!view.acceptsMouse || !IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        dragging_ = false;
+        return false;
+    }
+    const Vector2 mouse = GetMousePosition();
+    const bool clicked =
+        IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mouse, view.viewport);
+    const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    if (clicked) {
+        dragging_ = true;
+        if (!shift) {
+            return ClickAt(mouse.x, mouse.y, &measure);
+        }
+        pendingDelete_.reset();
+        insertWheel_.reset();
+    }
+    if (!dragging_) {
+        return false;
+    }
+    // Dragging or Shift+click: move only the cursor end of the selection.
+    auto position = PositionAt(mouse.x, mouse.y, &measure);
+    if (!position || *position == cursorPos) {
+        return clicked;
+    }
+    cursorPos = std::move(*position);
+    goalX_.reset();
+    return true;
+}
+
 std::size_t FileMpp::LineCount() const {
     // Newlines inside a matrix or another node belong to that node, not the gutter.
     return content.size();
@@ -241,6 +318,7 @@ uint32_t FileMpp::LineElementId(std::size_t line) const {
 }
 
 void FileMpp::DrawOverlay(const EditorView& view) const {
+    DrawSelection(view);
     if (view.cursorVisible) {
         if (const auto bounds = CursorBounds(view)) {
             BeginEditorClip(view);
@@ -251,6 +329,53 @@ void FileMpp::DrawOverlay(const EditorView& view) const {
     if (insertWheel_) {
         DrawInsertWheel(view);
     }
+}
+
+// One translucent box per row: from the start to the end of the selection in
+// that row, as tall as what is selected. A selected line break shows as a
+// little extra width at the end of the row, as in plain text files.
+void FileMpp::DrawSelection(const EditorView& view) const {
+    const auto selection = GetSelection();
+    if (!selection) {
+        return;
+    }
+    const TextMeasure measure = MakeMeasure(view.fonts);
+    const CursorPath& start = selection->start;
+    const CursorPath& end = selection->end;
+    BeginEditorClip(view);
+    if (start[0] == end[0]) {
+        const CursorPath linePath(start.begin(), start.end() - 2);
+        if (const auto* line = dynamic_cast<const LineNode*>(NodeAt(linePath))) {
+            if (const auto box = RangeBox(*line, start[start.size() - 2], start.back(),
+                                          end[end.size() - 2], end.back(), measure)) {
+                DrawRectangleRec(*box, selectionColor);
+            }
+        }
+    } else {
+        for (std::size_t row = start[0]; row <= end[0]; ++row) {
+            // Skip rows that are off screen.
+            const auto rowBounds = LastLayoutBounds(RowId(row));
+            if (!rowBounds || rowBounds->y > view.viewport.y + view.viewport.height ||
+                rowBounds->y + rowBounds->height < view.viewport.y) {
+                continue;
+            }
+            const LineNode& line = *content[row];
+            const CursorPath from = row == start[0] ? CursorPath{start[1], start[2]}
+                                                    : line.FirstPosition();
+            const CursorPath to = row == end[0] ? CursorPath{end[1], end[2]} : line.LastPosition();
+            auto box = RangeBox(line, from[0], from[1], to[0], to[1], measure);
+            if (!box) {
+                continue;
+            }
+            if (row != end[0]) {
+                box->width += editor_style::fontSize / 2.0f;
+            }
+            if (box->width > 0) {
+                DrawRectangleRec(*box, selectionColor);
+            }
+        }
+    }
+    EndScissorMode();
 }
 
 // A ring around the matrix cell split into four wedges, one per direction.

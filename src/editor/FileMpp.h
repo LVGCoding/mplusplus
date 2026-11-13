@@ -28,9 +28,18 @@ struct FileMpp : FileBase {
     // at an offset in a TextNode (see CursorPath).
     CursorPath cursorPos = {0, 0, 0};
 
-    // Starting position of the selected nodes.
-    // When selectionStart == cursorPos, nothing is selected.
+    // The other end of the selection (the anchor); cursorPos is the end that
+    // moves. When selectionStart == cursorPos, nothing is selected.
     CursorPath selectionStart = {0, 0, 0};
+
+    // The selection in document order, widened so both ends are in the same
+    // LineNode: if one end is inside a fraction/root/matrix and the other
+    // isn't, the whole object is selected. Ends in different rows are
+    // widened to positions directly in those rows.
+    struct Selection {
+        CursorPath start;
+        CursorPath end;
+    };
 
     // What Backspace does next to a fraction/root/matrix. A setting later;
     // for now the default from EditorSettings.h.
@@ -86,6 +95,24 @@ struct FileMpp : FileBase {
     // Returns false if no rendered position is available.
     bool ClickAt(float x, float y, const TextMeasure* measure);
 
+    // --- Selection (fileMppSelection.cpp) ----------------------------------------
+
+    // Put the cursor at `path` with nothing selected.
+    void MoveCursorTo(CursorPath path);
+
+    // The selected range, or nothing when the selection is empty.
+    std::optional<Selection> GetSelection() const;
+
+    // Select the whole document.
+    void SelectAll();
+
+    // Delete the selected range. Returns false if nothing was selected.
+    bool DeleteSelection();
+
+    // The cursor position nearest to a screen point, from the last layout.
+    // Used by ClickAt and by drag-selecting. In fileMppView.cpp.
+    std::optional<CursorPath> PositionAt(float x, float y, const TextMeasure* measure) const;
+
     const std::optional<PendingDelete>& GetPendingDelete() const { return pendingDelete_; }
     const std::optional<InsertWheel>& GetInsertWheel() const { return insertWheel_; }
 
@@ -101,7 +128,7 @@ struct FileMpp : FileBase {
     // The innermost fraction/root/matrix holding the cursor (outlined in green).
     const EditorNode* ActiveStructure() const;
 
-    // Rendering and input, in fileMppView.cpp. Selection is not written yet.
+    // Rendering and input, in fileMppView.cpp.
     bool HandleInput(const EditorView& view) override;
     void LayoutContent() const override;
     std::size_t LineCount() const override;
@@ -124,8 +151,13 @@ private:
     std::optional<InsertWheel> insertWheel_;
     bool mathMenuRequested_ = false;
 
+    // True while a mouse drag that started in this file is selecting.
+    bool dragging_ = false;
+
     std::optional<Clay_BoundingBox> CaretBox(const TextMeasure* measure) const;
     void DrawInsertWheel(const EditorView& view) const;
+    void DrawSelection(const EditorView& view) const;
+    bool HandleMouse(const EditorView& view, const TextMeasure& measure);
 
     void ResetCursorIfInvalid();
     void MarkEdited();
@@ -133,4 +165,8 @@ private:
     bool DeleteNodeAt(const CursorPath& node);
     bool ApplyPendingDelete();
     bool HandleWheelKey(int key);
+
+    // Shift+Left/Right: move the moving end of the selection one step, over
+    // whole objects at the level where the selection is.
+    bool ExtendSelection(bool right);
 };

@@ -214,13 +214,13 @@ TEST_F(LineLayoutTest, ClickCancelsPendingDeleteAndMatrixInsertWheel) {
     FileMpp file;
     file.SetSource("\\frac{a}{b}\n\\begin{matrix}x\\end{matrix}");
     LayoutFile(file);
-    file.cursorPos = {0, 2, 0};
+    file.MoveCursorTo({0, 2, 0});
     ASSERT_TRUE(file.PressKey(KEY_BACKSPACE, false, nullptr));
     ASSERT_TRUE(file.GetPendingDelete());
     const auto row = Row(file, 0);
     ASSERT_TRUE(file.ClickAt(row.x, row.y, nullptr));
     EXPECT_FALSE(file.GetPendingDelete());
-    file.cursorPos = {1, 1, 0, 0, 0, 0};
+    file.MoveCursorTo({1, 1, 0, 0, 0, 0});
     ASSERT_TRUE(file.PressKey(KEY_ENTER, false, nullptr));
     ASSERT_TRUE(file.GetInsertWheel());
     ASSERT_TRUE(file.ClickAt(row.x, row.y, nullptr));

@@ -80,23 +80,23 @@ TEST(CursorMove, RightWalksThroughSqrtIndexThenArgument) {
 
 TEST(CursorMove, LeftAndRightLeaveAFractionFromEitherSlot) {
     auto file = Doc("\\frac{1}{2}");
-    file.cursorPos = {0, 1, 1, 0, 1};  // end of the denominator
+    file.MoveCursorTo({0, 1, 1, 0, 1});  // end of the denominator
     ASSERT_TRUE(Press(file, KEY_RIGHT));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 2, 0}));
 
-    file.cursorPos = {0, 1, 1, 0, 0};  // start of the denominator
+    file.MoveCursorTo({0, 1, 1, 0, 0});  // start of the denominator
     ASSERT_TRUE(Press(file, KEY_LEFT));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 0}));
 
     // Entering from the right lands at the end of the numerator.
-    file.cursorPos = {0, 2, 0};
+    file.MoveCursorTo({0, 2, 0});
     ASSERT_TRUE(Press(file, KEY_LEFT));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 1, 0, 0, 1}));
 }
 
 TEST(CursorMove, StepsOverGreekLetters) {
     auto file = Doc("a\\alpha b");
-    file.cursorPos = {0, 0, 1};  // after "a", before alpha
+    file.MoveCursorTo({0, 0, 1});  // after "a", before alpha
     ASSERT_TRUE(Press(file, KEY_RIGHT));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 2, 0}));  // after alpha
     ASSERT_TRUE(Press(file, KEY_LEFT));
@@ -134,7 +134,7 @@ TEST(CursorMove, TextReportsExitsToItsParent) {
 
 TEST(CursorMove, LeftAndRightWrapBetweenRows) {
     auto file = Doc("ab\ncd");
-    file.cursorPos = {0, 0, 2};
+    file.MoveCursorTo({0, 0, 2});
     ASSERT_TRUE(Press(file, KEY_RIGHT));
     EXPECT_EQ(file.cursorPos, (CursorPath{1, 0, 0}));
     ASSERT_TRUE(Press(file, KEY_LEFT));
@@ -145,7 +145,7 @@ TEST(CursorMove, LeftAndRightWrapBetweenRows) {
 
 TEST(CursorMove, UpAndDownMoveBetweenNumeratorAndDenominator) {
     auto file = Doc("x\\frac{1}{2}\ny");
-    file.cursorPos = {0, 1, 1, 0, 1};  // denominator
+    file.MoveCursorTo({0, 1, 1, 0, 1});  // denominator
     ASSERT_TRUE(Press(file, KEY_UP));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 1, 0, 0, 0}));  // numerator
     ASSERT_TRUE(Press(file, KEY_DOWN));
@@ -158,7 +158,7 @@ TEST(CursorMove, UpAndDownMoveBetweenNumeratorAndDenominator) {
 
 TEST(CursorMove, UpFromTheTopRowDoesNothing) {
     auto file = Doc("\\frac{1}{2}");
-    file.cursorPos = {0, 1, 0, 0, 1};  // numerator
+    file.MoveCursorTo({0, 1, 0, 0, 1});  // numerator
     EXPECT_FALSE(Press(file, KEY_UP));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 1, 0, 0, 1}));
 }
@@ -191,7 +191,7 @@ TEST(CursorMove, ShiftKeepsTheSelectionStart) {
 
 TEST(CursorMove, RecoversFromAnInvalidPath) {
     auto file = Doc("ab");
-    file.cursorPos = {5, 9};
+    file.MoveCursorTo({5, 9});
     ASSERT_TRUE(Press(file, KEY_RIGHT));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 1}));
 }
@@ -201,12 +201,12 @@ TEST(CursorMove, RecoversFromAnInvalidPath) {
 TEST(CursorOutline, InnermostStructureHoldingTheCursorIsActive) {
     // \sqrt[2]{5|6}: the root's index and argument are outlined.
     auto file = Doc("\\sqrt[2]{56}");
-    file.cursorPos = {0, 1, 1, 0, 1};
+    file.MoveCursorTo({0, 1, 1, 0, 1});
     EXPECT_EQ(file.ActiveStructure(), NodeAt(file, 0, 1));
 
     // \sqrt[2]{\frac{1}{2|}}: only the fraction is outlined.
     file = Doc("\\sqrt[2]{\\frac{1}{2}}");
-    file.cursorPos = {0, 1, 1, 1, 1, 0, 1};
+    file.MoveCursorTo({0, 1, 1, 1, 1, 0, 1});
     ASSERT_NE(file.CursorText(file.cursorPos), nullptr);
     const auto* sqrt = dynamic_cast<const SqrtNode*>(NodeAt(file, 0, 1));
     ASSERT_NE(sqrt, nullptr);
@@ -216,6 +216,6 @@ TEST(CursorOutline, InnermostStructureHoldingTheCursorIsActive) {
 
 TEST(CursorOutline, NothingIsActiveOnAPlainRow) {
     auto file = Doc("ab\\frac{1}{2}");
-    file.cursorPos = {0, 0, 1};
+    file.MoveCursorTo({0, 0, 1});
     EXPECT_EQ(file.ActiveStructure(), nullptr);
 }

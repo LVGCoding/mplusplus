@@ -294,6 +294,20 @@ CursorPath LineNode::PositionNearX(float x, VerticalEntry entry,
     return LastPosition();
 }
 
+CursorPath LineNode::EraseRange(std::size_t startIndex, std::size_t startOffset,
+                                std::size_t endIndex, std::size_t endOffset) {
+    auto* first = AsText(children_.at(startIndex));
+    auto* last = AsText(children_.at(endIndex));
+    std::string joined = first->GetText().substr(0, std::min(startOffset, first->GetText().size()));
+    joined += last->GetText().substr(std::min(endOffset, last->GetText().size()));
+    first->SetText(std::move(joined));
+    if (endIndex > startIndex) {
+        children_.erase(children_.begin() + static_cast<std::ptrdiff_t>(startIndex) + 1,
+                        children_.begin() + static_cast<std::ptrdiff_t>(endIndex) + 1);
+    }
+    return {startIndex, startOffset};
+}
+
 EditorNode* LineNode::PathChild(PathView path, std::size_t& used) const {
     if (path.empty() || path[0] >= children_.size()) {
         return nullptr;
