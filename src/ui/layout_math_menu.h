@@ -11,11 +11,44 @@
 #include "layout_state.h"
 #include "layout_style.h"
 
+#include <algorithm>
 #include <cctype>
 #include <string>
 #include <vector>
 
 namespace layout_internal {
+    // Scroll the item list back to the top (used when opening and when the search changes).
+    inline void ResetMathMenuScroll() {
+        auto scroll = Clay_GetScrollContainerData(CLAY_ID("MathMenuList"));
+        if (scroll.found) {
+            *scroll.scrollPosition = {0, 0};
+        }
+    }
+
+    // Scroll the item list just enough that `itemId` is fully visible.
+    // Uses last frame's layout, the same way ScrollEditorCursorIntoView does.
+    inline void ScrollMathMenuToItem(Clay_ElementId itemId) {
+        auto scroll = Clay_GetScrollContainerData(CLAY_ID("MathMenuList"));
+        const auto list = Clay_GetElementData(CLAY_ID("MathMenuList"));
+        const auto item = Clay_GetElementData(itemId);
+        if (!scroll.found || !list.found || !item.found) return;
+
+        const float listTop = list.boundingBox.y;
+        const float listBottom = listTop + list.boundingBox.height;
+        const float itemTop = item.boundingBox.y;
+        const float itemBottom = itemTop + item.boundingBox.height;
+
+        float offset = scroll.scrollPosition->y;  // 0 at the top, negative when scrolled down
+        if (itemTop < listTop) {
+            offset += listTop - itemTop;           // row is above the view: scroll up
+        } else if (itemBottom > listBottom) {
+            offset -= itemBottom - listBottom;     // row is below the view: scroll down
+        }
+        const float minimumOffset = std::min(0.0f,
+            scroll.scrollContainerDimensions.height - scroll.contentDimensions.height);
+        scroll.scrollPosition->y = std::clamp(offset, minimumOffset, 0.0f);
+    }
+
     // Open the popup with its top-left corner at `position` (window pixels).
     // Every trigger goes through this, so new triggers only need to pick a position.
     inline void OpenMathMenu(Clay_Vector2 position) {
@@ -27,10 +60,7 @@ namespace layout_internal {
         mathMenuQuery.clear();
         mathMenuSelected = 0;
         // Start at the top of the list if it was scrolled before.
-        auto scroll = Clay_GetScrollContainerData(CLAY_ID("MathMenuList"));
-        if (scroll.found) {
-            *scroll.scrollPosition = {0, 0};
-        }
+        ResetMathMenuScroll();
     }
 
     inline void CloseMathMenu() {
@@ -96,10 +126,12 @@ namespace layout_internal {
     // an empty search closes the popup (like deleting the backslash).
     inline void HandleMathMenuKeys() {
         if (!mathMenuOpen) return;
+        bool queryChanged = false;
         while (const int codepoint = GetCharPressed()) {
             if (codepoint > 32 && codepoint < 127 && codepoint != '\\') {
                 mathMenuQuery += static_cast<char>(codepoint);
                 mathMenuSelected = 0;
+                queryChanged = true;
             }
         }
         if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
@@ -109,16 +141,30 @@ namespace layout_internal {
             }
             mathMenuQuery.pop_back();
             mathMenuSelected = 0;
+            queryChanged = true;
+        }
+        // New search results start at the top, where the selection is.
+        if (queryChanged) {
+            ResetMathMenuScroll();
         }
         const auto filtered = FilteredMathItems();
         if (filtered.empty()) return;
+        bool selectionMoved = false;
         if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN)) {
             mathMenuSelected = (mathMenuSelected + 1) % filtered.size();
+            selectionMoved = true;
         }
         if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP)) {
             mathMenuSelected = (mathMenuSelected + filtered.size() - 1) % filtered.size();
+            selectionMoved = true;
         }
         mathMenuSelected = std::min(mathMenuSelected, filtered.size() - 1);
+        // Keep the selected row in view. Only on arrow keys, so the mouse wheel
+        // can still scroll freely. Row IDs use the index into MathMenuItems().
+        if (selectionMoved) {
+            ScrollMathMenuToItem(CLAY_IDI("MathMenuItem",
+                                          static_cast<uint32_t>(filtered[mathMenuSelected])));
+        }
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) || IsKeyPressed(KEY_TAB)) {
             mathMenuItemRequested = filtered[mathMenuSelected];
         }
