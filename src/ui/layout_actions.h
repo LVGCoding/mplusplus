@@ -60,7 +60,7 @@ namespace layout_internal {
         if (FileBase* file = editor.ActiveFile()) {
             if (file->modified) {
                 unsavedChangesOpen = true;
-                fileMenuOpen = false;
+                CloseAllMenus();
                 closeError.clear();
             } else {
                 CloseActiveTab(editor);

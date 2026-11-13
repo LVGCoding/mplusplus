@@ -8,8 +8,10 @@
 #include "layout_style.h"
 
 namespace layout_internal {
-    inline void FileMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
-                             bool& requested) {
+    // One row of a menu-bar dropdown. Clicking it sets `requested` and closes
+    // the dropdown whose open flag is `menuOpen`.
+    inline void DropdownMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
+                                 bool& requested, bool& menuOpen) {
         CLAY(id,
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(24)},
                          .padding = {10, 16, 0, 0},
@@ -21,9 +23,19 @@ namespace layout_internal {
             if (enabled && !unsavedChangesOpen && Clay_Hovered() &&
                 IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                 requested = true;
-                fileMenuOpen = false;
+                menuOpen = false;
             }
         }
+    }
+
+    inline void FileMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
+                             bool& requested) {
+        DropdownMenuItem(id, label, enabled, requested, fileMenuOpen);
+    }
+
+    inline void InsertMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
+                               bool& requested) {
+        DropdownMenuItem(id, label, enabled, requested, insertMenuOpen);
     }
 
     inline void LayoutMenuBar() {
@@ -43,7 +55,8 @@ namespace layout_internal {
                      {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_GROW(0)},
                                  .padding = {8, 8, 0, 0}, .childGap = 6,
                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
-                      .backgroundColor = Clay_PointerOver(ids[i]) || (i == 0 && fileMenuOpen)
+                      .backgroundColor = Clay_PointerOver(ids[i]) || (i == 0 && fileMenuOpen) ||
+                                         (i == 2 && insertMenuOpen)
                           ? menuHover : Clay_Color{0, 0, 0, 0}}) {
                     CLAY_TEXT(labels[i], {.textColor = menuText,
                                           .fontId = FONT_BODY, .fontSize = 20,
@@ -56,6 +69,10 @@ namespace layout_internal {
                     if (i == 0 && !unsavedChangesOpen && Clay_Hovered() &&
                         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                         fileMenuOpen = !fileMenuOpen;
+                    }
+                    if (i == 2 && !unsavedChangesOpen && Clay_Hovered() &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        insertMenuOpen = !insertMenuOpen;
                     }
                     if (i == 4 && !unsavedChangesOpen && Clay_Hovered() &&
                         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -81,6 +98,26 @@ namespace layout_internal {
             FileMenuItem(CLAY_ID("NewButton"), CLAY_STRING("New"), true, newRequested);
             FileMenuItem(CLAY_ID("OpenButton"), CLAY_STRING("Open File"), true, openRequested);
             FileMenuItem(CLAY_ID("SaveButton"), CLAY_STRING("Save File"), canSave, saveRequested);
+        }
+    }
+
+    inline void LayoutInsertDropdown() {
+        CLAY(CLAY_ID("InsertDropdown"),
+             {.layout = {.sizing = {CLAY_SIZING_FIXED(200), CLAY_SIZING_FIT(0)},
+                         .padding = {0, 0, 4, 4},
+                         .layoutDirection = CLAY_TOP_TO_BOTTOM},
+              .backgroundColor = dropdownColor,
+              .floating = {.offset = {0, 0}, .parentId = CLAY_ID("InsertMenu").id,
+                           .zIndex = 1,
+                           .attachPoints = {.element = CLAY_ATTACH_POINT_LEFT_TOP,
+                                            .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM},
+                           .attachTo = CLAY_ATTACH_TO_ELEMENT_WITH_ID}}) {
+            // ===== INSERT MENU ITEMS: add new Insert entries here =====
+            // Each needs its own request flag in layout_state.h, handled in
+            // ProcessLayoutActions (Math is handled in ProcessMathMenuTriggers).
+            InsertMenuItem(CLAY_ID("InsertMathButton"), CLAY_STRING("Math"), true,
+                           insertMathRequested);
+            // ===== END INSERT MENU ITEMS =====
         }
     }
 }

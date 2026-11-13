@@ -27,7 +27,7 @@ namespace layout_internal {
                             editor.boundingBox.width, editor.boundingBox.height};
         }
         view.viewport = EditorViewport();
-        view.acceptsMouse = !fileMenuOpen;
+        view.acceptsMouse = !IsAnyMenuOpen();
         const double elapsed = GetTime() - lastCursorActivity;
         view.cursorVisible = elapsed < 0.7 || static_cast<int>((elapsed - 0.7) / 0.5) % 2 == 0;
         return view;
