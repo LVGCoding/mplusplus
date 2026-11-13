@@ -23,4 +23,14 @@ namespace layout_internal {
     }
 
     inline ClayRaylibCustomDraw closeIcon = {DrawCloseIcon};
+
+    // Magnifying glass for search bars.
+    inline void DrawSearchIcon(Clay_BoundingBox bounds) {
+        const Color color = {115, 115, 115, 255};
+        const Vector2 center = {bounds.x + bounds.width / 2 - 2, bounds.y + bounds.height / 2 - 2};
+        DrawRing(center, 4.5f, 6.0f, 0, 360, 24, color);
+        DrawLineEx({center.x + 4.5f, center.y + 4.5f}, {center.x + 9, center.y + 9}, 2.0f, color);
+    }
+
+    inline ClayRaylibCustomDraw searchIcon = {DrawSearchIcon};
 }

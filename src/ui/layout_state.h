@@ -22,6 +22,29 @@ namespace layout_internal {
     inline CloseAction closeAction = CloseAction::None;
     inline std::string closeError;
 
+    // Insert dropdown in the menu bar.
+    inline bool insertMenuOpen = false;
+    // Insert -> Math was clicked this frame; opened in ProcessLayoutActions.
+    inline bool insertMathRequested = false;
+
+    // Math popup (see layout_math_menu.h / layout_math_menu_items.h).
+    inline bool mathMenuOpen = false;
+    // Window position of the popup's top-left corner, set by OpenMathMenu.
+    inline Clay_Vector2 mathMenuPosition = {0, 0};
+    // Index of the math item clicked this frame (if any); run after rendering.
+    inline std::size_t mathMenuItemRequested = SIZE_MAX;
+
+    // True while any dropdown/popup menu is open (editor mouse input is paused).
+    inline bool IsAnyMenuOpen() {
+        return fileMenuOpen || insertMenuOpen || mathMenuOpen;
+    }
+
+    inline void CloseAllMenus() {
+        fileMenuOpen = false;
+        insertMenuOpen = false;
+        mathMenuOpen = false;
+    }
+
     inline double lastCursorActivity = 0;
 
     inline void ResetEditorCursorBlink() {
