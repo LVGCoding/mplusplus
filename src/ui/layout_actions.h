@@ -122,18 +122,4 @@ namespace layout_internal {
             std::fprintf(stderr, "%s\n", error.c_str());
         }
     }
-
-    // Edit -> Undo / Redo. Only .mpp files keep an undo history.
-    inline void ProcessUndoRedoRequests(Editor& editor) {
-        const bool undo = undoRequested;
-        const bool redo = redoRequested;
-        undoRequested = false;
-        redoRequested = false;
-        if (!undo && !redo) return;
-        auto* file = dynamic_cast<FileMpp*>(editor.ActiveFile());
-        if (!file) return;
-        if (undo ? file->Undo() : file->Redo()) {
-            ResetEditorCursorBlink();
-        }
-    }
 }

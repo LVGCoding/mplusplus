@@ -33,11 +33,6 @@ namespace layout_internal {
         DropdownMenuItem(id, label, enabled, requested, fileMenuOpen);
     }
 
-    inline void EditMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
-                             bool& requested) {
-        DropdownMenuItem(id, label, enabled, requested, editMenuOpen);
-    }
-
     inline void InsertMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
                                bool& requested) {
         DropdownMenuItem(id, label, enabled, requested, insertMenuOpen);
@@ -83,10 +78,6 @@ namespace layout_internal {
                     if (i == 2 && !unsavedChangesOpen && Clay_Hovered() &&
                         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                         insertMenuOpen = !insertMenuOpen;
-                    }
-                    if (i == 1 && !unsavedChangesOpen && Clay_Hovered() &&
-                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                        editMenuOpen = !editMenuOpen;
                     }
                     if (i == 4 && !unsavedChangesOpen && Clay_Hovered() &&
                         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
