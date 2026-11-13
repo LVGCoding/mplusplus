@@ -39,9 +39,7 @@ namespace layout_internal {
         return {element.boundingBox.x, element.boundingBox.y + element.boundingBox.height};
     }
 
-    // ===== TRIGGERS (menu / button): ways to open the popup from the UI =====
-    // Called from ProcessLayoutActions after rendering. For a new trigger, set a
-    // request flag (layout_state.h) where the click happens and handle it here.
+    // UI triggers
     inline void ProcessMathMenuTriggers() {
         // Trigger: Insert -> Math. Opens just below the Insert menu button.
         if (insertMathRequested) {
@@ -49,28 +47,16 @@ namespace layout_internal {
             OpenMathMenu(PositionBelow(CLAY_ID("InsertMenu")));
         }
 
-        // Add more UI triggers here, e.g.:
-        // if (toolbarMathRequested) {
-        //     toolbarMathRequested = false;
-        //     OpenMathMenu(PositionBelow(CLAY_ID("ToolbarMathButton")));
-        // }
-    }
-    // ===== END TRIGGERS (menu / button) =====
+        // Add more UI triggers here
 
-    // ===== TRIGGERS (keyboard): ways to open the popup while typing =====
-    // Called every frame from HandleActiveFileInput, before the file gets input.
-    // `view` lets you place the popup at the text cursor.
-    inline void CheckMathMenuKeyTriggers(const FileBase& /*file*/, const EditorView& /*view*/) {
-        // Example (disabled): open at the cursor when backslash is pressed.
-        // The '\' still reaches the editor afterwards; consume it if you don't want that.
-        //
-        // if (!mathMenuOpen && IsKeyPressed(KEY_BACKSLASH)) {
-        //     if (const auto cursor = file.CursorBounds(view)) {
-        //         OpenMathMenu({cursor->x, cursor->y + cursor->height});
-        //     }
-        // }
     }
-    // ===== END TRIGGERS (keyboard) =====
+
+    // Keyboard triggers
+    inline void CheckMathMenuKeyTriggers(const FileBase& /*file*/, const EditorView& /*view*/) {
+
+        // Add backslash stuff here
+
+    }
 
     // Close on Escape or a click anywhere outside the popup.
     // Called at the start of Layout(), using last frame's hover data.
@@ -116,10 +102,7 @@ namespace layout_internal {
         }
     }
 
-    // ===== SEARCH BAR (not functional yet) =====
-    // Only draws a placeholder. To make it work later: keep the typed text in
-    // a std::string in layout_state.h, show it here instead of the placeholder,
-    // and skip non-matching items in LayoutMathMenu's loop.
+    // SEARCH BAR (not functional yet)
     inline void MathMenuSearchBar() {
         CLAY(CLAY_ID("MathMenuSearch"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(mathMenuSearchHeight)},
@@ -136,7 +119,6 @@ namespace layout_internal {
                        .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
         }
     }
-    // ===== END SEARCH BAR =====
 
     inline void LayoutMathMenu() {
         // Outer window: rounded, holds the fixed search bar and the scrolling list.
