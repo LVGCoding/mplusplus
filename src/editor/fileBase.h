@@ -37,6 +37,23 @@ struct FileBase {
     virtual bool CanUndo() const { return false; }
     virtual bool CanRedo() const { return false; }
 
+    // --- Selection and clipboard ------------------------------------------------
+
+    // The selected text (empty if nothing is selected), in the file's source form.
+    virtual std::string SelectedText() const { return {}; }
+    // Insert `text` at the cursor, replacing the selection, as one undo step.
+    virtual bool PasteText(std::string /*text*/) { return false; }
+    // Delete the selected range as one undo step. Returns false if nothing was selected.
+    virtual bool DeleteSelection() { return false; }
+
+    bool HasSelection() const { return !SelectedText().empty(); }
+
+    // Shared by the keyboard shortcuts and the Edit menu. Each returns true if
+    // the content changed (Copy never changes it, so it returns whether it copied).
+    bool CopyToClipboard() const;
+    bool CutToClipboard();
+    bool PasteFromClipboard();
+
     // --- Rendering and input ------------------------------------------------
 
     // Handle this frame's keyboard and mouse input. Not called while a popup is

@@ -204,6 +204,7 @@ void ProcessLayoutActions(Editor& editor) {
 
     // One error string is shared by the handlers, as before.
     ProcessHistoryRequests(editor);
+    ProcessClipboardRequests(editor);
     ProcessMathMenuSelection(editor);
     ProcessMathMenuTriggers();
 

@@ -108,13 +108,13 @@ struct FileMpp : FileBase {
     void SelectAll();
 
     // Delete the selected range. Returns false if nothing was selected.
-    bool DeleteSelection();
+    bool DeleteSelection() override;
 
     // Clipboard text uses M++/LaTeX source, preserving selected structures.
-    std::string SelectedText() const;
+    std::string SelectedText() const override;
     // Parse and insert source, replacing the selection as one undo step.
     // Inside a math slot, top-level line breaks become spaces.
-    bool PasteText(std::string text);
+    bool PasteText(std::string text) override;
 
     // The cursor position nearest to a screen point, from the last layout.
     // Used by ClickAt and by drag-selecting. In fileMppView.cpp.

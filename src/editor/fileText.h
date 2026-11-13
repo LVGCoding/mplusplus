@@ -47,8 +47,9 @@ struct FileText : FileBase {
     bool CanUndo() const override { return !undo_.empty(); }
     bool CanRedo() const override { return !redo_.empty(); }
 
-    std::string SelectedText() const;
-    bool PasteText(std::string text);
+    std::string SelectedText() const override;
+    bool PasteText(std::string text) override;
+    bool DeleteSelection() override;
 
     bool HandleInput(const EditorView& view) override;
     void LayoutContent() const override;
@@ -91,7 +92,6 @@ private:
     // the cursor after it, and record an undo step.
     void Replace(std::size_t start, std::size_t end, std::string inserted, EditKind kind,
                  bool endsGroup = false);
-    bool DeleteSelection();
     bool MoveVertically(bool down, bool shift, const LineMeasure* measure);
     void UpdateModified();
 

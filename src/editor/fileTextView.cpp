@@ -193,14 +193,17 @@ bool FileText::HandleKeyboard(const EditorView& view) {
     bool changed = false;
 
     if (shortcut && IsKeyPressed(KEY_C)) {
-        const auto selected = SelectedText();
-        if (!selected.empty()) SetClipboardText(selected.c_str());
+        CopyToClipboard();
         while (GetCharPressed() > 0) {}
         return false;
     }
+    if (shortcut && IsKeyPressed(KEY_X)) {
+        const bool cut = CutToClipboard();
+        while (GetCharPressed() > 0) {}
+        return cut;
+    }
     if (shortcut && IsKeyPressed(KEY_V)) {
-        const char* pasted = GetClipboardText();
-        const bool inserted = pasted && PasteText(pasted);
+        const bool inserted = PasteFromClipboard();
         while (GetCharPressed() > 0) {}
         return inserted;
     }
