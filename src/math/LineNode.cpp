@@ -121,7 +121,6 @@ bool LineNode::IsEmpty() const {
 // Children laid out left to right and centred vertically. Braces of a {...}
 // group are only grouping in LaTeX, so they are not drawn. An empty line shows
 // a grey box with its (empty) text inside, so the cursor has somewhere to go.
-// TODO: mouse input is not implemented yet.
 void LineNode::Render(const RenderContext& context) {
     if (IsEmpty()) {
         const float size = context.fontSize;

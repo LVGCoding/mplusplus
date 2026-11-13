@@ -7,12 +7,14 @@
 // goes next. The document handles leaving a row.
 //
 // Editing (typing, deleting, the matrix insert wheel) is in fileMppEdit.cpp.
-// TODO: selection and mouse clicks are not implemented yet.
+// TODO: selection is not implemented yet.
 
 #include "FileMpp.h"
 
 #include "clay.h"
+#include "math/FracNode.h"
 #include "math/MatrixNode.h"
+#include "math/SqrtNode.h"
 #include "math/TextNode.h"
 #include "raylib.h"
 #include "ui/EditorView.h"
@@ -21,6 +23,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace {
 constexpr Color cursorColor = {20, 20, 20, 255};
@@ -51,7 +54,98 @@ TextMeasure MakeMeasure(Font* fonts) {
 Clay_ElementId RowId(std::size_t row) {
     return Clay_GetElementIdWithIndex(CLAY_STRING("MppRow"), static_cast<uint32_t>(row));
 }
+
+float DistanceToInterval(float value, float start, float length) {
+    return std::max({start - value, value - start - length, 0.0f});
+}
+
+// Descend through rendered boxes so a click chooses the correct slot before
+// choosing a text offset. In particular, x alone cannot distinguish fraction
+// slots or matrix rows. All coordinates already include scrolling.
+CursorPath PositionAt(const EditorNode& node, float x, float y, const TextMeasure* measure) {
+    if (dynamic_cast<const TextNode*>(&node)) {
+        return node.PositionNearX(x, VerticalEntry::FromAbove, measure);
+    }
+
+    const EditorNode* best = nullptr;
+    CursorPath prefix;
+    float distance = std::numeric_limits<float>::max();
+    auto consider = [&](const EditorNode* child, CursorPath path,
+                        std::optional<Clay_BoundingBox> bounds) {
+        if (!child || !bounds) return;
+        const float dx = DistanceToInterval(x, bounds->x, bounds->width);
+        const float dy = DistanceToInterval(y, bounds->y, bounds->height);
+        const float candidate = dx * dx + dy * dy;
+        // Text wins shared boundaries, including zero-width insertion points.
+        if (candidate < distance ||
+            (candidate == distance && dynamic_cast<const TextNode*>(child))) {
+            best = child;
+            prefix = std::move(path);
+            distance = candidate;
+        }
+    };
+    if (const auto* line = dynamic_cast<const LineNode*>(&node)) {
+        for (std::size_t i = 0; i < line->ChildCount(); ++i) {
+            const auto* child = line->GetChild(i);
+            consider(child, {i}, LastLayoutBounds(child->GetClayId()));
+        }
+        // Symbols cannot hold the cursor; resolve to the text on either side.
+        if (best && best->FirstPosition().empty()) {
+            const auto bounds = LastLayoutBounds(best->GetClayId());
+            const auto i = prefix.front();
+            if (bounds && x < bounds->x + bounds->width / 2 && i > 0) {
+                return JoinPath({i - 1}, line->GetChild(i - 1)->LastPosition());
+            }
+            if (i + 1 < line->ChildCount()) {
+                return JoinPath({i + 1}, line->GetChild(i + 1)->FirstPosition());
+            }
+        }
+    } else if (const auto* fraction = dynamic_cast<const FracNode*>(&node)) {
+        const auto [numerator, denominator] = fraction->GetChildren();
+        if (numerator) consider(numerator, {0}, LastLayoutBounds(numerator->GetClayId()));
+        if (denominator) consider(denominator, {1}, LastLayoutBounds(denominator->GetClayId()));
+    } else if (const auto* root = dynamic_cast<const SqrtNode*>(&node)) {
+        const auto [index, argument] = root->GetChildren();
+        if (index) consider(index, {0}, LastLayoutBounds(index->GetClayId()));
+        if (argument) consider(argument, {1}, LastLayoutBounds(argument->GetClayId()));
+    } else if (const auto* matrix = dynamic_cast<const MatrixNode*>(&node)) {
+        for (std::size_t row = 0; row < matrix->RowCount(); ++row) {
+            for (std::size_t column = 0; column < matrix->ColumnCount(row); ++column) {
+                consider(matrix->GetCell(row, column), {row, column}, matrix->CellBounds(row, column));
+            }
+        }
+    }
+    if (!best) return node.FirstPosition();
+    auto position = PositionAt(*best, x, y, measure);
+    if (position.empty()) return {};
+    prefix.insert(prefix.end(), position.begin(), position.end());
+    return prefix;
+}
 }  // namespace
+
+bool FileMpp::ClickAt(float x, float y, const TextMeasure* measure) {
+    std::optional<std::size_t> row;
+    float distance = std::numeric_limits<float>::max();
+    for (std::size_t i = 0; i < content.size(); ++i) {
+        const auto bounds = LastLayoutBounds(RowId(i));
+        if (!bounds) continue;
+        const float candidate = DistanceToInterval(y, bounds->y, bounds->height);
+        if (candidate < distance || (candidate == distance && y >= bounds->y)) {
+            row = i;
+            distance = candidate;
+        }
+    }
+    if (!row) return false;
+    auto position = JoinPath({*row}, PositionAt(*content[*row], x, y, measure));
+    if (!CursorText(position)) return false;
+    cursorPos = std::move(position);
+    selectionStart = cursorPos;
+    goalX_.reset();
+    goalPath_.clear();
+    pendingDelete_.reset();
+    insertWheel_.reset();
+    return true;
+}
 
 void FileMpp::LayoutContent() const {
     RenderContext context;
@@ -112,6 +206,12 @@ bool FileMpp::HandleInput(const EditorView& view) {
     const TextMeasure measure = MakeMeasure(view.fonts);
     const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
     bool changed = false;
+    if (view.acceptsMouse && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        const Vector2 mouse = GetMousePosition();
+        if (CheckCollisionPointRec(mouse, view.viewport)) {
+            changed |= ClickAt(mouse.x, mouse.y, &measure);
+        }
+    }
     for (const int key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE}) {
         if (IsKeyPressed(key) || IsKeyPressedRepeat(key)) {
             changed |= PressKey(key, shift, &measure);

@@ -82,6 +82,10 @@ struct FileMpp : FileBase {
     // True once after a backslash was typed: the UI should open the math popup.
     bool TakeMathMenuRequest();
 
+    // Place the cursor using screen coordinates from the latest layout.
+    // Returns false if no rendered position is available.
+    bool ClickAt(float x, float y, const TextMeasure* measure);
+
     const std::optional<PendingDelete>& GetPendingDelete() const { return pendingDelete_; }
     const std::optional<InsertWheel>& GetInsertWheel() const { return insertWheel_; }
 
@@ -97,8 +101,7 @@ struct FileMpp : FileBase {
     // The innermost fraction/root/matrix holding the cursor (outlined in green).
     const EditorNode* ActiveStructure() const;
 
-    // Rendering and input, in fileMppView.cpp. Selection and mouse clicks are
-    // not written yet.
+    // Rendering and input, in fileMppView.cpp. Selection is not written yet.
     bool HandleInput(const EditorView& view) override;
     void LayoutContent() const override;
     std::size_t LineCount() const override;
