@@ -59,6 +59,7 @@ namespace layout_internal {
         mathMenuItemRequested = SIZE_MAX;
         mathMenuQuery.clear();
         mathMenuSelected = 0;
+        ResetEditorCursorBlink();  // search-bar cursor starts solid
         // Start at the top of the list if it was scrolled before.
         ResetMathMenuScroll();
     }
@@ -146,6 +147,7 @@ namespace layout_internal {
         // New search results start at the top, where the selection is.
         if (queryChanged) {
             ResetMathMenuScroll();
+            ResetEditorCursorBlink();
         }
         const auto filtered = FilteredMathItems();
         if (filtered.empty()) return;
@@ -186,10 +188,7 @@ namespace layout_internal {
         if (mathMenuItemRequested == SIZE_MAX) return;
         const std::size_t index = mathMenuItemRequested;
         mathMenuItemRequested = SIZE_MAX;
-        const auto& items = MathMenuItems();
-        if (index < items.size() && items[index].onSelect) {
-            items[index].onSelect(editor);
-        }
+        SelectMathMenuItem(editor, index);
         // Remove this line to keep the popup open after a click.
         CloseMathMenu();
     }
@@ -197,8 +196,8 @@ namespace layout_internal {
     inline void MathMenuButton(const MathMenuItem& item, std::size_t index, bool selected) {
         const Clay_ElementId id = CLAY_IDI("MathMenuItem", static_cast<uint32_t>(index));
         CLAY(id,
-             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(mathMenuItemHeight)},
-                         .padding = {12, 12, 0, 0},
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIT(mathMenuItemHeight)},
+                         .padding = {12, 12, 4, 4}, .childGap = 12,
                          .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
               .backgroundColor = selected || Clay_PointerOver(id) ? menuHover
                                                                   : Clay_Color{0, 0, 0, 0},
@@ -208,11 +207,29 @@ namespace layout_internal {
                                  .chars = item.label.data()};
             CLAY_TEXT(label, {.textColor = menuText, .fontId = FONT_BODY,
                               .fontSize = mathMenuFontSize, .wrapMode = CLAY_TEXT_WRAP_NONE});
+            // Spacer pushes the preview to the right edge of the row.
+            CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIT(0)}}}) {}
+            // Rendered preview of the node this item inserts.
+            if (EditorNode* preview = MathMenuPreview(index)) {
+                RenderContext context;
+                context.fontSize = mathMenuPreviewFontSize;
+                preview->Render(context);
+            }
             if (!unsavedChangesOpen && Clay_Hovered() &&
                 IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                 mathMenuItemRequested = index;
             }
         }
+    }
+
+    // Blinking text cursor at the end of the search text. Same timing as the
+    // editor's cursor: solid for a moment after typing, then blinking.
+    inline void MathMenuSearchCursor() {
+        const double elapsed = GetTime() - lastCursorActivity;
+        const bool visible = elapsed < 0.7 || static_cast<int>((elapsed - 0.7) / 0.5) % 2 == 0;
+        CLAY(CLAY_ID("MathMenuSearchCursor"),
+             {.layout = {.sizing = {CLAY_SIZING_FIXED(2), CLAY_SIZING_FIXED(20)}},
+              .backgroundColor = visible ? menuText : Clay_Color{0, 0, 0, 0}}) {}
     }
 
     // Search bar: shows what has been typed since the backslash.
@@ -228,15 +245,27 @@ namespace layout_internal {
                  {.layout = {.sizing = {CLAY_SIZING_FIXED(16), CLAY_SIZING_FIXED(16)}},
                   .custom = {.customData = &searchIcon}}) {}
             if (mathMenuQuery.empty()) {
-                CLAY_TEXT(CLAY_STRING("Search..."),
-                          {.textColor = {150, 150, 150, 255}, .fontId = FONT_BODY,
-                           .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
+                // Cursor flush against the placeholder, so it doesn't read as a divider.
+                CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                                         .childGap = 1,
+                                         .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
+                    MathMenuSearchCursor();
+                    CLAY_TEXT(CLAY_STRING("Search..."),
+                              {.textColor = {150, 150, 150, 255}, .fontId = FONT_BODY,
+                               .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
+                }
             } else {
                 Clay_String query = {.isStaticallyAllocated = false,
                                      .length = static_cast<int32_t>(mathMenuQuery.size()),
                                      .chars = mathMenuQuery.c_str()};
-                CLAY_TEXT(query, {.textColor = menuText, .fontId = FONT_BODY,
-                                  .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
+                // No gap between the text and the cursor right after it.
+                CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                                         .childGap = 1,
+                                         .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
+                    CLAY_TEXT(query, {.textColor = menuText, .fontId = FONT_BODY,
+                                      .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
+                    MathMenuSearchCursor();
+                }
             }
         }
     }
