@@ -41,6 +41,10 @@ void Placeholder(float fontSize);
 
 inline constexpr Clay_Color slotOutlineColor = {46, 160, 67, 255};
 
+// Something marked to be deleted by the next Backspace.
+inline constexpr Clay_Color deleteColor = {214, 40, 40, 255};
+inline constexpr Clay_Color deleteFillColor = {214, 40, 40, 40};
+
 // Wraps one slot of a structure (a fraction's numerator, a matrix cell, ...).
 // When `outlined`, it gets a green border; the padding is always there so the
 // layout doesn't shift as the cursor moves in and out.

@@ -24,6 +24,10 @@ int main(int argc, char *argv[]) {
                  FLAG_WINDOW_HIGHDPI);
   InitWindow(1280, 720, "M++ Editor");
   defer(CloseWindow());
+  // raylib quits on Escape by default. The editor uses Escape to close popups
+  // (math menu, matrix insert wheel) and cancel deletes, so only the window's
+  // close button quits.
+  SetExitKey(KEY_NULL);
 
   // Load the font tables
   Font fonts[FONT_COUNT];

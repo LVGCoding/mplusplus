@@ -33,6 +33,10 @@ namespace layout_internal {
     inline Clay_Vector2 mathMenuPosition = {0, 0};
     // Index of the math item clicked this frame (if any); run after rendering.
     inline std::size_t mathMenuItemRequested = SIZE_MAX;
+    // Text typed into the popup's search bar (after the backslash).
+    inline std::string mathMenuQuery;
+    // Highlighted entry in the filtered list, moved with Up/Down.
+    inline std::size_t mathMenuSelected = 0;
 
     // True while any dropdown/popup menu is open (editor mouse input is paused).
     inline bool IsAnyMenuOpen() {

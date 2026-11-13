@@ -3,6 +3,8 @@
 #include "LineNode.h"
 #include "NodeStyle.h"
 
+#include "raylib.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -70,8 +72,22 @@ void MatrixNode::Render(const RenderContext& context) {
     const auto rowGap = static_cast<uint16_t>(std::round(fontSize * 0.3f));
     const auto pad = static_cast<uint16_t>(std::round(fontSize * 0.15f));
     const bool outlined = context.activeStructure == this;
-    const Clay_BorderWidth cellBorder =
-        outlined ? Clay_BorderWidth{1, 1, 1, 1, 0} : Clay_BorderWidth{0, 0, 0, 0, 0};
+    const DeleteHighlight& marked = context.deleteHighlight;
+    // Cells in the row/column marked for deletion are drawn in red.
+    auto markedForDelete = [&](std::size_t row, std::size_t column) {
+        if (marked.node != this) {
+            return false;
+        }
+        switch (marked.part) {
+        case DeleteHighlight::Part::Row:
+            return row == marked.index;
+        case DeleteHighlight::Part::Column:
+            return column == marked.index;
+        case DeleteHighlight::Part::Whole:
+            return true;
+        }
+        return false;
+    };
 
     CLAY(GetClayId(), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
                                   .childGap = pad,
@@ -97,11 +113,17 @@ void MatrixNode::Render(const RenderContext& context) {
                                                                     .y = CLAY_ALIGN_Y_CENTER}}}) {
                             // A ragged row leaves the slot empty.
                             if (column < cells_[row].size()) {
+                                const bool red = markedForDelete(row, column);
+                                const bool border = red || outlined;
                                 CLAY(CellId(row, column),
                                      {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
                                                  .padding = CLAY_PADDING_ALL(1)},
-                                      .border = {.color = node_style::slotOutlineColor,
-                                                 .width = cellBorder}}) {
+                                      .backgroundColor = red ? node_style::deleteFillColor
+                                                             : Clay_Color{0, 0, 0, 0},
+                                      .border = {.color = red ? node_style::deleteColor
+                                                              : node_style::slotOutlineColor,
+                                                 .width = border ? Clay_BorderWidth{1, 1, 1, 1, 0}
+                                                                 : Clay_BorderWidth{0, 0, 0, 0, 0}}}) {
                                     if (cells_[row][column]) {
                                         cells_[row][column]->Render(context);
                                     } else {
@@ -128,7 +150,19 @@ KeyResult MatrixNode::KeyPress(const KeyEvent& event) {
     }
     const std::size_t row = event.path[0];
     const std::size_t column = event.path[1];
+    if (event.codepoint == U'&') {
+        return {};  // would split the cell when saved
+    }
     KeyResult result = cell->KeyPress(event.Descend(used));
+    if (result.kind == KeyResult::Kind::Ignored && event.key == KEY_ENTER) {
+        return KeyResult::WithPath(KeyResult::Kind::MatrixInsert, {row, column});
+    }
+    if (result.kind == KeyResult::Kind::DeleteLeft) {
+        return KeyResult::WithPath(KeyResult::Kind::MatrixLine, {row, column});
+    }
+    if (result.kind == KeyResult::Kind::DeleteRight) {
+        return {};
+    }
 
     // Cell (r, c) if it exists and can hold the cursor.
     auto enter = [&](std::size_t r, std::size_t c, auto&& position) -> KeyResult {
@@ -176,10 +210,13 @@ KeyResult MatrixNode::KeyPress(const KeyEvent& event) {
             }
         }
         break;
-    case KeyResult::Kind::Ignored:
+    default:
         break;
     }
-    return moved.kind == KeyResult::Kind::Moved ? moved : result;
+    if (moved.kind == KeyResult::Kind::Moved) {
+        return moved;
+    }
+    return std::move(result).Prepend({row, column});
 }
 
 void MatrixNode::MouseClick() {}
@@ -234,6 +271,67 @@ EditorNode* MatrixNode::PathChild(PathView path, std::size_t& used) const {
     }
     used = 2;
     return GetCell(path[0], path[1]);
+}
+
+std::size_t MatrixNode::MaxColumnCount() const {
+    std::size_t columns = 0;
+    for (const auto& row : cells_) {
+        columns = std::max(columns, row.size());
+    }
+    return columns;
+}
+
+std::optional<Clay_BoundingBox> MatrixNode::CellBounds(std::size_t row, std::size_t column) const {
+    return LastLayoutBounds(CellId(row, column));
+}
+
+namespace {
+std::unique_ptr<EditorNode> EmptyCell() {
+    auto cell = std::make_unique<LineNode>();
+    cell->Normalize();
+    return cell;
+}
+}  // namespace
+
+void MatrixNode::InsertRow(std::size_t row) {
+    row = std::min(row, cells_.size());
+    Row cells;
+    for (std::size_t i = 0; i < std::max<std::size_t>(1, MaxColumnCount()); ++i) {
+        cells.push_back(EmptyCell());
+    }
+    cells_.insert(cells_.begin() + static_cast<std::ptrdiff_t>(row), std::move(cells));
+}
+
+void MatrixNode::InsertColumn(std::size_t column) {
+    for (auto& row : cells_) {
+        const std::size_t at = std::min(column, row.size());
+        row.insert(row.begin() + static_cast<std::ptrdiff_t>(at), EmptyCell());
+    }
+}
+
+bool MatrixNode::RemoveRow(std::size_t row) {
+    if (cells_.size() <= 1 || row >= cells_.size()) {
+        return false;
+    }
+    cells_.erase(cells_.begin() + static_cast<std::ptrdiff_t>(row));
+    return true;
+}
+
+bool MatrixNode::RemoveColumn(std::size_t column) {
+    if (MaxColumnCount() <= 1) {
+        return false;
+    }
+    for (const auto& row : cells_) {
+        if (row.size() == 1 && column == 0) {
+            return false;
+        }
+    }
+    for (auto& row : cells_) {
+        if (column < row.size()) {
+            row.erase(row.begin() + static_cast<std::ptrdiff_t>(column));
+        }
+    }
+    return true;
 }
 
 void MatrixNode::Normalize() {

@@ -47,6 +47,24 @@ public:
     // True if the line holds nothing but empty text.
     bool IsEmpty() const;
 
+    // --- Editing (keep the Normalize() invariant) --------------------------------
+
+    // Insert `node` at byte `offset` in the TextNode at `textIndex`, splitting
+    // that text around it. Returns the new node's child index.
+    std::size_t InsertAtText(std::size_t textIndex, std::size_t offset,
+                             std::unique_ptr<EditorNode> node);
+
+    // Remove the non-text child at `index` and join the texts on either side.
+    // Returns the cursor position where it was, relative to this line.
+    CursorPath RemoveAndJoin(std::size_t index);
+
+    // Move everything after byte `offset` of the TextNode at `textIndex` into a
+    // new line, which is returned.
+    std::unique_ptr<LineNode> SplitAt(std::size_t textIndex, std::size_t offset);
+
+    // Move all of `other`'s children onto the end of this line.
+    void Append(LineNode& other);
+
     void Render(const RenderContext& context) override;
 
     // Render the children without this line's own element or placeholder.
@@ -56,6 +74,7 @@ public:
     // Forwards to the child under the cursor. When the cursor leaves a child
     // sideways it moves into the neighbouring structure (or steps over a symbol
     // like \alpha); at either end of the line the exit is passed up.
+    // Backspace/Delete next to a non-text child ask for that child to be deleted.
     KeyResult KeyPress(const KeyEvent& event) override;
 
     void MouseClick() override;

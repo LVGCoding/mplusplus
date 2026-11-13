@@ -3,6 +3,7 @@
 #include "NodeStyle.h"
 #include "TextNode.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -57,6 +58,56 @@ bool LineNode::IsBraced() const {
     return braced_;
 }
 
+std::size_t LineNode::InsertAtText(std::size_t textIndex, std::size_t offset,
+                                   std::unique_ptr<EditorNode> node) {
+    auto* text = AsText(children_.at(textIndex));
+    const std::string& whole = text->GetText();
+    offset = std::min(offset, whole.size());
+    auto after = std::make_unique<TextNode>(whole.substr(offset));
+    text->SetText(whole.substr(0, offset));
+    node->Normalize();
+    const auto at = children_.begin() + static_cast<std::ptrdiff_t>(textIndex) + 1;
+    children_.insert(at, std::move(after));
+    children_.insert(children_.begin() + static_cast<std::ptrdiff_t>(textIndex) + 1,
+                     std::move(node));
+    return textIndex + 1;
+}
+
+CursorPath LineNode::RemoveAndJoin(std::size_t index) {
+    RemoveChild(index);
+    const std::size_t left = index > 0 ? index - 1 : 0;
+    std::size_t offset = 0;
+    if (auto* text = left < children_.size() ? AsText(children_[left]) : nullptr) {
+        offset = index > 0 ? text->GetText().size() : 0;
+    }
+    Normalize();  // joins the two texts that are now next to each other
+    return {left, offset};
+}
+
+std::unique_ptr<LineNode> LineNode::SplitAt(std::size_t textIndex, std::size_t offset) {
+    auto* text = AsText(children_.at(textIndex));
+    const std::string& whole = text->GetText();
+    offset = std::min(offset, whole.size());
+    std::vector<std::unique_ptr<EditorNode>> moved;
+    moved.push_back(std::make_unique<TextNode>(whole.substr(offset)));
+    text->SetText(whole.substr(0, offset));
+    for (std::size_t i = textIndex + 1; i < children_.size(); ++i) {
+        moved.push_back(std::move(children_[i]));
+    }
+    children_.resize(textIndex + 1);
+    auto line = std::make_unique<LineNode>(std::move(moved));
+    line->Normalize();
+    return line;
+}
+
+void LineNode::Append(LineNode& other) {
+    for (auto& child : other.children_) {
+        children_.push_back(std::move(child));
+    }
+    other.children_.clear();
+    Normalize();
+}
+
 bool LineNode::IsEmpty() const {
     for (const auto& child : children_) {
         const auto* text = AsText(child);
@@ -90,9 +141,20 @@ void LineNode::Render(const RenderContext& context) {
     }
 }
 
+// A child marked for deletion is drawn inside a red box.
 void LineNode::RenderChildren(const RenderContext& context) {
+    const DeleteHighlight& marked = context.deleteHighlight;
     for (const auto& child : children_) {
-        child->Render(context);
+        if (marked.node == child.get() && marked.part == DeleteHighlight::Part::Whole) {
+            CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)}},
+                          .backgroundColor = node_style::deleteFillColor,
+                          .border = {.color = node_style::deleteColor,
+                                     .width = CLAY_BORDER_OUTSIDE(1)}}) {
+                child->Render(context);
+            }
+        } else {
+            child->Render(context);
+        }
     }
 }
 
@@ -122,8 +184,28 @@ KeyResult LineNode::KeyPress(const KeyEvent& event) {
             }
         }
         return result;
+    case KeyResult::Kind::DeleteSelf:
+        return KeyResult::WithPath(KeyResult::Kind::DeleteNode, {index});
+    case KeyResult::Kind::DeleteLeft:
+        if (index == 0) {
+            return result;
+        }
+        if (!AsText(children_[index])) {
+            // Backspace at the start of a {...} group just steps out of it.
+            return KeyResult::Moved(JoinPath({index - 1}, children_[index - 1]->LastPosition()));
+        }
+        return KeyResult::WithPath(KeyResult::Kind::DeleteNode, {index - 1});
+    case KeyResult::Kind::DeleteRight:
+        if (index + 1 >= children_.size()) {
+            return result;
+        }
+        if (!AsText(children_[index])) {
+            return KeyResult::Moved(JoinPath({index + 1}, children_[index + 1]->FirstPosition()));
+        }
+        return KeyResult::WithPath(KeyResult::Kind::DeleteNode, {index + 1});
     default:
-        return result;  // Up/Down are for the enclosing structure or row.
+        // Up/Down are for the enclosing structure or row; paths get our index.
+        return std::move(result).Prepend({index});
     }
 }
 

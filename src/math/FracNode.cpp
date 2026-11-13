@@ -59,7 +59,18 @@ KeyResult FracNode::KeyPress(const KeyEvent& event) {
         return KeyResult::Moved(JoinPath(
             {1}, denominator_->PositionNearX(event.cursorX, VerticalEntry::FromAbove, event.measure)));
     }
-    return result;
+    if (result.kind == KeyResult::Kind::DeleteLeft) {
+        // Backspace at the start of the numerator deletes the fraction; at the
+        // start of the denominator it moves back to the numerator.
+        if (slot == 0 || !numerator_) {
+            return KeyResult::Exit(KeyResult::Kind::DeleteSelf);
+        }
+        return KeyResult::Moved(JoinPath({0}, numerator_->LastPosition()));
+    }
+    if (result.kind == KeyResult::Kind::DeleteRight) {
+        return {};
+    }
+    return std::move(result).Prepend({slot});
 }
 
 void FracNode::MouseClick() {}

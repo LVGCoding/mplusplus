@@ -17,7 +17,7 @@ FileMpp Doc(const std::string& source) {
 }
 
 bool Press(FileMpp& file, int key) {
-    return file.MoveCursor(key, false, nullptr);
+    return file.PressKey(key, false, nullptr);
 }
 
 const EditorNode* NodeAt(const FileMpp& file, std::size_t row, std::size_t child) {
@@ -182,10 +182,10 @@ TEST(CursorMove, ArrowsMoveBetweenMatrixCells) {
 
 TEST(CursorMove, ShiftKeepsTheSelectionStart) {
     auto file = Doc("abc");
-    ASSERT_TRUE(file.MoveCursor(KEY_RIGHT, true, nullptr));
+    ASSERT_TRUE(file.PressKey(KEY_RIGHT, true, nullptr));
     EXPECT_EQ(file.selectionStart, (CursorPath{0, 0, 0}));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 1}));
-    ASSERT_TRUE(file.MoveCursor(KEY_RIGHT, false, nullptr));
+    ASSERT_TRUE(file.PressKey(KEY_RIGHT, false, nullptr));
     EXPECT_EQ(file.selectionStart, file.cursorPos);
 }
 

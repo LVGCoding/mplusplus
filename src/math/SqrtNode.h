@@ -34,6 +34,7 @@ public:
 
     // Left from the start of the argument goes to the index (if any) and Right
     // from the end of the index goes to the argument; other exits are passed up.
+    // Backspace at the start of the first slot asks for the root to be deleted.
     KeyResult KeyPress(const KeyEvent& event) override;
     CursorPath FirstPosition() const override;
     CursorPath LastPosition() const override;

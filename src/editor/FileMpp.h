@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorSettings.h"
 #include "fileBase.h"
 #include "math/EditorNode.h"
 #include "math/LineNode.h"
@@ -31,6 +32,28 @@ struct FileMpp : FileBase {
     // When selectionStart == cursorPos, nothing is selected.
     CursorPath selectionStart = {0, 0, 0};
 
+    // What Backspace does next to a fraction/root/matrix. A setting later;
+    // for now the default from EditorSettings.h.
+    editor_settings::StructureBackspace backspaceMode = editor_settings::structureBackspace;
+
+    // Something marked in red, deleted by pressing the same key again.
+    struct PendingDelete {
+        CursorPath node;  // the node (Whole) or the matrix (Row/Column)
+        DeleteHighlight::Part part = DeleteHighlight::Part::Whole;
+        std::size_t row = 0;
+        std::size_t column = 0;
+        int key = 0;  // KEY_BACKSPACE or KEY_DELETE
+    };
+
+    // The wheel around a matrix cell for inserting a row or column.
+    enum class WheelDirection { Up, Down, Left, Right };
+    struct InsertWheel {
+        CursorPath matrix;
+        std::size_t row = 0;
+        std::size_t column = 0;
+        std::optional<WheelDirection> direction;
+    };
+
     FileMpp();
 
     bool Load(const std::filesystem::path& path, std::string& error) override;
@@ -42,10 +65,30 @@ struct FileMpp : FileBase {
     // The document serialized back to M++ source.
     std::string ContentText() const;
 
-    // Move the cursor for an arrow key (raylib KEY_*). `measure` may be null
-    // (e.g. in tests); then Up/Down land at the start of the target.
-    // Returns true if the cursor moved.
-    bool MoveCursor(int key, bool shift, const TextMeasure* measure);
+    // --- Editing (fileMppEdit.cpp) -------------------------------------------------
+
+    // Handle a key (raylib KEY_*): arrows, Backspace, Delete, Enter, Tab, Escape.
+    // `measure` may be null (e.g. in tests); then Up/Down land at the start of
+    // the target. Returns true if the cursor, content or highlights changed.
+    bool PressKey(int key, bool shift, const TextMeasure* measure);
+
+    // Type a character at the cursor. A backslash asks for the math popup
+    // instead (see TakeMathMenuRequest). Returns true if anything changed.
+    bool TypeCharacter(char32_t codepoint);
+
+    // Insert a new node (e.g. an empty fraction) at the cursor and move into it.
+    bool InsertNode(std::unique_ptr<EditorNode> node);
+
+    // True once after a backslash was typed: the UI should open the math popup.
+    bool TakeMathMenuRequest();
+
+    const std::optional<PendingDelete>& GetPendingDelete() const { return pendingDelete_; }
+    const std::optional<InsertWheel>& GetInsertWheel() const { return insertWheel_; }
+
+    // --- Tree lookup -------------------------------------------------------------------
+
+    // The node a path (without a trailing text offset) leads to, or null.
+    EditorNode* NodeAt(PathView path) const;
 
     // The node that `path` ends in and the offset into it, or null if the path
     // doesn't lead to a TextNode.
@@ -54,8 +97,8 @@ struct FileMpp : FileBase {
     // The innermost fraction/root/matrix holding the cursor (outlined in green).
     const EditorNode* ActiveStructure() const;
 
-    // Rendering and input, in fileMppView.cpp. Only cursor navigation is
-    // implemented; typing and selection are not written yet.
+    // Rendering and input, in fileMppView.cpp. Selection and mouse clicks are
+    // not written yet.
     bool HandleInput(const EditorView& view) override;
     void LayoutContent() const override;
     std::size_t LineCount() const override;
@@ -74,5 +117,17 @@ private:
     std::optional<float> goalX_;
     CursorPath goalPath_;
 
+    std::optional<PendingDelete> pendingDelete_;
+    std::optional<InsertWheel> insertWheel_;
+    bool mathMenuRequested_ = false;
+
     std::optional<Clay_BoundingBox> CaretBox(const TextMeasure* measure) const;
+    void DrawInsertWheel(const EditorView& view) const;
+
+    void ResetCursorIfInvalid();
+    void MarkEdited();
+    bool RequestDelete(CursorPath node, int key);
+    bool DeleteNodeAt(const CursorPath& node);
+    bool ApplyPendingDelete();
+    bool HandleWheelKey(int key);
 };

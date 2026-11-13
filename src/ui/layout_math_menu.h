@@ -11,6 +11,10 @@
 #include "layout_state.h"
 #include "layout_style.h"
 
+#include <cctype>
+#include <string>
+#include <vector>
+
 namespace layout_internal {
     // Open the popup with its top-left corner at `position` (window pixels).
     // Every trigger goes through this, so new triggers only need to pick a position.
@@ -20,6 +24,8 @@ namespace layout_internal {
         mathMenuOpen = true;
         mathMenuPosition = position;
         mathMenuItemRequested = SIZE_MAX;
+        mathMenuQuery.clear();
+        mathMenuSelected = 0;
         // Start at the top of the list if it was scrolled before.
         auto scroll = Clay_GetScrollContainerData(CLAY_ID("MathMenuList"));
         if (scroll.found) {
@@ -30,6 +36,29 @@ namespace layout_internal {
     inline void CloseMathMenu() {
         mathMenuOpen = false;
         mathMenuItemRequested = SIZE_MAX;
+        mathMenuQuery.clear();
+    }
+
+    // Indices into MathMenuItems() matching the search text (case-insensitive,
+    // ignoring the leading backslash). Names starting with it come first.
+    inline std::vector<std::size_t> FilteredMathItems() {
+        auto lower = [](std::string_view text) {
+            std::string out(text);
+            for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return out;
+        };
+        const std::string query = lower(mathMenuQuery);
+        std::vector<std::size_t> starts, contains;
+        const auto& items = MathMenuItems();
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            std::string name = lower(items[i].label);
+            if (!name.empty() && name[0] == '\\') name.erase(0, 1);
+            const auto at = name.find(query);
+            if (at == 0) starts.push_back(i);
+            else if (at != std::string::npos) contains.push_back(i);
+        }
+        starts.insert(starts.end(), contains.begin(), contains.end());
+        return starts;
     }
 
     // Position just below an element from the last layout (e.g. a menu-bar button).
@@ -51,11 +80,48 @@ namespace layout_internal {
 
     }
 
-    // Keyboard triggers
-    inline void CheckMathMenuKeyTriggers(const FileBase& /*file*/, const EditorView& /*view*/) {
+    // Keyboard triggers. Called after the file has handled this frame's input.
+    inline void CheckMathMenuKeyTriggers(FileBase& file, const EditorView& view) {
+        // Trigger: typing a backslash in an M++ file. Opens just below the cursor.
+        auto* mpp = dynamic_cast<FileMpp*>(&file);
+        if (mpp && mpp->TakeMathMenuRequest()) {
+            const auto cursor = file.CursorBounds(view);
+            OpenMathMenu(cursor ? Clay_Vector2{cursor->x, cursor->y + cursor->height + 4}
+                                : PositionBelow(CLAY_ID("InsertMenu")));
+        }
+    }
 
-        // Add backslash stuff here
-
+    // Keyboard control while the popup is open; the editor gets no input then.
+    // Typing filters the list, Up/Down choose, Enter inserts, and Backspace on
+    // an empty search closes the popup (like deleting the backslash).
+    inline void HandleMathMenuKeys() {
+        if (!mathMenuOpen) return;
+        while (const int codepoint = GetCharPressed()) {
+            if (codepoint > 32 && codepoint < 127 && codepoint != '\\') {
+                mathMenuQuery += static_cast<char>(codepoint);
+                mathMenuSelected = 0;
+            }
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
+            if (mathMenuQuery.empty()) {
+                CloseMathMenu();
+                return;
+            }
+            mathMenuQuery.pop_back();
+            mathMenuSelected = 0;
+        }
+        const auto filtered = FilteredMathItems();
+        if (filtered.empty()) return;
+        if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN)) {
+            mathMenuSelected = (mathMenuSelected + 1) % filtered.size();
+        }
+        if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP)) {
+            mathMenuSelected = (mathMenuSelected + filtered.size() - 1) % filtered.size();
+        }
+        mathMenuSelected = std::min(mathMenuSelected, filtered.size() - 1);
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) || IsKeyPressed(KEY_TAB)) {
+            mathMenuItemRequested = filtered[mathMenuSelected];
+        }
     }
 
     // Close on Escape or a click anywhere outside the popup.
@@ -82,13 +148,14 @@ namespace layout_internal {
         CloseMathMenu();
     }
 
-    inline void MathMenuButton(const MathMenuItem& item, std::size_t index) {
+    inline void MathMenuButton(const MathMenuItem& item, std::size_t index, bool selected) {
         const Clay_ElementId id = CLAY_IDI("MathMenuItem", static_cast<uint32_t>(index));
         CLAY(id,
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(mathMenuItemHeight)},
                          .padding = {12, 12, 0, 0},
                          .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
-              .backgroundColor = Clay_PointerOver(id) ? menuHover : Clay_Color{0, 0, 0, 0},
+              .backgroundColor = selected || Clay_PointerOver(id) ? menuHover
+                                                                  : Clay_Color{0, 0, 0, 0},
               .cornerRadius = CLAY_CORNER_RADIUS(6)}) {
             Clay_String label = {.isStaticallyAllocated = false,
                                  .length = static_cast<int32_t>(item.label.size()),
@@ -102,7 +169,7 @@ namespace layout_internal {
         }
     }
 
-    // SEARCH BAR (not functional yet)
+    // Search bar: shows what has been typed since the backslash.
     inline void MathMenuSearchBar() {
         CLAY(CLAY_ID("MathMenuSearch"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(mathMenuSearchHeight)},
@@ -114,9 +181,17 @@ namespace layout_internal {
             CLAY(CLAY_ID("MathMenuSearchIcon"),
                  {.layout = {.sizing = {CLAY_SIZING_FIXED(16), CLAY_SIZING_FIXED(16)}},
                   .custom = {.customData = &searchIcon}}) {}
-            CLAY_TEXT(CLAY_STRING("Search..."),
-                      {.textColor = {150, 150, 150, 255}, .fontId = FONT_BODY,
-                       .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
+            if (mathMenuQuery.empty()) {
+                CLAY_TEXT(CLAY_STRING("Search..."),
+                          {.textColor = {150, 150, 150, 255}, .fontId = FONT_BODY,
+                           .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
+            } else {
+                Clay_String query = {.isStaticallyAllocated = false,
+                                     .length = static_cast<int32_t>(mathMenuQuery.size()),
+                                     .chars = mathMenuQuery.c_str()};
+                CLAY_TEXT(query, {.textColor = menuText, .fontId = FONT_BODY,
+                                  .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
+            }
         }
     }
 
@@ -141,8 +216,14 @@ namespace layout_internal {
                              .layoutDirection = CLAY_TOP_TO_BOTTOM},
                   .clip = {.vertical = true, .childOffset = Clay_GetScrollOffset()}}) {
                 const auto& items = MathMenuItems();
-                for (std::size_t i = 0; i < items.size(); ++i) {
-                    MathMenuButton(items[i], i);
+                const auto filtered = FilteredMathItems();
+                for (std::size_t i = 0; i < filtered.size(); ++i) {
+                    MathMenuButton(items[filtered[i]], filtered[i], i == mathMenuSelected);
+                }
+                if (filtered.empty()) {
+                    CLAY_TEXT(CLAY_STRING("No matches"),
+                              {.textColor = {150, 150, 150, 255}, .fontId = FONT_BODY,
+                               .fontSize = mathMenuFontSize, .wrapMode = CLAY_TEXT_WRAP_NONE});
                 }
             }
         }

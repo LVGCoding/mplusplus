@@ -52,6 +52,9 @@ KeyResult SqrtNode::KeyPress(const KeyEvent& event) {
         return {};
     }
     const std::size_t slot = event.path[0];
+    if (slot == 0 && event.codepoint == U']') {
+        return {};  // would end the [index] early when saved
+    }
     KeyResult result = child->KeyPress(event.Descend(used));
     if (result.kind == KeyResult::Kind::Moved) {
         return std::move(result).Prepend({slot});
@@ -62,7 +65,18 @@ KeyResult SqrtNode::KeyPress(const KeyEvent& event) {
     if (result.kind == KeyResult::Kind::ExitRight && slot == 0 && argument_) {
         return KeyResult::Moved(JoinPath({1}, argument_->FirstPosition()));
     }
-    return result;
+    if (result.kind == KeyResult::Kind::DeleteLeft) {
+        // Backspace at the start of the first slot deletes the root; at the
+        // start of the argument after an index it moves into the index.
+        if (slot == 1 && root_) {
+            return KeyResult::Moved(JoinPath({0}, root_->LastPosition()));
+        }
+        return KeyResult::Exit(KeyResult::Kind::DeleteSelf);
+    }
+    if (result.kind == KeyResult::Kind::DeleteRight) {
+        return {};
+    }
+    return std::move(result).Prepend({slot});
 }
 
 void SqrtNode::MouseClick() {}

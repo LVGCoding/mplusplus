@@ -12,6 +12,12 @@ namespace {
 bool IsContinuationByte(char c) {
     return (static_cast<unsigned char>(c) & 0xC0) == 0x80;
 }
+
+std::string EncodeUtf8(char32_t codepoint) {
+    int bytes = 0;
+    const char* encoded = CodepointToUTF8(static_cast<int>(codepoint), &bytes);
+    return std::string(encoded, static_cast<std::size_t>(bytes));
+}
 }  // namespace
 
 TextNode::TextNode(std::string text) : text_(std::move(text)) {}
@@ -28,7 +34,26 @@ void TextNode::Render(const RenderContext& context) {
 
 KeyResult TextNode::KeyPress(const KeyEvent& event) {
     const std::size_t offset = event.path.empty() ? 0 : std::min(event.path[0], text_.size());
+    if (event.key == 0 && event.codepoint != 0) {
+        const std::string character = EncodeUtf8(event.codepoint);
+        text_.insert(offset, character);
+        return KeyResult::Moved({offset + character.size()}, true);
+    }
     switch (event.key) {
+    case KEY_BACKSPACE:
+        if (offset == 0) {
+            return KeyResult::Exit(KeyResult::Kind::DeleteLeft);
+        } else {
+            const std::size_t previous = PreviousCharacter(offset);
+            text_.erase(previous, offset - previous);
+            return KeyResult::Moved({previous}, true);
+        }
+    case KEY_DELETE:
+        if (offset == text_.size()) {
+            return KeyResult::Exit(KeyResult::Kind::DeleteRight);
+        }
+        text_.erase(offset, NextCharacter(offset) - offset);
+        return KeyResult::Moved({offset}, true);
     case KEY_LEFT:
         if (offset == 0) {
             return KeyResult::Exit(KeyResult::Kind::ExitLeft);

@@ -65,8 +65,13 @@ bool HandleActiveFileInput(Editor& editor, Font* fonts) {
         return false;
     }
     const EditorView view = MakeEditorView(fonts);
-    CheckMathMenuKeyTriggers(*file, view);
+    if (mathMenuOpen) {
+        // The math popup takes the keyboard while it is open.
+        HandleMathMenuKeys();
+        return false;
+    }
     const bool activity = file->HandleInput(view);
+    CheckMathMenuKeyTriggers(*file, view);
     if (activity) {
         ResetEditorCursorBlink();
     }

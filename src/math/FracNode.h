@@ -32,7 +32,8 @@ public:
     bool HasChild() override;
 
     // Up from the denominator goes to the numerator and Down goes back; all
-    // other exits are passed up, so Left/Right leave the fraction.
+    // other exits are passed up, so Left/Right leave the fraction. Backspace at
+    // the start of the numerator asks for the fraction to be deleted.
     KeyResult KeyPress(const KeyEvent& event) override;
     CursorPath FirstPosition() const override;
     CursorPath LastPosition() const override;

@@ -31,12 +31,24 @@ using TextMeasure = std::function<float(std::string_view text, float fontSize)>;
 // Which side the cursor comes from when it moves vertically into a node.
 enum class VerticalEntry { FromAbove, FromBelow };
 
+// What is marked in red, waiting for a second Backspace to delete it.
+struct DeleteHighlight {
+    enum class Part { Whole, Row, Column };
+
+    // The node itself (Whole), or the matrix whose row/column is marked.
+    const EditorNode* node = nullptr;
+    Part part = Part::Whole;
+    std::size_t index = 0;  // row or column for Row/Column
+};
+
 struct RenderContext {
     float fontSize = 18.0f;
 
     // The innermost structure (fraction, root, matrix) that holds the cursor.
     // It outlines its slots so the user can see where they can navigate.
     const EditorNode* activeStructure = nullptr;
+
+    DeleteHighlight deleteHighlight;
 
     RenderContext WithFontSize(float size) const {
         RenderContext context = *this;
@@ -46,7 +58,10 @@ struct RenderContext {
 };
 
 struct KeyEvent {
-    int key = 0;  // raylib KEY_*
+    int key = 0;  // raylib KEY_*, or 0 for a typed character
+
+    // The typed character when key == 0.
+    char32_t codepoint = 0;
     bool shift = false;
     bool ctrl = false;
     bool alt = false;
@@ -68,23 +83,51 @@ struct KeyEvent {
     }
 };
 
-// How the cursor should move in response to a KeyEvent.
-//   Moved      - `path` is the new cursor position, relative to the node that returned it.
-//   Exit*      - the cursor would leave this node in that direction; the parent decides
-//                where it goes.
-//   Ignored    - the key does nothing here.
+// What a KeyEvent did, or what the parent should do about it.
+//   Moved        - `path` is the new cursor position, relative to the node that
+//                  returned it. `changed` is set if the content was edited.
+//   Exit*        - the cursor would leave this node in that direction; the
+//                  parent decides where it goes.
+//   DeleteLeft   - Backspace at the very start of this node.
+//   DeleteRight  - Delete at the very end of this node.
+//   DeleteSelf   - this node asks its parent to delete it (e.g. Backspace at the
+//                  start of a fraction's numerator).
+//   DeleteNode   - `path` leads to a node that should be deleted.
+//   MatrixLine   - `path` leads to a matrix cell [.., row, column]; Backspace at
+//                  its start asks to delete that row (or column).
+//   MatrixInsert - `path` leads to a matrix cell; Enter asks to insert a row or
+//                  column next to it.
+//   Ignored      - the key does nothing here.
 struct KeyResult {
-    enum class Kind { Ignored, Moved, ExitLeft, ExitRight, ExitUp, ExitDown };
+    enum class Kind {
+        Ignored,
+        Moved,
+        ExitLeft,
+        ExitRight,
+        ExitUp,
+        ExitDown,
+        DeleteLeft,
+        DeleteRight,
+        DeleteSelf,
+        DeleteNode,
+        MatrixLine,
+        MatrixInsert,
+    };
 
     Kind kind = Kind::Ignored;
     CursorPath path;
+    bool changed = false;
 
-    static KeyResult Moved(CursorPath path) { return {Kind::Moved, std::move(path)}; }
-    static KeyResult Exit(Kind kind) { return {kind, {}}; }
+    static KeyResult Moved(CursorPath path, bool changed = false) {
+        return {Kind::Moved, std::move(path), changed};
+    }
+    static KeyResult Exit(Kind kind) { return {kind, {}, false}; }
+    static KeyResult WithPath(Kind kind, CursorPath path) { return {kind, std::move(path), false}; }
 
-    // Prefix this node's own indices onto a child's Moved path.
+    // Prefix this node's own indices onto a child's result path.
     KeyResult Prepend(std::initializer_list<std::size_t> indices) && {
-        if (kind == Kind::Moved) {
+        if (kind == Kind::Moved || kind == Kind::DeleteNode || kind == Kind::MatrixLine ||
+            kind == Kind::MatrixInsert) {
             path.insert(path.begin(), indices);
         }
         return std::move(*this);

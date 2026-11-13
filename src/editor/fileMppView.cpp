@@ -6,22 +6,35 @@
 // cursor itself or reports that it is leaving, and its parent decides where it
 // goes next. The document handles leaving a row.
 //
-// TODO: typing, deleting, selection and mouse clicks are not implemented yet.
+// Editing (typing, deleting, the matrix insert wheel) is in fileMppEdit.cpp.
+// TODO: selection and mouse clicks are not implemented yet.
 
 #include "FileMpp.h"
 
 #include "clay.h"
+#include "math/MatrixNode.h"
 #include "math/TextNode.h"
 #include "raylib.h"
 #include "ui/EditorView.h"
 #include "ui/clay_renderer_raylib.h"
 #include "ui/font.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
 constexpr Color cursorColor = {20, 20, 20, 255};
 constexpr float cursorWidth = 2.0f;
+
+// Matrix insert wheel.
+constexpr float wheelGap = 6.0f;          // between the cell and the ring
+constexpr float wheelThickness = 52.0f;   // width of the ring
+constexpr float wheelFontSize = 13.0f;
+constexpr Color wheelFill = {245, 245, 245, 235};
+constexpr Color wheelChosen = {46, 160, 67, 240};
+constexpr Color wheelEdge = {150, 150, 150, 255};
+constexpr Color wheelShadow = {0, 0, 0, 40};
+constexpr Color wheelText = {40, 40, 40, 255};
 
 // Measures text the same way Clay does when laying out a TextNode.
 TextMeasure MakeMeasure(Font* fonts) {
@@ -44,6 +57,13 @@ void FileMpp::LayoutContent() const {
     RenderContext context;
     context.fontSize = editor_style::fontSize;
     context.activeStructure = ActiveStructure();
+    if (pendingDelete_) {
+        context.deleteHighlight.node = NodeAt(pendingDelete_->node);
+        context.deleteHighlight.part = pendingDelete_->part;
+        context.deleteHighlight.index = pendingDelete_->part == DeleteHighlight::Part::Column
+                                            ? pendingDelete_->column
+                                            : pendingDelete_->row;
+    }
     CLAY(CLAY_ID("MppDocument"), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
                                              .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
         for (std::size_t i = 0; i < content.size(); ++i) {
@@ -57,31 +77,6 @@ void FileMpp::LayoutContent() const {
                 content[i]->RenderChildren(context);
             }
         }
-    }
-}
-
-TextNode* FileMpp::CursorText(const CursorPath& path, std::size_t* offset) const {
-    if (path.empty() || path[0] >= content.size()) {
-        return nullptr;
-    }
-    const EditorNode* node = content[path[0]].get();
-    PathView rest = PathView(path).subspan(1);
-    while (true) {
-        if (auto* text = dynamic_cast<const TextNode*>(node)) {
-            if (rest.size() != 1 || rest[0] > text->GetText().size()) {
-                return nullptr;
-            }
-            if (offset) {
-                *offset = rest[0];
-            }
-            return const_cast<TextNode*>(text);
-        }
-        std::size_t used = 0;
-        node = node->PathChild(rest, used);
-        if (!node) {
-            return nullptr;
-        }
-        rest = rest.subspan(used);
     }
 }
 
@@ -113,83 +108,27 @@ std::optional<Clay_BoundingBox> FileMpp::CaretBox(const TextMeasure* measure) co
     return text ? text->CaretBox(offset, measure) : std::nullopt;
 }
 
-bool FileMpp::MoveCursor(int key, bool shift, const TextMeasure* measure) {
-    if (!CursorText(cursorPos)) {
-        // The tree changed under the cursor; start over at the beginning.
-        cursorPos = JoinPath({0}, content.front()->FirstPosition());
-    }
-    const bool vertical = key == KEY_UP || key == KEY_DOWN;
-    if (!vertical || cursorPos != goalPath_) {
-        goalX_.reset();
-    }
-    if (vertical && !goalX_) {
-        const auto caret = CaretBox(measure);
-        goalX_ = caret ? caret->x : 0.0f;
-    }
-
-    const std::size_t row = cursorPos[0];
-    KeyEvent event;
-    event.key = key;
-    event.shift = shift;
-    event.path = PathView(cursorPos).subspan(1);
-    event.cursorX = goalX_.value_or(0.0f);
-    event.measure = measure;
-    KeyResult result = content[row]->KeyPress(event);
-
-    CursorPath next;
-    switch (result.kind) {
-    case KeyResult::Kind::Moved:
-        next = JoinPath({row}, std::move(result.path));
-        break;
-    case KeyResult::Kind::ExitLeft:
-        if (row > 0) {
-            next = JoinPath({row - 1}, content[row - 1]->LastPosition());
-        }
-        break;
-    case KeyResult::Kind::ExitRight:
-        if (row + 1 < content.size()) {
-            next = JoinPath({row + 1}, content[row + 1]->FirstPosition());
-        }
-        break;
-    case KeyResult::Kind::ExitUp:
-        if (row > 0) {
-            next = JoinPath({row - 1}, content[row - 1]->PositionNearX(
-                                           event.cursorX, VerticalEntry::FromBelow, measure));
-        }
-        break;
-    case KeyResult::Kind::ExitDown:
-        if (row + 1 < content.size()) {
-            next = JoinPath({row + 1}, content[row + 1]->PositionNearX(
-                                           event.cursorX, VerticalEntry::FromAbove, measure));
-        }
-        break;
-    case KeyResult::Kind::Ignored:
-        break;
-    }
-
-    if (next.empty() || next == cursorPos) {
-        return false;
-    }
-    cursorPos = std::move(next);
-    if (vertical) {
-        goalPath_ = cursorPos;
-    }
-    if (!shift) {
-        selectionStart = cursorPos;
-    }
-    return true;
-}
-
 bool FileMpp::HandleInput(const EditorView& view) {
     const TextMeasure measure = MakeMeasure(view.fonts);
     const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    bool moved = false;
-    for (const int key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN}) {
+    bool changed = false;
+    for (const int key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE}) {
         if (IsKeyPressed(key) || IsKeyPressedRepeat(key)) {
-            moved |= MoveCursor(key, shift, &measure);
+            changed |= PressKey(key, shift, &measure);
         }
     }
-    return moved;
+    for (const int key : {KEY_ENTER, KEY_KP_ENTER, KEY_TAB, KEY_ESCAPE}) {
+        if (IsKeyPressed(key)) {
+            changed |= PressKey(key == KEY_KP_ENTER ? KEY_ENTER : key, shift, &measure);
+        }
+    }
+    while (const int codepoint = GetCharPressed()) {
+        changed |= TypeCharacter(static_cast<char32_t>(codepoint));
+        if (mathMenuRequested_) {
+            break;  // the rest of this frame's typing belongs to the popup
+        }
+    }
+    return changed;
 }
 
 std::size_t FileMpp::LineCount() const {
@@ -202,16 +141,62 @@ uint32_t FileMpp::LineElementId(std::size_t line) const {
 }
 
 void FileMpp::DrawOverlay(const EditorView& view) const {
-    if (!view.cursorVisible) {
+    if (view.cursorVisible) {
+        if (const auto bounds = CursorBounds(view)) {
+            BeginEditorClip(view);
+            DrawRectangleRec(*bounds, cursorColor);
+            EndScissorMode();
+        }
+    }
+    if (insertWheel_) {
+        DrawInsertWheel(view);
+    }
+}
+
+// A ring around the matrix cell split into four wedges, one per direction.
+// The chosen wedge is highlighted; Enter inserts a row/column that way.
+void FileMpp::DrawInsertWheel(const EditorView& view) const {
+    const auto* matrix = dynamic_cast<const MatrixNode*>(NodeAt(insertWheel_->matrix));
+    const auto cell = matrix ? matrix->CellBounds(insertWheel_->row, insertWheel_->column)
+                             : std::nullopt;
+    if (!cell) {
         return;
     }
-    const auto bounds = CursorBounds(view);
-    if (!bounds) {
-        return;
+    const Vector2 centre = {cell->x + cell->width / 2, cell->y + cell->height / 2};
+    const float inner = std::max(cell->width, cell->height) / 2 + wheelGap;
+    const float outer = inner + wheelThickness;
+
+    struct Wedge {
+        WheelDirection direction;
+        float angle;  // centre of the wedge in raylib degrees (0 = right, 90 = down)
+        const char* label;
+    };
+    static constexpr Wedge wedges[] = {
+        {WheelDirection::Right, 0.0f, "Col right"},
+        {WheelDirection::Down, 90.0f, "Row below"},
+        {WheelDirection::Left, 180.0f, "Col left"},
+        {WheelDirection::Up, 270.0f, "Row above"},
+    };
+
+    DrawCircleV(centre, outer + 1, wheelShadow);
+    for (const Wedge& wedge : wedges) {
+        const bool chosen = insertWheel_->direction == wedge.direction;
+        DrawRing(centre, inner, outer, wedge.angle - 44, wedge.angle + 44, 24,
+                 chosen ? wheelChosen : wheelFill);
     }
-    BeginEditorClip(view);
-    DrawRectangleRec(*bounds, cursorColor);
-    EndScissorMode();
+    DrawRing(centre, inner - 1, inner, 0, 360, 48, wheelEdge);
+    DrawRing(centre, outer, outer + 1, 0, 360, 48, wheelEdge);
+
+    const Font font = view.fonts ? view.fonts[FONT_BODY] : GetFontDefault();
+    const float radius = (inner + outer) / 2;
+    for (const Wedge& wedge : wedges) {
+        const bool chosen = insertWheel_->direction == wedge.direction;
+        const float radians = wedge.angle * DEG2RAD;
+        const Vector2 size = MeasureTextEx(font, wedge.label, wheelFontSize, 0);
+        const Vector2 at = {centre.x + std::cos(radians) * radius - size.x / 2,
+                            centre.y + std::sin(radians) * radius - size.y / 2};
+        DrawTextEx(font, wedge.label, at, wheelFontSize, 0, chosen ? WHITE : wheelText);
+    }
 }
 
 std::optional<Rectangle> FileMpp::CursorBounds(const EditorView& view) const {
