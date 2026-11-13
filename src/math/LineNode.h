@@ -66,6 +66,7 @@ public:
     void Append(LineNode& other);
 
     void Render(const RenderContext& context) override;
+    std::unique_ptr<EditorNode> Clone() const override;
 
     // Render the children without this line's own element or placeholder.
     // Used for document rows, which the file wraps in its own row element.

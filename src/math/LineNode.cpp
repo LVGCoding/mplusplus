@@ -342,3 +342,15 @@ void LineNode::Normalize() {
     }
     children_ = std::move(normalized);
 }
+
+std::unique_ptr<EditorNode> LineNode::Clone() const {
+    std::vector<std::unique_ptr<EditorNode>> children;
+    children.reserve(children_.size());
+    for (const auto& child : children_) {
+        children.push_back(CloneOf(child));
+    }
+    auto copy = std::make_unique<LineNode>(std::move(children), braced_);
+    copy->spacing_ = spacing_;
+    copy->CopyIdFrom(*this);
+    return copy;
+}

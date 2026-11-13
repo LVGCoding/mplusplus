@@ -41,6 +41,7 @@ public:
     ~GreekNode() override = default;
 
     void Render(const RenderContext& context) override;
+    std::unique_ptr<EditorNode> Clone() const override;
 
     void MouseClick() override;
 

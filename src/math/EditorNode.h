@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <random>
 #include <span>
@@ -162,6 +163,10 @@ public:
 
     virtual void Render(const RenderContext& context) = 0;
 
+    // A deep copy that keeps every node's id, so it lays out where the
+    // original did (Clay looks up last frame's boxes by id). Used by undo.
+    virtual std::unique_ptr<EditorNode> Clone() const = 0;
+
     // Handle a key with the cursor inside this node. `event.path` is the cursor
     // path relative to this node; containers forward it to the child it points
     // into and then interpret the child's result.
@@ -218,6 +223,14 @@ public:
     // Clay element id for this node, consistent across frames so Clay can
     // track the element (hover, scroll, element data) between layouts.
     Clay_ElementId GetClayId() const { return CLAY_IDI("EditorNode", id_); }
+
+protected:
+    void CopyIdFrom(const EditorNode& other) { id_ = other.id_; }
+
+    // Clone() of a child that may be null.
+    static std::unique_ptr<EditorNode> CloneOf(const std::unique_ptr<EditorNode>& node) {
+        return node ? node->Clone() : nullptr;
+    }
 
 private:
     static std::uint32_t GenerateId() {

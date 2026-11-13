@@ -148,3 +148,9 @@ void SqrtNode::SetChildren(std::unique_ptr<EditorNode> root, std::unique_ptr<Edi
     root_ = std::move(root);
     argument_ = std::move(argument);
 }
+
+std::unique_ptr<EditorNode> SqrtNode::Clone() const {
+    auto copy = std::make_unique<SqrtNode>(CloneOf(root_), CloneOf(argument_));
+    copy->CopyIdFrom(*this);
+    return copy;
+}

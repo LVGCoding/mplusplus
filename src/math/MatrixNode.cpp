@@ -394,3 +394,19 @@ bool MatrixNode::IsMatrixEnvironment(const std::string& name) {
     }
     return false;
 }
+
+std::unique_ptr<EditorNode> MatrixNode::Clone() const {
+    std::vector<Row> cells;
+    cells.reserve(cells_.size());
+    for (const Row& row : cells_) {
+        Row copied;
+        copied.reserve(row.size());
+        for (const auto& cell : row) {
+            copied.push_back(CloneOf(cell));
+        }
+        cells.push_back(std::move(copied));
+    }
+    auto copy = std::make_unique<MatrixNode>(environment_, std::move(cells));
+    copy->CopyIdFrom(*this);
+    return copy;
+}

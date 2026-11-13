@@ -131,6 +131,7 @@ bool FileMpp::DeleteSelection() {
     if (!selection) {
         return false;
     }
+    EditScope scope(*this, EditKind::Other);
     const CursorPath& start = selection->start;
     const CursorPath& end = selection->end;
     if (start[0] == end[0]) {

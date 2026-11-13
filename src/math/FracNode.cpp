@@ -132,3 +132,9 @@ void FracNode::SetChildren(std::unique_ptr<EditorNode> numerator,
     numerator_ = std::move(numerator);
     denominator_ = std::move(denominator);
 }
+
+std::unique_ptr<EditorNode> FracNode::Clone() const {
+    auto copy = std::make_unique<FracNode>(CloneOf(numerator_), CloneOf(denominator_));
+    copy->CopyIdFrom(*this);
+    return copy;
+}

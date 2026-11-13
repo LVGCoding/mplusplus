@@ -60,6 +60,7 @@ bool FileMpp::Load(const std::filesystem::path& path, std::string& error) {
         return false;
     }
     SetSource(std::move(text));
+    savedSource_ = source;
     this->path = path;
     modified = false;
     return true;
@@ -69,6 +70,7 @@ bool FileMpp::Save(const std::filesystem::path& path, std::string& error) {
     if (!WriteWholeFile(path, source, error)) {
         return false;
     }
+    savedSource_ = source;
     this->path = path;
     modified = false;
     return true;
@@ -82,6 +84,9 @@ void FileMpp::SetSource(std::string text) {
     cursorPos = JoinPath({0}, content.front()->FirstPosition());
     selectionStart = cursorPos;
     goalX_.reset();
+    pendingDelete_.reset();
+    insertWheel_.reset();
+    ClearHistory();
 }
 
 std::string FileMpp::ContentText() const {

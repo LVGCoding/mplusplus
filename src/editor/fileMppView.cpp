@@ -258,6 +258,14 @@ bool FileMpp::HandleInput(const EditorView& view) {
         SelectAll();
         changed = true;
     }
+    // Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes. Held keys repeat.
+    auto pressed = [](int key) { return IsKeyPressed(key) || IsKeyPressedRepeat(key); };
+    if (ctrl && pressed(KEY_Z)) {
+        changed |= shift ? Redo() : Undo();
+    }
+    if (ctrl && pressed(KEY_Y)) {
+        changed |= Redo();
+    }
     for (const int key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE}) {
         if (IsKeyPressed(key) || IsKeyPressedRepeat(key)) {
             changed |= PressKey(key, shift, &measure);

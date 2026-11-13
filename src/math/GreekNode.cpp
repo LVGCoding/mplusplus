@@ -60,3 +60,7 @@ std::optional<GreekNode::GreekSymbolType> GreekNode::SymbolFromName(std::string_
     }
     return std::nullopt;
 }
+
+std::unique_ptr<EditorNode> GreekNode::Clone() const {
+    return std::make_unique<GreekNode>(*this);
+}

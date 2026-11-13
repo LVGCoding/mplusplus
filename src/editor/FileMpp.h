@@ -6,6 +6,7 @@
 #include "math/LineNode.h"
 
 #include <cstddef>
+#include <deque>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -113,6 +114,17 @@ struct FileMpp : FileBase {
     // Used by ClickAt and by drag-selecting. In fileMppView.cpp.
     std::optional<CursorPath> PositionAt(float x, float y, const TextMeasure* measure) const;
 
+    // --- Undo and redo (fileMppHistory.cpp) ---------------------------------------
+    //
+    // Each step holds copies of only the rows an edit changed, so history stays
+    // small however large the document is. Typing (and Backspace/Delete on
+    // characters) in one place is grouped into one step per word.
+
+    bool Undo();
+    bool Redo();
+    bool CanUndo() const { return !undo_.empty(); }
+    bool CanRedo() const { return !redo_.empty(); }
+
     const std::optional<PendingDelete>& GetPendingDelete() const { return pendingDelete_; }
     const std::optional<InsertWheel>& GetInsertWheel() const { return insertWheel_; }
 
@@ -154,12 +166,77 @@ private:
     // True while a mouse drag that started in this file is selecting.
     bool dragging_ = false;
 
+    // --- Undo history (fileMppHistory.cpp) ---
+
+    // Edits that can be grouped with the previous step of the same kind.
+    enum class EditKind { Other, Typing, Deleting };
+
+    struct UndoStep {
+        std::size_t firstRow = 0;
+        // Rows to put back at firstRow, replacing `replaces` rows that are there
+        // now. Undo and redo swap them with the current rows.
+        std::vector<std::unique_ptr<LineNode>> rows;
+        std::size_t replaces = 0;
+        CursorPath cursorBefore, anchorBefore;
+        CursorPath cursorAfter, anchorAfter;
+    };
+
+    // Rows an edit in progress may change, copied before it starts: from the
+    // row before the selection/cursor to the row after it.
+    struct OpenEdit {
+        std::size_t firstRow = 0;
+        std::size_t rowCount = 0;  // content.size() at the start
+        std::vector<std::unique_ptr<LineNode>> rows;
+        std::vector<std::string> texts;
+        CursorPath cursor, anchor;
+        EditKind kind = EditKind::Other;
+        bool endsGroup = false;
+    };
+
+    // Brackets one user action (a key, a typed character, an insert) so all
+    // the changes it makes become a single undo step. Nests.
+    class EditScope {
+    public:
+        EditScope(FileMpp& file, EditKind kind, bool endsGroup = false) : file_(file) {
+            file_.BeginEdit(kind, endsGroup);
+        }
+        ~EditScope() { file_.EndEdit(); }
+        EditScope(const EditScope&) = delete;
+        EditScope& operator=(const EditScope&) = delete;
+
+    private:
+        FileMpp& file_;
+    };
+
+    static constexpr std::size_t maxUndoSteps = 1000;
+
+    std::deque<UndoStep> undo_;
+    std::deque<UndoStep> redo_;
+    std::optional<OpenEdit> openEdit_;
+    int editDepth_ = 0;
+    bool edited_ = false;
+    // Kind of undo_.back() while the next edit may still join it.
+    std::optional<EditKind> openGroup_;
+    // The text last loaded or saved; nullopt for a file never saved.
+    std::optional<std::string> savedSource_;
+
+    void BeginEdit(EditKind kind, bool endsGroup);
+    void EndEdit();
+    void UpdateSource();
+    void ClearHistory();
+    // Swap a step's rows with the rows they replace.
+    void SwapRows(UndoStep& step);
+    void AfterHistoryMove();
+
     std::optional<Clay_BoundingBox> CaretBox(const TextMeasure* measure) const;
     void DrawInsertWheel(const EditorView& view) const;
     void DrawSelection(const EditorView& view) const;
     bool HandleMouse(const EditorView& view, const TextMeasure& measure);
 
     void ResetCursorIfInvalid();
+
+    // Called by every edit: the content changed and `source` must be updated.
+    // Inside an EditScope this is done once at the end, with an undo step.
     void MarkEdited();
     bool RequestDelete(CursorPath node, int key);
     bool DeleteNodeAt(const CursorPath& node);

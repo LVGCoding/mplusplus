@@ -20,6 +20,7 @@ public:
     explicit TextNode(std::string text = {});
 
     void Render(const RenderContext& context) override;
+    std::unique_ptr<EditorNode> Clone() const override;
 
     // Typing inserts at the cursor and Backspace/Delete remove one character.
     // Left/Right move one character, leaving at either end; Up/Down always leave.

@@ -171,3 +171,7 @@ std::size_t TextNode::NextCharacter(std::size_t offset) const {
     }
     return offset;
 }
+
+std::unique_ptr<EditorNode> TextNode::Clone() const {
+    return std::make_unique<TextNode>(*this);
+}

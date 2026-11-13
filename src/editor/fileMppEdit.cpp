@@ -14,6 +14,7 @@
 #include "raylib.h"
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -68,18 +69,21 @@ void FileMpp::ResetCursorIfInvalid() {
     }
 }
 
-void FileMpp::MarkEdited() {
-    modified = true;
-    source = ContentText();
-    goalX_.reset();
-}
-
 bool FileMpp::TakeMathMenuRequest() {
     return std::exchange(mathMenuRequested_, false);
 }
 
 bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
     ResetCursorIfInvalid();
+    // Only these keys edit (arrows, Tab and Escape just move or toggle marks).
+    // Deleting single characters groups into one undo step, like typing.
+    std::optional<EditScope> scope;
+    if (key == KEY_BACKSPACE || key == KEY_DELETE) {
+        const bool characters = !pendingDelete_ && !insertWheel_ && !GetSelection();
+        scope.emplace(*this, characters ? EditKind::Deleting : EditKind::Other);
+    } else if (key == KEY_ENTER) {
+        scope.emplace(*this, EditKind::Other);
+    }
     if (insertWheel_) {
         return HandleWheelKey(key);
     }
@@ -264,6 +268,8 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
     if (codepoint == U'{' || codepoint == U'}') {
         return false;
     }
+    // A space ends the word, so each word (with its space) undoes in one go.
+    EditScope scope(*this, EditKind::Typing, codepoint == U' ');
     DeleteSelection();  // typing replaces the selection
     KeyEvent event;
     event.codepoint = codepoint;
@@ -282,6 +288,7 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
 
 bool FileMpp::InsertNode(std::unique_ptr<EditorNode> node) {
     ResetCursorIfInvalid();
+    EditScope scope(*this, EditKind::Other);
     pendingDelete_.reset();
     insertWheel_.reset();
     DeleteSelection();
