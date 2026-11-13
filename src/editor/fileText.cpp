@@ -57,6 +57,11 @@ bool FileText::Load(const std::filesystem::path &path, std::string &error) {
   }
   cursorPos = 0;
   selectionStart = 0;
+  goalX_.reset();
+  undo_.clear();
+  redo_.clear();
+  groupOpen_ = false;
+  savedText_ = text;
   this->path = path;
   modified = false;
   return true;
@@ -66,6 +71,7 @@ bool FileText::Save(const std::filesystem::path &path, std::string &error) {
   if (!WriteWholeFile(path, text, error)) {
     return false;
   }
+  savedText_ = text;
   this->path = path;
   modified = false;
   return true;
