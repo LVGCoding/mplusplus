@@ -1,5 +1,7 @@
 #include "GreekNode.h"
 
+#include "NodeStyle.h"
+
 #include <array>
 
 namespace {
@@ -9,12 +11,21 @@ constexpr std::array<std::string_view, 24> symbolNames = {
     "iota",  "kappa",   "lambda", "mu",   "nu",      "xi",      "omicron", "pi",
     "rho",   "sigma",   "tau",   "upsilon", "phi",   "chi",     "psi", "omega",
 };
+
+// UTF-8 glyph for each symbol, in the same order as symbolNames. The font must
+// load these codepoints (see LoadFontTable).
+constexpr std::array<std::string_view, 24> symbolGlyphs = {
+    "α", "β", "γ", "δ", "ε", "ζ", "η", "θ", "ι", "κ", "λ", "μ",
+    "ν", "ξ", "ο", "π", "ρ", "σ", "τ", "υ", "φ", "χ", "ψ", "ω",
+};
 }  // namespace
 
 GreekNode::GreekNode(GreekSymbolType symbol) : symbol_(symbol) {}
 
-// TODO: rendering and input are not implemented yet.
-void GreekNode::Render(float /*fontSize*/) {}
+// TODO: input is not implemented yet.
+void GreekNode::Render(float fontSize) {
+    node_style::Text(symbolGlyphs[static_cast<std::size_t>(symbol_)], fontSize);
+}
 void GreekNode::KeyPress() {}
 void GreekNode::MouseClick() {}
 std::pair<float, float> GreekNode::GetNWCorner() {

@@ -58,23 +58,30 @@ function(mplusplus_set_warnings target)
 endfunction()
 
 # --- Core library -----------------------------------------------------------
-# Everything that doesn't need a window (parser, math nodes, file handling).
-# Both the app and the tests link against this, so tests never need raylib.
+# The parser, math nodes, and file types (including how each file type renders
+# and handles input). Both the app and the tests link against this. It links
+# raylib, but tests never open a window as long as they don't call raylib.
 
 add_library(mplusplus_core STATIC
   src/editor/editor.cpp
   src/editor/fileBase.cpp
   src/editor/fileText.cpp
+  src/editor/fileTextView.cpp
   src/editor/fileMpp.cpp
+  src/editor/fileMppView.cpp
   src/math/FracNode.cpp
   src/math/GreekNode.cpp
   src/math/LineNode.cpp
   src/math/MatrixNode.cpp
+  src/math/NodeStyle.cpp
   src/math/SqrtNode.cpp
   src/math/TextNode.cpp
   src/parser/parser.cpp
+  src/ui/clay_impl.cpp
+  src/ui/clay_renderer_raylib.cpp
 )
 target_include_directories(mplusplus_core PUBLIC src)
+target_link_libraries(mplusplus_core PUBLIC raylib clay)
 mplusplus_set_warnings(mplusplus_core)
 
 # --- Executable -------------------------------------------------------------
@@ -84,14 +91,8 @@ add_executable(mplusplus
   src/ui/font.cpp
   src/ui/file_dialog.cpp
   src/ui/layout.cpp
-  src/editor/input.cpp
-  src/ui/clay_impl.cpp
-  src/ui/clay_renderer_raylib.cpp
-  src/math/nanosvg_impl.cpp
-  src/math/latex_renderer.cpp
-  src/math/svg_preprocessor.cpp
 )
-target_link_libraries(mplusplus PRIVATE mplusplus_core raylib clay nfd)
+target_link_libraries(mplusplus PRIVATE mplusplus_core nfd)
 mplusplus_set_warnings(mplusplus)
 
 if(MSVC)
