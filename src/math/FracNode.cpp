@@ -1,55 +1,123 @@
 #include "FracNode.h"
+
+#include "LineNode.h"
 #include "NodeStyle.h"
 
-FracNode::FracNode(std::unique_ptr<EditorNode> numerator,
-                   std::unique_ptr<EditorNode> denominator)
+#include "raylib.h"
+
+#include <cmath>
+
+FracNode::FracNode(std::unique_ptr<EditorNode> numerator, std::unique_ptr<EditorNode> denominator)
     : numerator_(std::move(numerator)), denominator_(std::move(denominator)) {}
 
 // Numerator over a fraction bar over the denominator, both slightly smaller
 // and centred. The bar spans the wider of the two plus a little overhang.
-void FracNode::Render(float fontSize) {
-  const float partSize = node_style::Scaled(fontSize, node_style::fractionScale);
-  const float bar = node_style::RuleThickness(fontSize);
-  const uint16_t overhang = static_cast<uint16_t>(std::round(fontSize * 0.15f));
-  CLAY(GetClayId(),
-       {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                   .padding = {overhang, overhang, 0, 0},
-                   .childGap = 2,
-                   .childAlignment = {.x = CLAY_ALIGN_X_CENTER},
-                   .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
-    if (numerator_) {
-      numerator_->Render(partSize);
-    } else {
-      node_style::Placeholder(partSize);
+void FracNode::Render(const RenderContext& context) {
+    const float fontSize = context.fontSize;
+    const RenderContext part =
+        context.WithFontSize(node_style::Scaled(fontSize, node_style::fractionScale));
+    const float bar = node_style::RuleThickness(fontSize);
+    const auto overhang = static_cast<uint16_t>(std::round(fontSize * 0.15f));
+    const bool outlined = context.activeStructure == this;
+    auto renderPart = [&](const std::unique_ptr<EditorNode>& node) {
+        node_style::Slot(outlined, [&] {
+            if (node) {
+                node->Render(part);
+            } else {
+                node_style::Placeholder(part.fontSize);
+            }
+        });
+    };
+    CLAY(GetClayId(), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                                  .padding = {overhang, overhang, 0, 0},
+                                  .childGap = 2,
+                                  .childAlignment = {.x = CLAY_ALIGN_X_CENTER},
+                                  .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
+        renderPart(numerator_);
+        CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(bar)}},
+                      .backgroundColor = node_style::textColor}) {}
+        renderPart(denominator_);
     }
-    CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_GROW(0),
-                                        CLAY_SIZING_FIXED(bar)}},
-                  .backgroundColor = node_style::textColor}) {}
-    if (denominator_) {
-      denominator_->Render(partSize);
-    } else {
-      node_style::Placeholder(partSize);
-    }
-  }
 }
-void FracNode::KeyPress() {}
+
+KeyResult FracNode::KeyPress(const KeyEvent& event) {
+    std::size_t used = 0;
+    EditorNode* child = PathChild(event.path, used);
+    if (!child) {
+        return {};
+    }
+    const std::size_t slot = event.path[0];
+    KeyResult result = child->KeyPress(event.Descend(used));
+    if (result.kind == KeyResult::Kind::Moved) {
+        return std::move(result).Prepend({slot});
+    }
+    if (result.kind == KeyResult::Kind::ExitUp && slot == 1 && numerator_) {
+        return KeyResult::Moved(JoinPath(
+            {0}, numerator_->PositionNearX(event.cursorX, VerticalEntry::FromBelow, event.measure)));
+    }
+    if (result.kind == KeyResult::Kind::ExitDown && slot == 0 && denominator_) {
+        return KeyResult::Moved(JoinPath(
+            {1}, denominator_->PositionNearX(event.cursorX, VerticalEntry::FromAbove, event.measure)));
+    }
+    return result;
+}
+
 void FracNode::MouseClick() {}
-std::pair<float, float> FracNode::GetNWCorner() { return {0.0f, 0.0f}; }
-std::pair<float, float> FracNode::GetSize() { return {0.0f, 0.0f}; }
+
+std::pair<float, float> FracNode::GetNWCorner() {
+    return {0.0f, 0.0f};
+}
+
+std::pair<float, float> FracNode::GetSize() {
+    return {0.0f, 0.0f};
+}
 
 std::string FracNode::ToText() const {
-  return "\\frac{" + (numerator_ ? numerator_->ToText() : std::string()) +
-         "}{" + (denominator_ ? denominator_->ToText() : std::string()) + "}";
+    return "\\frac{" + (numerator_ ? numerator_->ToText() : std::string()) + "}{" +
+           (denominator_ ? denominator_->ToText() : std::string()) + "}";
 }
 
-bool FracNode::HasChild() { return numerator_ || denominator_; }
+bool FracNode::HasChild() {
+    return numerator_ || denominator_;
+}
 
-std::pair<EditorNode *, EditorNode *> FracNode::GetChildren() const {
-  return {numerator_.get(), denominator_.get()};
+// Entering from either side lands in the numerator.
+CursorPath FracNode::FirstPosition() const {
+    return numerator_ ? JoinPath({0}, numerator_->FirstPosition()) : CursorPath{};
+}
+
+CursorPath FracNode::LastPosition() const {
+    return numerator_ ? JoinPath({0}, numerator_->LastPosition()) : CursorPath{};
+}
+
+CursorPath FracNode::PositionNearX(float x, VerticalEntry entry, const TextMeasure* measure) const {
+    if (entry == VerticalEntry::FromBelow && denominator_) {
+        return JoinPath({1}, denominator_->PositionNearX(x, entry, measure));
+    }
+    return numerator_ ? JoinPath({0}, numerator_->PositionNearX(x, entry, measure)) : CursorPath{};
+}
+
+EditorNode* FracNode::PathChild(PathView path, std::size_t& used) const {
+    if (path.empty() || path[0] > 1) {
+        return nullptr;
+    }
+    used = 1;
+    return path[0] == 0 ? numerator_.get() : denominator_.get();
+}
+
+void FracNode::Normalize() {
+    numerator_ = LineNode::EnsureLine(std::move(numerator_));
+    denominator_ = LineNode::EnsureLine(std::move(denominator_));
+    numerator_->Normalize();
+    denominator_->Normalize();
+}
+
+std::pair<EditorNode*, EditorNode*> FracNode::GetChildren() const {
+    return {numerator_.get(), denominator_.get()};
 }
 
 void FracNode::SetChildren(std::unique_ptr<EditorNode> numerator,
                            std::unique_ptr<EditorNode> denominator) {
-  numerator_ = std::move(numerator);
-  denominator_ = std::move(denominator);
+    numerator_ = std::move(numerator);
+    denominator_ = std::move(denominator);
 }

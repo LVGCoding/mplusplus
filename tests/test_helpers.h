@@ -19,7 +19,8 @@ namespace test {
 
 std::string Describe(const EditorNode* node);
 
-inline std::string DescribeList(const std::vector<std::unique_ptr<EditorNode>>& nodes) {
+template <typename Node>
+std::string DescribeList(const std::vector<std::unique_ptr<Node>>& nodes) {
     std::string out;
     for (std::size_t i = 0; i < nodes.size(); ++i) {
         if (i > 0) {

@@ -1,73 +1,249 @@
 #include "LineNode.h"
-#include "NodeStyle.h"
 
+#include "NodeStyle.h"
+#include "TextNode.h"
+
+#include <cmath>
+#include <limits>
 #include <utility>
 
-LineNode::LineNode(std::vector<std::unique_ptr<EditorNode>> children,
-                   bool braced)
+namespace {
+TextNode* AsText(const std::unique_ptr<EditorNode>& node) {
+    return dynamic_cast<TextNode*>(node.get());
+}
+}  // namespace
+
+LineNode::LineNode(std::vector<std::unique_ptr<EditorNode>> children, bool braced)
     : children_(std::move(children)), braced_(braced) {}
 
-void LineNode::AddChild(std::unique_ptr<EditorNode> child) {
-  children_.push_back(std::move(child));
+std::unique_ptr<EditorNode> LineNode::EnsureLine(std::unique_ptr<EditorNode> node) {
+    if (!node) {
+        return std::make_unique<LineNode>();
+    }
+    if (dynamic_cast<LineNode*>(node.get())) {
+        return node;
+    }
+    std::vector<std::unique_ptr<EditorNode>> children;
+    children.push_back(std::move(node));
+    return std::make_unique<LineNode>(std::move(children));
 }
 
-void LineNode::InsertChild(std::size_t index,
-                           std::unique_ptr<EditorNode> child) {
-  if (index > children_.size()) {
-    index = children_.size();
-  }
-  children_.insert(children_.begin() + static_cast<std::ptrdiff_t>(index),
-                   std::move(child));
+void LineNode::AddChild(std::unique_ptr<EditorNode> child) {
+    children_.push_back(std::move(child));
+}
+
+void LineNode::InsertChild(std::size_t index, std::unique_ptr<EditorNode> child) {
+    if (index > children_.size()) {
+        index = children_.size();
+    }
+    children_.insert(children_.begin() + static_cast<std::ptrdiff_t>(index), std::move(child));
 }
 
 void LineNode::RemoveChild(std::size_t index) {
-  if (index < children_.size()) {
-    children_.erase(children_.begin() + static_cast<std::ptrdiff_t>(index));
-  }
+    if (index < children_.size()) {
+        children_.erase(children_.begin() + static_cast<std::ptrdiff_t>(index));
+    }
 }
 
-EditorNode *LineNode::GetChild(std::size_t index) const {
-  return index < children_.size() ? children_[index].get() : nullptr;
+EditorNode* LineNode::GetChild(std::size_t index) const {
+    return index < children_.size() ? children_[index].get() : nullptr;
 }
 
-std::size_t LineNode::ChildCount() const { return children_.size(); }
+std::size_t LineNode::ChildCount() const {
+    return children_.size();
+}
 
-bool LineNode::IsBraced() const { return braced_; }
+bool LineNode::IsBraced() const {
+    return braced_;
+}
+
+bool LineNode::IsEmpty() const {
+    for (const auto& child : children_) {
+        const auto* text = AsText(child);
+        if (!text || !text->GetText().empty()) {
+            return false;
+        }
+    }
+    return true;
+}
 
 // Children laid out left to right and centred vertically. Braces of a {...}
-// group are only grouping in LaTeX, so they are not drawn.
-// TODO: input is not implemented yet.
-void LineNode::Render(float fontSize) {
-  if (children_.empty()) {
-    node_style::Placeholder(fontSize);
-    return;
-  }
-  CLAY(GetClayId(),
-       {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                   .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
-                   .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
-    for (const auto &child : children_) {
-      child->Render(fontSize);
+// group are only grouping in LaTeX, so they are not drawn. An empty line shows
+// a grey box with its (empty) text inside, so the cursor has somewhere to go.
+// TODO: mouse input is not implemented yet.
+void LineNode::Render(const RenderContext& context) {
+    if (IsEmpty()) {
+        const float size = context.fontSize;
+        CLAY(GetClayId(),
+             {.layout = {.sizing = {CLAY_SIZING_FIXED(std::round(size * 0.6f)),
+                                    CLAY_SIZING_FIXED(std::round(size))},
+                         .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER}},
+              .border = {.color = node_style::placeholderColor, .width = CLAY_BORDER_OUTSIDE(1)}}) {
+            RenderChildren(context);
+        }
+        return;
     }
-  }
+    CLAY(GetClayId(), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
+                                  .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
+        RenderChildren(context);
+    }
 }
-void LineNode::KeyPress() {}
+
+void LineNode::RenderChildren(const RenderContext& context) {
+    for (const auto& child : children_) {
+        child->Render(context);
+    }
+}
+
+KeyResult LineNode::KeyPress(const KeyEvent& event) {
+    if (event.path.empty() || event.path[0] >= children_.size()) {
+        return {};
+    }
+    const std::size_t index = event.path[0];
+    KeyResult result = children_[index]->KeyPress(event.Descend(1));
+
+    switch (result.kind) {
+    case KeyResult::Kind::Moved:
+        return std::move(result).Prepend({index});
+    case KeyResult::Kind::ExitRight:
+        // Enter the next child that can hold the cursor; symbols are skipped,
+        // which puts the cursor in the text just after them.
+        for (std::size_t next = index + 1; next < children_.size(); ++next) {
+            if (auto position = children_[next]->FirstPosition(); !position.empty()) {
+                return KeyResult::Moved(JoinPath({next}, std::move(position)));
+            }
+        }
+        return result;
+    case KeyResult::Kind::ExitLeft:
+        for (std::size_t previous = index; previous-- > 0;) {
+            if (auto position = children_[previous]->LastPosition(); !position.empty()) {
+                return KeyResult::Moved(JoinPath({previous}, std::move(position)));
+            }
+        }
+        return result;
+    default:
+        return result;  // Up/Down are for the enclosing structure or row.
+    }
+}
+
 void LineNode::MouseClick() {}
-std::pair<float, float> LineNode::GetNWCorner() { return {0.0f, 0.0f}; }
-std::pair<float, float> LineNode::GetSize() { return {0.0f, 0.0f}; }
+
+std::pair<float, float> LineNode::GetNWCorner() {
+    return {0.0f, 0.0f};
+}
+
+std::pair<float, float> LineNode::GetSize() {
+    return {0.0f, 0.0f};
+}
 
 std::string LineNode::ToText() const {
-  std::string text;
-  if (braced_) {
-    text += '{';
-  }
-  for (const auto &child : children_) {
-    text += child->ToText();
-  }
-  if (braced_) {
-    text += '}';
-  }
-  return text;
+    std::string text;
+    if (braced_) {
+        text += '{';
+    }
+    for (const auto& child : children_) {
+        text += child->ToText();
+    }
+    if (braced_) {
+        text += '}';
+    }
+    return text;
 }
 
-bool LineNode::HasChild() { return !children_.empty(); }
+bool LineNode::HasChild() {
+    return !children_.empty();
+}
+
+CursorPath LineNode::FirstPosition() const {
+    for (std::size_t i = 0; i < children_.size(); ++i) {
+        if (auto position = children_[i]->FirstPosition(); !position.empty()) {
+            return JoinPath({i}, std::move(position));
+        }
+    }
+    return {};
+}
+
+CursorPath LineNode::LastPosition() const {
+    for (std::size_t i = children_.size(); i-- > 0;) {
+        if (auto position = children_[i]->LastPosition(); !position.empty()) {
+            return JoinPath({i}, std::move(position));
+        }
+    }
+    return {};
+}
+
+// Pick the child drawn nearest to x. A symbol the cursor can't enter resolves
+// to the text on whichever side of it x is closer to.
+CursorPath LineNode::PositionNearX(float x, VerticalEntry entry,
+                                   const TextMeasure* measure) const {
+    std::size_t best = children_.size();
+    float bestDistance = std::numeric_limits<float>::max();
+    float bestCentre = 0.0f;
+    for (std::size_t i = 0; i < children_.size(); ++i) {
+        const auto bounds = LastLayoutBounds(children_[i]->GetClayId());
+        if (!bounds) {
+            continue;
+        }
+        const float left = bounds->x;
+        const float right = bounds->x + bounds->width;
+        const float distance = x < left ? left - x : (x > right ? x - right : 0.0f);
+        // Prefer text on ties so a boundary between text and a structure stays
+        // in the text rather than jumping into the structure.
+        if (distance < bestDistance || (distance == bestDistance && AsText(children_[i]))) {
+            best = i;
+            bestDistance = distance;
+            bestCentre = left + bounds->width / 2;
+        }
+    }
+    if (best == children_.size()) {
+        return FirstPosition();
+    }
+
+    if (auto position = children_[best]->PositionNearX(x, entry, measure); !position.empty()) {
+        return JoinPath({best}, std::move(position));
+    }
+    // Can't enter it: land just before or just after it.
+    if (x < bestCentre && best > 0) {
+        return JoinPath({best - 1}, children_[best - 1]->LastPosition());
+    }
+    if (best + 1 < children_.size()) {
+        return JoinPath({best + 1}, children_[best + 1]->FirstPosition());
+    }
+    return LastPosition();
+}
+
+EditorNode* LineNode::PathChild(PathView path, std::size_t& used) const {
+    if (path.empty() || path[0] >= children_.size()) {
+        return nullptr;
+    }
+    used = 1;
+    return children_[path[0]].get();
+}
+
+void LineNode::Normalize() {
+    std::vector<std::unique_ptr<EditorNode>> normalized;
+    normalized.reserve(children_.size() * 2 + 1);
+    for (auto& child : children_) {
+        if (!child) {
+            continue;
+        }
+        child->Normalize();
+        if (auto* text = AsText(child)) {
+            if (!normalized.empty() && AsText(normalized.back())) {
+                AsText(normalized.back())->AppendText(text->GetText());
+            } else {
+                normalized.push_back(std::move(child));
+            }
+            continue;
+        }
+        if (normalized.empty() || !AsText(normalized.back())) {
+            normalized.push_back(std::make_unique<TextNode>());
+        }
+        normalized.push_back(std::move(child));
+    }
+    if (normalized.empty() || !AsText(normalized.back())) {
+        normalized.push_back(std::make_unique<TextNode>());
+    }
+    children_ = std::move(normalized);
+}

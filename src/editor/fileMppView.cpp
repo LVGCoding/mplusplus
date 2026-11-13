@@ -1,103 +1,224 @@
 // Rendering and input for M++ documents (FileMpp).
 // Loading and saving live in fileMpp.cpp.
 //
-// TODO: editing is not implemented yet:
-//   - HandleInput():   route keys/clicks to the node under the cursor
-//   (KeyPress/MouseClick)
-//   - DrawOverlay():   draw the cursor/selection using cursorPos/selectionStart
-//   - CursorBounds():  return the cursor rectangle so the editor can scroll to
-//   it
+// The cursor is a path into the node tree (see CursorPath in EditorNode.h).
+// Arrow keys are sent down that path as a KeyEvent; each node either moves the
+// cursor itself or reports that it is leaving, and its parent decides where it
+// goes next. The document handles leaving a row.
+//
+// TODO: typing, deleting, selection and mouse clicks are not implemented yet.
+
+#include "FileMpp.h"
 
 #include "clay.h"
-#include "FileMpp.h"
-#include "math/NodeStyle.h"
 #include "math/TextNode.h"
+#include "raylib.h"
 #include "ui/EditorView.h"
+#include "ui/clay_renderer_raylib.h"
+#include "ui/font.h"
 
-#include <algorithm>
-#include <string_view>
-#include <vector>
+#include <cmath>
 
 namespace {
-// One item on a document row: a node, or a slice of a top-level TextNode.
-struct RowItem {
-    EditorNode* node = nullptr;
-    std::string_view text;
-};
+constexpr Color cursorColor = {20, 20, 20, 255};
+constexpr float cursorWidth = 2.0f;
 
-// Split the top-level nodes into rows at the newlines in their text, so the
-// document keeps the source's line structure.
-std::vector<std::vector<RowItem>>
-SplitIntoRows(const std::vector<std::unique_ptr<EditorNode>>& content) {
-    std::vector<std::vector<RowItem>> rows(1);
-    for (const auto& node : content) {
-        const auto* text = dynamic_cast<const TextNode*>(node.get());
-        if (!text) {
-            rows.back().push_back({node.get(), {}});
-            continue;
-        }
-        std::string_view rest = text->GetText();
-        while (true) {
-            const std::size_t newline = rest.find('\n');
-            std::string_view line = rest.substr(0, newline);
-            if (!line.empty() && line.back() == '\r') {
-                line.remove_suffix(1);
-            }
-            if (!line.empty()) {
-                rows.back().push_back({nullptr, line});
-            }
-            if (newline == std::string_view::npos) {
-                break;
-            }
-            rows.emplace_back();
-            rest.remove_prefix(newline + 1);
-        }
-    }
-    return rows;
+// Measures text the same way Clay does when laying out a TextNode.
+TextMeasure MakeMeasure(Font* fonts) {
+    return [fonts](std::string_view text, float fontSize) {
+        Clay_StringSlice slice = {.length = static_cast<int32_t>(text.size()),
+                                  .chars = text.data(),
+                                  .baseChars = text.data()};
+        Clay_TextElementConfig config = {.fontId = FONT_BODY,
+                                         .fontSize = static_cast<uint16_t>(fontSize)};
+        return ClayRaylib_MeasureText(slice, &config, fonts).width;
+    };
+}
+
+Clay_ElementId RowId(std::size_t row) {
+    return Clay_GetElementIdWithIndex(CLAY_STRING("MppRow"), static_cast<uint32_t>(row));
 }
 }  // namespace
 
 void FileMpp::LayoutContent() const {
-    const float fontSize = editor_style::fontSize;
-    const auto rows = SplitIntoRows(content);
-    CLAY(CLAY_ID("MppDocument"),
-         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                     .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
-        for (std::size_t i = 0; i < rows.size(); ++i) {
+    RenderContext context;
+    context.fontSize = editor_style::fontSize;
+    context.activeStructure = ActiveStructure();
+    CLAY(CLAY_ID("MppDocument"), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                                             .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
+        for (std::size_t i = 0; i < content.size(); ++i) {
             // Rows are at least one text line tall; rows holding fractions or
             // matrices grow to fit them.
-            CLAY(Clay_GetElementIdWithIndex(CLAY_STRING("MppRow"), static_cast<uint32_t>(i)),
+            CLAY(RowId(i),
                  {.layout = {
                       .sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(editor_style::lineHeight)},
                       .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
                       .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
-                for (const RowItem& item : rows[i]) {
-                    if (item.node) {
-                        item.node->Render(fontSize);
-                    } else {
-                        node_style::Text(item.text, fontSize);
-                    }
-                }
+                content[i]->RenderChildren(context);
             }
         }
     }
 }
 
-bool FileMpp::HandleInput(const EditorView& /*view*/) {
-    return false;
+TextNode* FileMpp::CursorText(const CursorPath& path, std::size_t* offset) const {
+    if (path.empty() || path[0] >= content.size()) {
+        return nullptr;
+    }
+    const EditorNode* node = content[path[0]].get();
+    PathView rest = PathView(path).subspan(1);
+    while (true) {
+        if (auto* text = dynamic_cast<const TextNode*>(node)) {
+            if (rest.size() != 1 || rest[0] > text->GetText().size()) {
+                return nullptr;
+            }
+            if (offset) {
+                *offset = rest[0];
+            }
+            return const_cast<TextNode*>(text);
+        }
+        std::size_t used = 0;
+        node = node->PathChild(rest, used);
+        if (!node) {
+            return nullptr;
+        }
+        rest = rest.subspan(used);
+    }
+}
+
+const EditorNode* FileMpp::ActiveStructure() const {
+    if (cursorPos.empty() || cursorPos[0] >= content.size()) {
+        return nullptr;
+    }
+    const EditorNode* active = nullptr;
+    const EditorNode* node = content[cursorPos[0]].get();
+    PathView rest = PathView(cursorPos).subspan(1);
+    while (node) {
+        std::size_t used = 0;
+        const EditorNode* child = node->PathChild(rest, used);
+        if (!child) {
+            break;
+        }
+        if (node->OutlinesSlots()) {
+            active = node;
+        }
+        node = child;
+        rest = rest.subspan(used);
+    }
+    return active;
+}
+
+std::optional<Clay_BoundingBox> FileMpp::CaretBox(const TextMeasure* measure) const {
+    std::size_t offset = 0;
+    const TextNode* text = CursorText(cursorPos, &offset);
+    return text ? text->CaretBox(offset, measure) : std::nullopt;
+}
+
+bool FileMpp::MoveCursor(int key, bool shift, const TextMeasure* measure) {
+    if (!CursorText(cursorPos)) {
+        // The tree changed under the cursor; start over at the beginning.
+        cursorPos = JoinPath({0}, content.front()->FirstPosition());
+    }
+    const bool vertical = key == KEY_UP || key == KEY_DOWN;
+    if (!vertical || cursorPos != goalPath_) {
+        goalX_.reset();
+    }
+    if (vertical && !goalX_) {
+        const auto caret = CaretBox(measure);
+        goalX_ = caret ? caret->x : 0.0f;
+    }
+
+    const std::size_t row = cursorPos[0];
+    KeyEvent event;
+    event.key = key;
+    event.shift = shift;
+    event.path = PathView(cursorPos).subspan(1);
+    event.cursorX = goalX_.value_or(0.0f);
+    event.measure = measure;
+    KeyResult result = content[row]->KeyPress(event);
+
+    CursorPath next;
+    switch (result.kind) {
+    case KeyResult::Kind::Moved:
+        next = JoinPath({row}, std::move(result.path));
+        break;
+    case KeyResult::Kind::ExitLeft:
+        if (row > 0) {
+            next = JoinPath({row - 1}, content[row - 1]->LastPosition());
+        }
+        break;
+    case KeyResult::Kind::ExitRight:
+        if (row + 1 < content.size()) {
+            next = JoinPath({row + 1}, content[row + 1]->FirstPosition());
+        }
+        break;
+    case KeyResult::Kind::ExitUp:
+        if (row > 0) {
+            next = JoinPath({row - 1}, content[row - 1]->PositionNearX(
+                                           event.cursorX, VerticalEntry::FromBelow, measure));
+        }
+        break;
+    case KeyResult::Kind::ExitDown:
+        if (row + 1 < content.size()) {
+            next = JoinPath({row + 1}, content[row + 1]->PositionNearX(
+                                           event.cursorX, VerticalEntry::FromAbove, measure));
+        }
+        break;
+    case KeyResult::Kind::Ignored:
+        break;
+    }
+
+    if (next.empty() || next == cursorPos) {
+        return false;
+    }
+    cursorPos = std::move(next);
+    if (vertical) {
+        goalPath_ = cursorPos;
+    }
+    if (!shift) {
+        selectionStart = cursorPos;
+    }
+    return true;
+}
+
+bool FileMpp::HandleInput(const EditorView& view) {
+    const TextMeasure measure = MakeMeasure(view.fonts);
+    const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    bool moved = false;
+    for (const int key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN}) {
+        if (IsKeyPressed(key) || IsKeyPressedRepeat(key)) {
+            moved |= MoveCursor(key, shift, &measure);
+        }
+    }
+    return moved;
 }
 
 std::size_t FileMpp::LineCount() const {
     // Newlines inside a matrix or another node belong to that node, not the gutter.
-    return SplitIntoRows(content).size();
+    return content.size();
 }
 
 uint32_t FileMpp::LineElementId(std::size_t line) const {
-    return Clay_GetElementIdWithIndex(CLAY_STRING("MppRow"), static_cast<uint32_t>(line)).id;
+    return RowId(line).id;
 }
 
-void FileMpp::DrawOverlay(const EditorView& /*view*/) const {}
+void FileMpp::DrawOverlay(const EditorView& view) const {
+    if (!view.cursorVisible) {
+        return;
+    }
+    const auto bounds = CursorBounds(view);
+    if (!bounds) {
+        return;
+    }
+    BeginEditorClip(view);
+    DrawRectangleRec(*bounds, cursorColor);
+    EndScissorMode();
+}
 
-std::optional<Rectangle> FileMpp::CursorBounds(const EditorView& /*view*/) const {
-    return std::nullopt;
+std::optional<Rectangle> FileMpp::CursorBounds(const EditorView& view) const {
+    const TextMeasure measure = MakeMeasure(view.fonts);
+    const auto caret = CaretBox(&measure);
+    if (!caret) {
+        return std::nullopt;
+    }
+    return Rectangle{std::round(caret->x - cursorWidth / 2), caret->y, cursorWidth, caret->height};
 }

@@ -19,9 +19,7 @@ public:
 
     ~FracNode() override = default;
 
-    void Render(float fontSize) override;
-
-    void KeyPress() override;
+    void Render(const RenderContext& context) override;
 
     void MouseClick() override;
 
@@ -32,6 +30,17 @@ public:
     std::pair<float, float> GetSize() override;
 
     bool HasChild() override;
+
+    // Up from the denominator goes to the numerator and Down goes back; all
+    // other exits are passed up, so Left/Right leave the fraction.
+    KeyResult KeyPress(const KeyEvent& event) override;
+    CursorPath FirstPosition() const override;
+    CursorPath LastPosition() const override;
+    CursorPath PositionNearX(float x, VerticalEntry entry,
+                             const TextMeasure* measure) const override;
+    EditorNode* PathChild(PathView path, std::size_t& used) const override;
+    bool OutlinesSlots() const override { return true; }
+    void Normalize() override;
 
     // {numerator, denominator}; either may be null.
     std::pair<EditorNode*, EditorNode*> GetChildren() const;

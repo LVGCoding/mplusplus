@@ -20,9 +20,7 @@ public:
 
     ~SqrtNode() override = default;
 
-    void Render(float fontSize) override;
-
-    void KeyPress() override;
+    void Render(const RenderContext& context) override;
 
     void MouseClick() override;
 
@@ -33,6 +31,17 @@ public:
     std::pair<float, float> GetSize() override;
 
     bool HasChild() override;
+
+    // Left from the start of the argument goes to the index (if any) and Right
+    // from the end of the index goes to the argument; other exits are passed up.
+    KeyResult KeyPress(const KeyEvent& event) override;
+    CursorPath FirstPosition() const override;
+    CursorPath LastPosition() const override;
+    CursorPath PositionNearX(float x, VerticalEntry entry,
+                             const TextMeasure* measure) const override;
+    EditorNode* PathChild(PathView path, std::size_t& used) const override;
+    bool OutlinesSlots() const override { return true; }
+    void Normalize() override;
 
     // {root, argument}; root is null for a plain square root.
     std::pair<EditorNode*, EditorNode*> GetChildren() const;

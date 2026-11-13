@@ -39,6 +39,24 @@ void Text(std::string_view text, float fontSize);
 // and clickable.
 void Placeholder(float fontSize);
 
+inline constexpr Clay_Color slotOutlineColor = {46, 160, 67, 255};
+
+// Wraps one slot of a structure (a fraction's numerator, a matrix cell, ...).
+// When `outlined`, it gets a green border; the padding is always there so the
+// layout doesn't shift as the cursor moves in and out.
+template <typename Body>
+void Slot(bool outlined, Body&& body) {
+    const Clay_BorderWidth width =
+        outlined ? Clay_BorderWidth{1, 1, 1, 1, 0} : Clay_BorderWidth{0, 0, 0, 0, 0};
+    CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                             .padding = CLAY_PADDING_ALL(1),
+                             .childAlignment = {.x = CLAY_ALIGN_X_CENTER,
+                                                .y = CLAY_ALIGN_Y_CENTER}},
+                  .border = {.color = slotOutlineColor, .width = width}}) {
+        body();
+    }
+}
+
 // Custom elements that stretch to their laid-out height.
 enum class Delimiter { Paren, Bracket, Brace, Bar, DoubleBar };
 void Radical(float fontSize);

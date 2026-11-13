@@ -70,7 +70,10 @@ TEST_F(FileTest, MppFileIsParsedOnLoad) {
     std::string error;
     ASSERT_TRUE(file.Load(path, error)) << error;
     EXPECT_EQ(file.source, "\\frac{1}{\\alpha}");
-    EXPECT_EQ(test::DescribeList(file.content), R"(frac(line(text("1")), line(greek(alpha))))");
+    // One row, padded so every cursor position is in a TextNode.
+    EXPECT_EQ(test::DescribeList(file.content),
+              R"(line(text(""), frac(line(text("1")), line(text(""), greek(alpha), text(""))), text("")))");
+    EXPECT_EQ(file.ContentText(), "\\frac{1}{\\alpha}");
 }
 
 TEST_F(FileTest, LoadMissingFileFails) {

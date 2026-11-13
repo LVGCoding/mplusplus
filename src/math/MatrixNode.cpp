@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <utility>
 
 MatrixNode::MatrixNode() {
@@ -36,28 +37,30 @@ Delimiters DelimitersFor(const std::string& environment) {
 }
 }  // namespace
 
+Clay_ElementId MatrixNode::CellId(std::size_t row, std::size_t column) const {
+    // Rows can be ragged, so number cells by a fixed stride rather than by
+    // the current column count.
+    return Clay__HashStringWithOffset(CLAY_STRING("MatrixCell"),
+                                      static_cast<uint32_t>(row * 1024 + column), GetId());
+}
+
 // Clay has no grid layout, so the matrix is laid out as columns of centred
 // cells. To keep rows lined up across columns, each cell is given at least the
 // height of the tallest cell in its row, measured from the previous frame
 // (cell ids are stable, so last frame's layout can be looked up).
-// TODO: input is not implemented yet.
-void MatrixNode::Render(float fontSize) {
+// TODO: mouse input is not implemented yet.
+void MatrixNode::Render(const RenderContext& context) {
+    const float fontSize = context.fontSize;
     std::size_t columns = 0;
     for (const auto& row : cells_) {
         columns = std::max(columns, row.size());
     }
 
-    auto cellId = [&](std::size_t row, std::size_t column) {
-        return Clay__HashStringWithOffset(CLAY_STRING("MatrixCell"),
-                                          static_cast<uint32_t>(row * columns + column), GetId());
-    };
-
     std::vector<float> rowHeights(cells_.size(), 0.0f);
     for (std::size_t row = 0; row < cells_.size(); ++row) {
         for (std::size_t column = 0; column < cells_[row].size(); ++column) {
-            const Clay_ElementData data = Clay_GetElementData(cellId(row, column));
-            if (data.found) {
-                rowHeights[row] = std::max(rowHeights[row], data.boundingBox.height);
+            if (const auto bounds = LastLayoutBounds(CellId(row, column))) {
+                rowHeights[row] = std::max(rowHeights[row], bounds->height);
             }
         }
     }
@@ -66,12 +69,14 @@ void MatrixNode::Render(float fontSize) {
     const auto columnGap = static_cast<uint16_t>(std::round(fontSize));
     const auto rowGap = static_cast<uint16_t>(std::round(fontSize * 0.3f));
     const auto pad = static_cast<uint16_t>(std::round(fontSize * 0.15f));
+    const bool outlined = context.activeStructure == this;
+    const Clay_BorderWidth cellBorder =
+        outlined ? Clay_BorderWidth{1, 1, 1, 1, 0} : Clay_BorderWidth{0, 0, 0, 0, 0};
 
-    CLAY(GetClayId(),
-         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                     .childGap = pad,
-                     .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
-                     .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
+    CLAY(GetClayId(), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                                  .childGap = pad,
+                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
+                                  .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
         if (delimiters.present) {
             node_style::DelimiterSymbol(delimiters.kind, false, fontSize);
         }
@@ -92,11 +97,13 @@ void MatrixNode::Render(float fontSize) {
                                                                     .y = CLAY_ALIGN_Y_CENTER}}}) {
                             // A ragged row leaves the slot empty.
                             if (column < cells_[row].size()) {
-                                CLAY(cellId(row, column),
-                                     {.layout = {.sizing = {CLAY_SIZING_FIT(0),
-                                                            CLAY_SIZING_FIT(0)}}}) {
+                                CLAY(CellId(row, column),
+                                     {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                                                 .padding = CLAY_PADDING_ALL(1)},
+                                      .border = {.color = node_style::slotOutlineColor,
+                                                 .width = cellBorder}}) {
                                     if (cells_[row][column]) {
-                                        cells_[row][column]->Render(fontSize);
+                                        cells_[row][column]->Render(context);
                                     } else {
                                         node_style::Placeholder(fontSize);
                                     }
@@ -112,13 +119,130 @@ void MatrixNode::Render(float fontSize) {
         }
     }
 }
-void MatrixNode::KeyPress() {}
+
+KeyResult MatrixNode::KeyPress(const KeyEvent& event) {
+    std::size_t used = 0;
+    EditorNode* cell = PathChild(event.path, used);
+    if (!cell) {
+        return {};
+    }
+    const std::size_t row = event.path[0];
+    const std::size_t column = event.path[1];
+    KeyResult result = cell->KeyPress(event.Descend(used));
+
+    // Cell (r, c) if it exists and can hold the cursor.
+    auto enter = [&](std::size_t r, std::size_t c, auto&& position) -> KeyResult {
+        EditorNode* target = GetCell(r, c);
+        if (!target) {
+            return {};
+        }
+        CursorPath path = position(*target);
+        if (path.empty()) {
+            return {};
+        }
+        return KeyResult::Moved(JoinPath({r, c}, std::move(path)));
+    };
+    auto nearX = [&](VerticalEntry entry) {
+        return [&event, entry](const EditorNode& node) {
+            return node.PositionNearX(event.cursorX, entry, event.measure);
+        };
+    };
+
+    KeyResult moved;
+    switch (result.kind) {
+    case KeyResult::Kind::Moved:
+        return std::move(result).Prepend({row, column});
+    case KeyResult::Kind::ExitLeft:
+        if (column > 0) {
+            moved = enter(row, column - 1, [](const EditorNode& n) { return n.LastPosition(); });
+        }
+        break;
+    case KeyResult::Kind::ExitRight:
+        moved = enter(row, column + 1, [](const EditorNode& n) { return n.FirstPosition(); });
+        break;
+    case KeyResult::Kind::ExitUp:
+        if (row > 0) {
+            const std::size_t above = ColumnCount(row - 1);
+            if (above > 0) {
+                moved = enter(row - 1, std::min(column, above - 1), nearX(VerticalEntry::FromBelow));
+            }
+        }
+        break;
+    case KeyResult::Kind::ExitDown:
+        if (row + 1 < cells_.size()) {
+            const std::size_t below = ColumnCount(row + 1);
+            if (below > 0) {
+                moved = enter(row + 1, std::min(column, below - 1), nearX(VerticalEntry::FromAbove));
+            }
+        }
+        break;
+    case KeyResult::Kind::Ignored:
+        break;
+    }
+    return moved.kind == KeyResult::Kind::Moved ? moved : result;
+}
+
 void MatrixNode::MouseClick() {}
 std::pair<float, float> MatrixNode::GetNWCorner() {
     return {0.0f, 0.0f};
 }
 std::pair<float, float> MatrixNode::GetSize() {
     return {0.0f, 0.0f};
+}
+
+// Entering from the left lands in the first cell, from the right in the last
+// cell of the first row.
+CursorPath MatrixNode::FirstPosition() const {
+    EditorNode* cell = GetCell(0, 0);
+    return cell ? JoinPath({0, 0}, cell->FirstPosition()) : CursorPath{};
+}
+
+CursorPath MatrixNode::LastPosition() const {
+    const std::size_t columns = ColumnCount(0);
+    EditorNode* cell = columns > 0 ? GetCell(0, columns - 1) : nullptr;
+    return cell ? JoinPath({0, columns - 1}, cell->LastPosition()) : CursorPath{};
+}
+
+// From above, the top row; from below, the bottom row; in the column nearest x.
+CursorPath MatrixNode::PositionNearX(float x, VerticalEntry entry,
+                                     const TextMeasure* measure) const {
+    if (cells_.empty()) {
+        return {};
+    }
+    const std::size_t row = entry == VerticalEntry::FromAbove ? 0 : cells_.size() - 1;
+    std::size_t best = 0;
+    float bestDistance = -1.0f;
+    for (std::size_t column = 0; column < cells_[row].size(); ++column) {
+        const auto bounds = LastLayoutBounds(CellId(row, column));
+        if (!bounds) {
+            continue;
+        }
+        const float centre = bounds->x + bounds->width / 2;
+        const float distance = std::abs(centre - x);
+        if (bestDistance < 0 || distance < bestDistance) {
+            best = column;
+            bestDistance = distance;
+        }
+    }
+    EditorNode* cell = GetCell(row, best);
+    return cell ? JoinPath({row, best}, cell->PositionNearX(x, entry, measure)) : CursorPath{};
+}
+
+EditorNode* MatrixNode::PathChild(PathView path, std::size_t& used) const {
+    if (path.size() < 2) {
+        return nullptr;
+    }
+    used = 2;
+    return GetCell(path[0], path[1]);
+}
+
+void MatrixNode::Normalize() {
+    for (auto& row : cells_) {
+        for (auto& cell : row) {
+            cell = LineNode::EnsureLine(std::move(cell));
+            cell->Normalize();
+        }
+    }
 }
 
 std::string MatrixNode::ToText() const {
