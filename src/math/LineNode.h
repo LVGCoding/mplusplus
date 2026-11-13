@@ -93,4 +93,14 @@ public:
                              const TextMeasure* measure) const override;
     EditorNode* PathChild(PathView path, std::size_t& used) const override;
     void Normalize() override;
+
+    // --- Selection ------------------------------------------------------------------
+
+    // Remove everything between two cursor positions in this line: byte
+    // `startOffset` of the TextNode at `startIndex` up to byte `endOffset` of
+    // the TextNode at `endIndex` (start must come first). The texts at either
+    // end are joined. Returns the cursor position where the range was.
+    CursorPath EraseRange(std::size_t startIndex, std::size_t startOffset, std::size_t endIndex,
+                          std::size_t endOffset);
+
 };

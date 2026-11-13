@@ -63,6 +63,9 @@ void FileMpp::ResetCursorIfInvalid() {
         cursorPos = JoinPath({0}, content.front()->FirstPosition());
         selectionStart = cursorPos;
     }
+    if (!CursorText(selectionStart)) {
+        selectionStart = cursorPos;
+    }
 }
 
 void FileMpp::MarkEdited() {
@@ -95,6 +98,35 @@ bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
         if (key == KEY_ESCAPE) {
             return true;
         }
+    }
+
+    // With something selected: Escape clears it, Left/Right go to its ends,
+    // Backspace/Delete remove it and Enter replaces it.
+    if (GetSelection() && !shift) {
+        switch (key) {
+        case KEY_ESCAPE:
+            selectionStart = cursorPos;
+            return true;
+        case KEY_LEFT:
+        case KEY_RIGHT:
+            cursorPos = key == KEY_LEFT ? GetSelection()->start : GetSelection()->end;
+            selectionStart = cursorPos;
+            goalX_.reset();
+            return true;
+        default:
+            break;
+        }
+    }
+    if (key == KEY_BACKSPACE || key == KEY_DELETE) {
+        if (DeleteSelection()) {
+            return true;
+        }
+    }
+    if (key == KEY_ENTER) {
+        DeleteSelection();
+    }
+    if (shift && (key == KEY_LEFT || key == KEY_RIGHT)) {
+        return ExtendSelection(key == KEY_RIGHT);
     }
     if (key == KEY_ESCAPE || key == KEY_TAB) {
         return false;
@@ -200,6 +232,11 @@ bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
     }
 
     if (next.empty() || next == cursorPos) {
+        // Up/Down that can't move still drops the selection.
+        if (!shift && selectionStart != cursorPos) {
+            selectionStart = cursorPos;
+            return true;
+        }
         return false;
     }
     cursorPos = std::move(next);
@@ -227,6 +264,7 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
     if (codepoint == U'{' || codepoint == U'}') {
         return false;
     }
+    DeleteSelection();  // typing replaces the selection
     KeyEvent event;
     event.codepoint = codepoint;
     event.path = PathView(cursorPos).subspan(1);
@@ -246,6 +284,7 @@ bool FileMpp::InsertNode(std::unique_ptr<EditorNode> node) {
     ResetCursorIfInvalid();
     pendingDelete_.reset();
     insertWheel_.reset();
+    DeleteSelection();
     const CursorPath linePath = Prefix(cursorPos, 2);
     auto* line = dynamic_cast<LineNode*>(NodeAt(linePath));
     if (!line || !node) {

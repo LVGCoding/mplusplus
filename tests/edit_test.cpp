@@ -15,7 +15,7 @@ FileMpp Doc(const std::string& source, CursorPath cursor = {}) {
     FileMpp file;
     file.SetSource(source);
     if (!cursor.empty()) {
-        file.cursorPos = std::move(cursor);
+        file.MoveCursorTo(std::move(cursor));
     }
     return file;
 }
@@ -160,7 +160,7 @@ TEST(EditDelete, BackspaceAtTheStartOfASlot) {
     EXPECT_FALSE(file.GetPendingDelete());
 
     // Start of the numerator: marks the fraction.
-    file.cursorPos = {0, 1, 0, 0, 0};
+    file.MoveCursorTo({0, 1, 0, 0, 0});
     ASSERT_TRUE(Press(file, KEY_BACKSPACE));
     ASSERT_TRUE(file.GetPendingDelete());
     EXPECT_EQ(file.GetPendingDelete()->node, (CursorPath{0, 1}));

@@ -50,7 +50,6 @@ Clay_ElementId MatrixNode::CellId(std::size_t row, std::size_t column) const {
 // cells. To keep rows lined up across columns, each cell is given at least the
 // height of the tallest cell in its row, measured from the previous frame
 // (cell ids are stable, so last frame's layout can be looked up).
-// TODO: mouse input is not implemented yet.
 void MatrixNode::Render(const RenderContext& context) {
     const float fontSize = context.fontSize;
     std::size_t columns = 0;

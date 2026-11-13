@@ -70,6 +70,7 @@ add_library(mplusplus_core STATIC
   src/editor/fileMpp.cpp
   src/editor/fileMppView.cpp
   src/editor/fileMppEdit.cpp
+  src/editor/fileMppSelection.cpp
   src/math/FracNode.cpp
   src/math/GreekNode.cpp
   src/math/LineNode.cpp

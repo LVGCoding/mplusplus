@@ -12,7 +12,6 @@ SqrtNode::SqrtNode(std::unique_ptr<EditorNode> root, std::unique_ptr<EditorNode>
 
 // [index] surd, then the argument under an overline. The surd stretches to the
 // argument's height and its top-right corner meets the overline.
-// TODO: mouse input is not implemented yet.
 void SqrtNode::Render(const RenderContext& context) {
     const float fontSize = context.fontSize;
     const float rule = node_style::RuleThickness(fontSize);
