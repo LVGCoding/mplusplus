@@ -12,7 +12,11 @@ namespace layout_internal {
     inline bool saveRequested = false;
     inline bool undoRequested = false;
     inline bool redoRequested = false;
-    // Menu history actions need a fresh layout before revealing the cursor.
+    // Edit -> Cut / Copy / Paste clicked this frame.
+    inline bool cutRequested = false;
+    inline bool copyRequested = false;
+    inline bool pasteRequested = false;
+    // Edit-menu actions (undo/redo, cut/paste) need a fresh layout before revealing the cursor.
     inline bool historyActivity = false;
     inline bool closeRequested = false;
     // Tab index the user clicked to activate or close this frame (if any).

@@ -256,14 +256,17 @@ bool FileMpp::HandleInput(const EditorView& view) {
     const bool modifier = IsShortcutModifierDown();
     bool changed = HandleMouse(view, measure);
     if (modifier && IsKeyPressed(KEY_C)) {
-        const auto selected = SelectedText();
-        if (!selected.empty()) SetClipboardText(selected.c_str());
+        CopyToClipboard();
+        while (GetCharPressed() > 0) {}
+        return changed;
+    }
+    if (modifier && IsKeyPressed(KEY_X)) {
+        changed |= CutToClipboard();
         while (GetCharPressed() > 0) {}
         return changed;
     }
     if (modifier && IsKeyPressed(KEY_V)) {
-        const char* pasted = GetClipboardText();
-        if (pasted) changed |= PasteText(pasted);
+        changed |= PasteFromClipboard();
         while (GetCharPressed() > 0) {}
         return changed;
     }

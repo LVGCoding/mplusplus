@@ -20,6 +20,23 @@ namespace layout_internal {
         }
     }
 
+    // Edit -> Cut / Copy / Paste.
+    inline void ProcessClipboardRequests(Editor& editor) {
+        FileBase* file = editor.ActiveFile();
+        if (cutRequested) {
+            cutRequested = false;
+            if (file) historyActivity |= file->CutToClipboard();
+        }
+        if (copyRequested) {
+            copyRequested = false;
+            if (file) file->CopyToClipboard();
+        }
+        if (pasteRequested) {
+            pasteRequested = false;
+            if (file) historyActivity |= file->PasteFromClipboard();
+        }
+    }
+
     inline bool SaveActiveFile(Editor& editor, std::string& error) {
         FileBase* file = editor.ActiveFile();
         if (!file) {

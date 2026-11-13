@@ -121,6 +121,15 @@ namespace layout_internal {
                              file && file->CanUndo(), undoRequested, editMenuOpen);
             DropdownMenuItem(CLAY_ID("RedoButton"), CLAY_STRING("Redo"),
                              file && file->CanRedo(), redoRequested, editMenuOpen);
+            const bool hasSelection = file && file->HasSelection();
+            const char* clipboard = GetClipboardText();
+            const bool canPaste = file && clipboard && clipboard[0] != 0;
+            DropdownMenuItem(CLAY_ID("CutButton"), CLAY_STRING("Cut"),
+                             hasSelection, cutRequested, editMenuOpen);
+            DropdownMenuItem(CLAY_ID("CopyButton"), CLAY_STRING("Copy"),
+                             hasSelection, copyRequested, editMenuOpen);
+            DropdownMenuItem(CLAY_ID("PasteButton"), CLAY_STRING("Paste"),
+                             canPaste, pasteRequested, editMenuOpen);
         }
     }
 

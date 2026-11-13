@@ -6,6 +6,22 @@
 #include "editor/FileMpp.h"
 #include "fileText.h"
 
+bool FileBase::CopyToClipboard() const {
+  const std::string selected = SelectedText();
+  if (selected.empty()) return false;
+  SetClipboardText(selected.c_str());
+  return true;
+}
+
+bool FileBase::CutToClipboard() {
+  return CopyToClipboard() && DeleteSelection();
+}
+
+bool FileBase::PasteFromClipboard() {
+  const char *pasted = GetClipboardText();
+  return pasted && PasteText(pasted);
+}
+
 const std::string &FileBase::TabName() const {
   tabName_ = path.filename().string();
   if (tabName_.empty()) {
