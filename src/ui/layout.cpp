@@ -6,7 +6,7 @@
 //   layout_state.h         UI state and request flags
 //   layout_editor_view.h   EditorView for the active file
 //   layout_icons.h         custom-drawn icons
-//   layout_menu.h          menu bar, File and Insert dropdowns
+//   layout_menu.h          menu bar, File, Edit and Insert dropdowns
 //   layout_math_menu.h     math popup (open/close, triggers, drawing)
 //   layout_math_menu_items.h  math popup items and what each one does
 //   layout_tabs.h          file tab bar, switching/closing tabs
@@ -125,11 +125,20 @@ void Layout(Editor& editor) {
     const FileBase* activeFile = editor.ActiveFile();
     if (!activeFile) ResetEditorCursorBlink();
     const bool canSave = activeFile && !activeFile->path.empty();
+    const auto* activeMpp = dynamic_cast<const FileMpp*>(activeFile);
+    const bool canUndo = activeMpp && activeMpp->CanUndo();
+    const bool canRedo = activeMpp && activeMpp->CanRedo();
     if (IsKeyPressed(KEY_ESCAPE) ||
         (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
          !Clay_PointerOver(CLAY_ID("FileMenu")) &&
          !Clay_PointerOver(CLAY_ID("FileDropdown")))) {
         fileMenuOpen = false;
+    }
+    if (IsKeyPressed(KEY_ESCAPE) ||
+        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
+         !Clay_PointerOver(CLAY_ID("EditMenu")) &&
+         !Clay_PointerOver(CLAY_ID("EditDropdown")))) {
+        editMenuOpen = false;
     }
     if (IsKeyPressed(KEY_ESCAPE) ||
         (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
@@ -150,6 +159,9 @@ void Layout(Editor& editor) {
         }
         if (fileMenuOpen) {
             LayoutFileDropdown(canSave);
+        }
+        if (editMenuOpen) {
+            LayoutEditDropdown(canUndo, canRedo);
         }
         if (insertMenuOpen) {
             LayoutInsertDropdown();
@@ -179,6 +191,8 @@ void ProcessLayoutActions(Editor& editor) {
     // One error string is shared by the handlers, as before.
     ProcessMathMenuSelection(editor);
     ProcessMathMenuTriggers();
+
+    ProcessUndoRedoRequests(editor);
 
     std::string error;
     ProcessNewRequest(editor, error);

@@ -1,6 +1,6 @@
 #pragma once
 
-// Menu bar (File / Edit / Insert / Run / Docs) and the File dropdown.
+// Menu bar (File / Edit / Insert / Run / Docs) and its dropdowns.
 
 #include "layout_common.h"
 #include "layout_icons.h"
@@ -33,6 +33,11 @@ namespace layout_internal {
         DropdownMenuItem(id, label, enabled, requested, fileMenuOpen);
     }
 
+    inline void EditMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
+                             bool& requested) {
+        DropdownMenuItem(id, label, enabled, requested, editMenuOpen);
+    }
+
     inline void InsertMenuItem(Clay_ElementId id, Clay_String label, bool enabled,
                                bool& requested) {
         DropdownMenuItem(id, label, enabled, requested, insertMenuOpen);
@@ -56,6 +61,7 @@ namespace layout_internal {
                                  .padding = {8, 8, 0, 0}, .childGap = 6,
                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
                       .backgroundColor = Clay_PointerOver(ids[i]) || (i == 0 && fileMenuOpen) ||
+                                         (i == 1 && editMenuOpen) ||
                                          (i == 2 && insertMenuOpen)
                           ? menuHover : Clay_Color{0, 0, 0, 0}}) {
                     CLAY_TEXT(labels[i], {.textColor = menuText,
@@ -69,6 +75,10 @@ namespace layout_internal {
                     if (i == 0 && !unsavedChangesOpen && Clay_Hovered() &&
                         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                         fileMenuOpen = !fileMenuOpen;
+                    }
+                    if (i == 1 && !unsavedChangesOpen && Clay_Hovered() &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        editMenuOpen = !editMenuOpen;
                     }
                     if (i == 2 && !unsavedChangesOpen && Clay_Hovered() &&
                         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -98,6 +108,22 @@ namespace layout_internal {
             FileMenuItem(CLAY_ID("NewButton"), CLAY_STRING("New"), true, newRequested);
             FileMenuItem(CLAY_ID("OpenButton"), CLAY_STRING("Open File"), true, openRequested);
             FileMenuItem(CLAY_ID("SaveButton"), CLAY_STRING("Save File"), canSave, saveRequested);
+        }
+    }
+
+    inline void LayoutEditDropdown(bool canUndo, bool canRedo) {
+        CLAY(CLAY_ID("EditDropdown"),
+             {.layout = {.sizing = {CLAY_SIZING_FIXED(200), CLAY_SIZING_FIT(0)},
+                         .padding = {0, 0, 4, 4},
+                         .layoutDirection = CLAY_TOP_TO_BOTTOM},
+              .backgroundColor = dropdownColor,
+              .floating = {.offset = {0, 0}, .parentId = CLAY_ID("EditMenu").id,
+                           .zIndex = 1,
+                           .attachPoints = {.element = CLAY_ATTACH_POINT_LEFT_TOP,
+                                            .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM},
+                           .attachTo = CLAY_ATTACH_TO_ELEMENT_WITH_ID}}) {
+            EditMenuItem(CLAY_ID("UndoButton"), CLAY_STRING("Undo"), canUndo, undoRequested);
+            EditMenuItem(CLAY_ID("RedoButton"), CLAY_STRING("Redo"), canRedo, redoRequested);
         }
     }
 

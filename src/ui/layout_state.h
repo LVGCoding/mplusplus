@@ -22,6 +22,11 @@ namespace layout_internal {
     inline CloseAction closeAction = CloseAction::None;
     inline std::string closeError;
 
+    // Edit dropdown in the menu bar; Undo/Redo clicks are applied in ProcessLayoutActions.
+    inline bool editMenuOpen = false;
+    inline bool undoRequested = false;
+    inline bool redoRequested = false;
+
     // Insert dropdown in the menu bar.
     inline bool insertMenuOpen = false;
     // Insert -> Math was clicked this frame; opened in ProcessLayoutActions.
@@ -40,11 +45,12 @@ namespace layout_internal {
 
     // True while any dropdown/popup menu is open (editor mouse input is paused).
     inline bool IsAnyMenuOpen() {
-        return fileMenuOpen || insertMenuOpen || mathMenuOpen;
+        return fileMenuOpen || editMenuOpen || insertMenuOpen || mathMenuOpen;
     }
 
     inline void CloseAllMenus() {
         fileMenuOpen = false;
+        editMenuOpen = false;
         insertMenuOpen = false;
         mathMenuOpen = false;
     }

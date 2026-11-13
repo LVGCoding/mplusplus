@@ -30,4 +30,6 @@ namespace layout_internal {
     inline constexpr float mathMenuCornerRadius = 12;
     inline constexpr float mathMenuSearchHeight = 34;
     inline constexpr uint16_t mathMenuFontSize = 20;
+    // Font size of the rendered node previews on the right of each math item.
+    inline constexpr float mathMenuPreviewFontSize = 18;
 }
