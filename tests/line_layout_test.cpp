@@ -64,7 +64,7 @@ protected:
 TEST_F(LineLayoutTest,
        NumbersFollowTallRowsOnFirstFrameAndAfterResize) {
     FileMpp file;
-    file.content = Parser().ParseText("plain\n\\frac{a}{b}\n\\sqrt[3]{x}\n"
+    file.SetSource("plain\n\\frac{a}{b}\n\\sqrt[3]{x}\n"
                                       "\\begin{matrix}a&b\\\\c&d\\end{matrix}\n\\alpha");
     ASSERT_EQ(file.LineCount(), 5u);
     LayoutFile(file);
@@ -80,10 +80,10 @@ TEST_F(LineLayoutTest,
     EXPECT_GT(Row(file, 3).height, editor_style::lineHeight);
     EXPECT_FLOAT_EQ(Label(5).y, Row(file, 4).y + Row(file, 4).height);
 
-    file.content = Parser().ParseText("\\frac{\\frac{a}{b}}{c}\nnext");
+    file.SetSource("\\frac{\\frac{a}{b}}{c}\nnext");
     LayoutFile(file);
     EXPECT_FLOAT_EQ(Label(1).y, Row(file, 0).y + Row(file, 0).height);
-    file.content = Parser().ParseText("short\nnext");
+    file.SetSource("short\nnext");
     LayoutFile(file);
     EXPECT_FLOAT_EQ(Row(file, 0).height, editor_style::lineHeight);
     EXPECT_FLOAT_EQ(Label(1).y - Label(0).y, editor_style::lineHeight);
@@ -92,7 +92,7 @@ TEST_F(LineLayoutTest,
 TEST_F(LineLayoutTest,
        EmptyRowsAndNestedNewlinesUseRenderedLineCount) {
     FileMpp file;
-    file.content = Parser().ParseText("\n\\begin{matrix}a&b\\\\\nc&d\\end{matrix}\n\n");
+    file.SetSource("\n\\begin{matrix}a&b\\\\\nc&d\\end{matrix}\n\n");
     ASSERT_EQ(file.LineCount(), 4u);
     LayoutFile(file);
     for (std::size_t line = 0; line < file.LineCount(); ++line) {
@@ -120,7 +120,7 @@ TEST_F(LineLayoutTest,
     for (int line = 0; line < 30; ++line) {
         source += "\\frac{a}{b}\n";
     }
-    file.content = Parser().ParseText(source);
+    file.SetSource(source);
     LayoutFile(file);
     auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
     EXPECT_TRUE(scroll.found);

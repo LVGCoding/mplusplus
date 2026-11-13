@@ -22,11 +22,12 @@ constexpr std::array<std::string_view, 24> symbolGlyphs = {
 
 GreekNode::GreekNode(GreekSymbolType symbol) : symbol_(symbol) {}
 
-// TODO: input is not implemented yet.
-void GreekNode::Render(float fontSize) {
-    node_style::Text(symbolGlyphs[static_cast<std::size_t>(symbol_)], fontSize);
+// A single symbol: the cursor steps over it rather than going inside.
+void GreekNode::Render(const RenderContext& context) {
+    CLAY(GetClayId(), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)}}}) {
+        node_style::Text(symbolGlyphs[static_cast<std::size_t>(symbol_)], context.fontSize);
+    }
 }
-void GreekNode::KeyPress() {}
 void GreekNode::MouseClick() {}
 std::pair<float, float> GreekNode::GetNWCorner() {
     return {0.0f, 0.0f};

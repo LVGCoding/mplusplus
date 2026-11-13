@@ -40,9 +40,7 @@ public:
 
     ~GreekNode() override = default;
 
-    void Render(float fontSize) override;
-
-    void KeyPress() override;
+    void Render(const RenderContext& context) override;
 
     void MouseClick() override;
 

@@ -14,7 +14,7 @@ namespace layout_internal {
         const auto i = static_cast<uint32_t>(index);
         const Clay_ElementId tabId = CLAY_IDI("FileTab", i);
         const Clay_ElementId closeId = CLAY_IDI("FileTabCloseButton", i);
-        const bool clickable = !unsavedChangesOpen && !fileMenuOpen;
+        const bool clickable = !unsavedChangesOpen && !IsAnyMenuOpen();
 
         CLAY(tabId,
              {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_GROW(0)},
