@@ -110,6 +110,12 @@ struct FileMpp : FileBase {
     // Delete the selected range. Returns false if nothing was selected.
     bool DeleteSelection();
 
+    // Clipboard text uses M++/LaTeX source, preserving selected structures.
+    std::string SelectedText() const;
+    // Parse and insert source, replacing the selection as one undo step.
+    // Inside a math slot, top-level line breaks become spaces.
+    bool PasteText(std::string text);
+
     // The cursor position nearest to a screen point, from the last layout.
     // Used by ClickAt and by drag-selecting. In fileMppView.cpp.
     std::optional<CursorPath> PositionAt(float x, float y, const TextMeasure* measure) const;
@@ -120,10 +126,10 @@ struct FileMpp : FileBase {
     // small however large the document is. Typing (and Backspace/Delete on
     // characters) in one place is grouped into one step per word.
 
-    bool Undo();
-    bool Redo();
-    bool CanUndo() const { return !undo_.empty(); }
-    bool CanRedo() const { return !redo_.empty(); }
+    bool Undo() override;
+    bool Redo() override;
+    bool CanUndo() const override { return !undo_.empty(); }
+    bool CanRedo() const override { return !redo_.empty(); }
 
     const std::optional<PendingDelete>& GetPendingDelete() const { return pendingDelete_; }
     const std::optional<InsertWheel>& GetInsertWheel() const { return insertWheel_; }

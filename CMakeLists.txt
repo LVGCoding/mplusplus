@@ -67,6 +67,7 @@ add_library(mplusplus_core STATIC
   src/editor/fileBase.cpp
   src/editor/fileText.cpp
   src/editor/fileTextView.cpp
+  src/editor/fileTextEdit.cpp
   src/editor/fileMpp.cpp
   src/editor/fileMppView.cpp
   src/editor/fileMppEdit.cpp

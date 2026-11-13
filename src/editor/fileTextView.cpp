@@ -6,6 +6,7 @@
 #include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
 #include "ui/font.h"
+#include "ui/shortcuts.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,28 +19,6 @@ namespace {
 constexpr Clay_Color textColor = {20, 20, 20, 255};
 constexpr Color cursorColor = {20, 20, 20, 255};
 constexpr Color selectionColor = {65, 105, 168, 80};
-
-// Byte offset of the UTF-8 character before `position`.
-std::size_t PreviousCharacter(const std::string& text, std::size_t position) {
-    if (position == 0)
-        return 0;
-    --position;
-    while (position > 0 && (static_cast<unsigned char>(text[position]) & 0xC0) == 0x80) {
-        --position;
-    }
-    return position;
-}
-
-// Byte offset of the UTF-8 character after `position`.
-std::size_t NextCharacter(const std::string& text, std::size_t position) {
-    if (position == text.size())
-        return position;
-    ++position;
-    while (position < text.size() && (static_cast<unsigned char>(text[position]) & 0xC0) == 0x80) {
-        ++position;
-    }
-    return position;
-}
 
 // On-screen width of text[start, end) in the editor font.
 float TextWidth(const std::string& text, std::size_t start, std::size_t end, Font font) {
@@ -145,10 +124,7 @@ bool FileText::HandleInput(const EditorView& view) {
     const auto previousAnchor = selectionStart;
 
     const bool clicked = HandleMouse(view);
-    const bool changed = HandleKeyboard();
-    if (changed) {
-        modified = true;
-    }
+    const bool changed = HandleKeyboard(view);
     return clicked || changed || previousCursor != cursorPos || previousAnchor != selectionStart;
 }
 
@@ -199,99 +175,58 @@ bool FileText::HandleMouse(const EditorView& view) {
     return clicked;
 }
 
-bool FileText::HandleKeyboard() {
+// Reads this frame's keys and passes them to PressKey/TypeCharacter
+// (fileTextEdit.cpp), which do the editing.
+bool FileText::HandleKeyboard(const EditorView& view) {
+    const Font font = view.fonts[FONT_BODY];
+    const LineMeasure measure = [font](std::string_view piece) {
+        Clay_StringSlice slice = {.length = static_cast<int32_t>(piece.size()),
+                                  .chars = piece.data(),
+                                  .baseChars = piece.data()};
+        Clay_TextElementConfig config = {.fontId = FONT_BODY, .fontSize = fontSize};
+        Font copy = font;
+        return ClayRaylib_MeasureText(slice, &config, &copy).width;
+    };
+    const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    const bool shortcut = IsShortcutModifierDown();  // Command on macOS
+    auto pressed = [](int key) { return IsKeyPressed(key) || IsKeyPressedRepeat(key); };
     bool changed = false;
 
-    cursorPos = std::min(cursorPos, text.size());
-    selectionStart = std::min(selectionStart, text.size());
-
-    const bool shiftHeld = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    const bool leftPressed = IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT);
-    const bool rightPressed = IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT);
-
-    // Move cursor left
-    if (leftPressed) {
-        if (!shiftHeld && selectionStart != cursorPos) {
-            cursorPos = std::min(selectionStart, cursorPos);
-        } else if (cursorPos > 0) {
-            cursorPos = PreviousCharacter(text, cursorPos);
-        }
-        if (!shiftHeld) {
-            selectionStart = cursorPos;
-        }
+    if (shortcut && IsKeyPressed(KEY_C)) {
+        const auto selected = SelectedText();
+        if (!selected.empty()) SetClipboardText(selected.c_str());
+        while (GetCharPressed() > 0) {}
+        return false;
     }
-
-    // Move cursor right
-    if (rightPressed) {
-        if (!shiftHeld && selectionStart != cursorPos) {
-            cursorPos = std::max(selectionStart, cursorPos);
-        } else if (cursorPos < text.size()) {
-            cursorPos = NextCharacter(text, cursorPos);
-        }
-        if (!shiftHeld) {
-            selectionStart = cursorPos;
-        }
+    if (shortcut && IsKeyPressed(KEY_V)) {
+        const char* pasted = GetClipboardText();
+        const bool inserted = pasted && PasteText(pasted);
+        while (GetCharPressed() > 0) {}
+        return inserted;
     }
-
-    // Delete currently selected text
-    auto deleteSelection = [&]() {
-        if (selectionStart == cursorPos) {
-            return false;
-        }
-        const std::size_t start = std::min(selectionStart, cursorPos);
-        const std::size_t end = std::max(selectionStart, cursorPos);
-        text.erase(start, end - start);
-        cursorPos = start;
-        selectionStart = start;
+    if (shortcut && IsKeyPressed(KEY_A)) {
+        SelectAll();
+        while (GetCharPressed() > 0) {}
         return true;
-    };
-
-    // Handle typed characters
-    int key = GetCharPressed();
-    while (key > 0) {
-        if (key >= 32) {
-            deleteSelection();
-            int bytes = 0;
-            const char* character = CodepointToUTF8(key, &bytes);
-            text.insert(cursorPos, character, bytes);
-            cursorPos += bytes;
-            selectionStart = cursorPos;
-            changed = true;
-        }
-        key = GetCharPressed();
     }
-
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER)) {
-        deleteSelection();
-        text.insert(cursorPos, 1, '\n');
-        ++cursorPos;
-        selectionStart = cursorPos;
-        changed = true;
+    // Modifier+Z undoes; Modifier+Y or Modifier+Shift+Z redoes. Held keys repeat.
+    if (shortcut && pressed(KEY_Z)) {
+        changed |= shift ? Redo() : Undo();
     }
-
-    // Handle Backspace
-    if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
-        if (deleteSelection()) {
-            changed = true;
-        } else if (cursorPos > 0) {
-            const auto previous = PreviousCharacter(text, cursorPos);
-            text.erase(previous, cursorPos - previous);
-            cursorPos = previous;
-            selectionStart = cursorPos;
-            changed = true;
+    if (shortcut && pressed(KEY_Y)) {
+        changed |= Redo();
+    }
+    for (const int key :
+         {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE, KEY_ENTER}) {
+        if (pressed(key)) {
+            changed |= PressKey(key, shift, &measure);
         }
     }
-
-    // Handle Delete
-    if (IsKeyPressed(KEY_DELETE) || IsKeyPressedRepeat(KEY_DELETE)) {
-        if (deleteSelection()) {
-            changed = true;
-        } else if (cursorPos < text.size()) {
-            text.erase(cursorPos, NextCharacter(text, cursorPos) - cursorPos);
-            selectionStart = cursorPos;
-            changed = true;
-        }
+    if (pressed(KEY_KP_ENTER)) {
+        changed |= PressKey(KEY_ENTER, shift, &measure);
     }
-
+    while (const int codepoint = GetCharPressed()) {
+        changed |= TypeCharacter(static_cast<char32_t>(codepoint));
+    }
     return changed;
 }

@@ -64,13 +64,30 @@ bool HandleActiveFileInput(Editor& editor, Font* fonts) {
     if (!file) {
         return false;
     }
+#if defined(__APPLE__)
+    const bool saveModifier = IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER);
+#else
+    const bool saveModifier = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+#endif
+    if (saveModifier && IsKeyPressed(KEY_S)) {
+        // Share the Save button's deferred action, including its Save As dialog.
+        saveRequested = true;
+        fileMenuOpen = false;
+        // Consume the shortcut so it cannot type into the document or math popup.
+        while (GetCharPressed() > 0) {}
+        return false;
+    }
     const EditorView view = MakeEditorView(fonts);
     if (mathMenuOpen) {
         // The math popup takes the keyboard while it is open.
         HandleMathMenuKeys();
         return false;
     }
-    const bool activity = file->HandleInput(view);
+    bool activity = file->HandleInput(view);
+    if (historyActivity) {
+        historyActivity = false;
+        activity = true;
+    }
     CheckMathMenuKeyTriggers(*file, view);
     if (activity) {
         ResetEditorCursorBlink();
@@ -161,7 +178,7 @@ void Layout(Editor& editor) {
             LayoutFileDropdown(canSave);
         }
         if (editMenuOpen) {
-            LayoutEditDropdown(canUndo, canRedo);
+            LayoutEditDropdown(activeFile);
         }
         if (insertMenuOpen) {
             LayoutInsertDropdown();
@@ -189,6 +206,7 @@ void ProcessLayoutActions(Editor& editor) {
     }
 
     // One error string is shared by the handlers, as before.
+    ProcessHistoryRequests(editor);
     ProcessMathMenuSelection(editor);
     ProcessMathMenuTriggers();
 

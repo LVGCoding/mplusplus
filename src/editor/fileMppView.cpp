@@ -21,6 +21,7 @@
 #include "ui/EditorView.h"
 #include "ui/clay_renderer_raylib.h"
 #include "ui/font.h"
+#include "ui/shortcuts.h"
 
 #include <algorithm>
 #include <cmath>
@@ -252,24 +253,31 @@ std::optional<Clay_BoundingBox> FileMpp::CaretBox(const TextMeasure* measure) co
 bool FileMpp::HandleInput(const EditorView& view) {
     const TextMeasure measure = MakeMeasure(view.fonts);
     const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    const bool modifier = IsShortcutModifierDown();
     bool changed = HandleMouse(view, measure);
-    if (ctrl && IsKeyPressed(KEY_A)) {
-        SelectAll();
-        changed = true;
+    if (modifier && IsKeyPressed(KEY_C)) {
+        const auto selected = SelectedText();
+        if (!selected.empty()) SetClipboardText(selected.c_str());
+        while (GetCharPressed() > 0) {}
+        return changed;
     }
-    // Use Command on macOS and Control elsewhere for undo/redo.
-#if defined(__APPLE__)
-    const bool historyModifier = IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER);
-#else
-    const bool historyModifier = ctrl;
-#endif
+    if (modifier && IsKeyPressed(KEY_V)) {
+        const char* pasted = GetClipboardText();
+        if (pasted) changed |= PasteText(pasted);
+        while (GetCharPressed() > 0) {}
+        return changed;
+    }
+    if (modifier && IsKeyPressed(KEY_A)) {
+        SelectAll();
+        while (GetCharPressed() > 0) {}
+        return true;
+    }
     // Modifier+Z undoes; Modifier+Y or Modifier+Shift+Z redoes. Held keys repeat.
     auto pressed = [](int key) { return IsKeyPressed(key) || IsKeyPressedRepeat(key); };
-    if (historyModifier && pressed(KEY_Z)) {
+    if (modifier && pressed(KEY_Z)) {
         changed |= shift ? Redo() : Undo();
     }
-    if (historyModifier && pressed(KEY_Y)) {
+    if (modifier && pressed(KEY_Y)) {
         changed |= Redo();
     }
     for (const int key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE}) {

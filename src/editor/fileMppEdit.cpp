@@ -14,6 +14,7 @@
 #include "raylib.h"
 
 #include <algorithm>
+#include <iterator>
 #include <optional>
 #include <utility>
 
@@ -71,6 +72,46 @@ void FileMpp::ResetCursorIfInvalid() {
 
 bool FileMpp::TakeMathMenuRequest() {
     return std::exchange(mathMenuRequested_, false);
+}
+
+bool FileMpp::PasteText(std::string text) {
+    if (text.empty()) return false;
+    FileMpp pasted;
+    pasted.SetSource(std::move(text));
+    EditScope scope(*this, EditKind::Other);
+    DeleteSelection();
+    pendingDelete_.reset();
+    insertWheel_.reset();
+    const CursorPath linePath = Prefix(cursorPos, 2);
+    auto* line = dynamic_cast<LineNode*>(NodeAt(linePath));
+    if (!line) return false;
+
+    // Slots are single lines; retain pasted math objects but treat document
+    // line breaks as whitespace when pasting inside a fraction/root/cell.
+    if (linePath.size() > 1 && pasted.content.size() > 1) {
+        for (std::size_t i = 1; i < pasted.content.size(); ++i) {
+            pasted.content.front()->AddChild(std::make_unique<TextNode>(" "));
+            pasted.content.front()->Append(*pasted.content[i]);
+        }
+        pasted.content.resize(1);
+    }
+    auto tail = line->SplitAt(cursorPos[cursorPos.size() - 2], cursorPos.back());
+    line->Append(*pasted.content.front());
+    LineNode* last = line;
+    CursorPath destination = linePath;
+    if (pasted.content.size() > 1) {
+        const auto row = cursorPos[0];
+        destination = {row + pasted.content.size() - 1};
+        last = pasted.content.back().get();
+        content.insert(content.begin() + static_cast<std::ptrdiff_t>(row) + 1,
+                       std::make_move_iterator(pasted.content.begin() + 1),
+                       std::make_move_iterator(pasted.content.end()));
+    }
+    cursorPos = Concat(destination, last->LastPosition());
+    last->Append(*tail);
+    selectionStart = cursorPos;
+    MarkEdited();
+    return true;
 }
 
 bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
