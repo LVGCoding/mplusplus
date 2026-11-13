@@ -32,6 +32,11 @@ struct FileBase {
 
     virtual const std::string& TabName() const;
 
+    virtual bool Undo() { return false; }
+    virtual bool Redo() { return false; }
+    virtual bool CanUndo() const { return false; }
+    virtual bool CanRedo() const { return false; }
+
     // --- Rendering and input ------------------------------------------------
 
     // Handle this frame's keyboard and mouse input. Not called while a popup is

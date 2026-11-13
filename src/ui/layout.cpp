@@ -83,7 +83,11 @@ bool HandleActiveFileInput(Editor& editor, Font* fonts) {
         HandleMathMenuKeys();
         return false;
     }
-    const bool activity = file->HandleInput(view);
+    bool activity = file->HandleInput(view);
+    if (historyActivity) {
+        historyActivity = false;
+        activity = true;
+    }
     CheckMathMenuKeyTriggers(*file, view);
     if (activity) {
         ResetEditorCursorBlink();
@@ -174,7 +178,7 @@ void Layout(Editor& editor) {
             LayoutFileDropdown(canSave);
         }
         if (editMenuOpen) {
-            LayoutEditDropdown(canUndo, canRedo);
+            LayoutEditDropdown(activeFile);
         }
         if (insertMenuOpen) {
             LayoutInsertDropdown();
@@ -202,6 +206,7 @@ void ProcessLayoutActions(Editor& editor) {
     }
 
     // One error string is shared by the handlers, as before.
+    ProcessHistoryRequests(editor);
     ProcessMathMenuSelection(editor);
     ProcessMathMenuTriggers();
 

@@ -126,6 +126,43 @@ void FileMpp::SelectAll() {
     cursorPos = JoinPath({content.size() - 1}, content.back()->LastPosition());
 }
 
+std::string FileMpp::SelectedText() const {
+    const auto selection = GetSelection();
+    if (!selection) return {};
+    const auto& start = selection->start;
+    const auto& end = selection->end;
+    std::string result;
+    auto appendRange = [&](const LineNode& line, std::size_t first, std::size_t from,
+                           std::size_t last, std::size_t to) {
+        for (std::size_t i = first; i <= last; ++i) {
+            const auto* node = line.GetChild(i);
+            if (const auto* text = dynamic_cast<const TextNode*>(node)) {
+                const auto begin = i == first ? from : 0;
+                const auto finish = i == last ? to : text->GetText().size();
+                result += text->GetText().substr(begin, finish - begin);
+            } else {
+                result += node->ToText();
+            }
+        }
+    };
+    if (start[0] == end[0]) {
+        const auto* line = dynamic_cast<const LineNode*>(NodeAt(Prefix(start, start.size() - 2)));
+        if (line) appendRange(*line, start[start.size() - 2], start.back(),
+                               end[end.size() - 2], end.back());
+    } else {
+        for (std::size_t row = start[0]; row <= end[0]; ++row) {
+            if (row > start[0]) result += lineEnding_;
+            const auto& line = *content[row];
+            const auto last = line.ChildCount() - 1;
+            appendRange(line, row == start[0] ? start[1] : 0,
+                        row == start[0] ? start.back() : 0,
+                        row == end[0] ? end[1] : last,
+                        row == end[0] ? end.back() : TextLength(line, last));
+        }
+    }
+    return result;
+}
+
 bool FileMpp::DeleteSelection() {
     const auto selection = GetSelection();
     if (!selection) {

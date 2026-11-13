@@ -84,6 +84,10 @@ namespace layout_internal {
                         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                         insertMenuOpen = !insertMenuOpen;
                     }
+                    if (i == 1 && !unsavedChangesOpen && Clay_Hovered() &&
+                        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        editMenuOpen = !editMenuOpen;
+                    }
                     if (i == 4 && !unsavedChangesOpen && Clay_Hovered() &&
                         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                         docsRequested = true;
@@ -111,7 +115,7 @@ namespace layout_internal {
         }
     }
 
-    inline void LayoutEditDropdown(bool canUndo, bool canRedo) {
+    inline void LayoutEditDropdown(const FileBase* file) {
         CLAY(CLAY_ID("EditDropdown"),
              {.layout = {.sizing = {CLAY_SIZING_FIXED(200), CLAY_SIZING_FIT(0)},
                          .padding = {0, 0, 4, 4},
@@ -122,8 +126,10 @@ namespace layout_internal {
                            .attachPoints = {.element = CLAY_ATTACH_POINT_LEFT_TOP,
                                             .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM},
                            .attachTo = CLAY_ATTACH_TO_ELEMENT_WITH_ID}}) {
-            EditMenuItem(CLAY_ID("UndoButton"), CLAY_STRING("Undo"), canUndo, undoRequested);
-            EditMenuItem(CLAY_ID("RedoButton"), CLAY_STRING("Redo"), canRedo, redoRequested);
+            DropdownMenuItem(CLAY_ID("UndoButton"), CLAY_STRING("Undo"),
+                             file && file->CanUndo(), undoRequested, editMenuOpen);
+            DropdownMenuItem(CLAY_ID("RedoButton"), CLAY_STRING("Redo"),
+                             file && file->CanRedo(), redoRequested, editMenuOpen);
         }
     }
 

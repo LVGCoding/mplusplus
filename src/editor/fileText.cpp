@@ -1,7 +1,22 @@
 #include "fileText.h"
 
+#include <algorithm>
 #include <fstream>
 #include <utility>
+
+std::string FileText::SelectedText() const {
+  const auto start = std::min({selectionStart, cursorPos, text.size()});
+  const auto end = std::min(std::max(selectionStart, cursorPos), text.size());
+  return text.substr(start, end - start);
+}
+
+bool FileText::PasteText(std::string pasted) {
+  if (pasted.empty()) return false;
+  const auto start = std::min({selectionStart, cursorPos, text.size()});
+  const auto end = std::min(std::max(selectionStart, cursorPos), text.size());
+  Replace(start, end, std::move(pasted), EditKind::Other);
+  return true;
+}
 
 bool ReadWholeFile(const std::filesystem::path &path, std::string &text,
                    std::string &error) {
