@@ -42,10 +42,13 @@ struct FileText : FileBase {
 
     // Undo and redo. Typing and deleting characters group into one step per
     // word; anything else (Enter, deleting a selection) is a step of its own.
-    bool Undo();
-    bool Redo();
-    bool CanUndo() const { return !undo_.empty(); }
-    bool CanRedo() const { return !redo_.empty(); }
+    bool Undo() override;
+    bool Redo() override;
+    bool CanUndo() const override { return !undo_.empty(); }
+    bool CanRedo() const override { return !redo_.empty(); }
+
+    std::string SelectedText() const;
+    bool PasteText(std::string text);
 
     bool HandleInput(const EditorView& view) override;
     void LayoutContent() const override;

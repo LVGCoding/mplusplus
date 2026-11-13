@@ -3,6 +3,7 @@
 #include "math/TextNode.h"
 #include "parser/parser.h"
 #include "ui/layout_panels.h"
+#include "ui/layout_menu.h"
 
 #include <cmath>
 #include <gtest/gtest.h>
@@ -58,8 +59,53 @@ protected:
         EXPECT_TRUE(data.found);
         return data.boundingBox;
     }
+
+    void ExpectHistoryMenu(const FileBase* file, bool undoEnabled, bool redoEnabled) {
+        Clay_BeginLayout();
+        CLAY(CLAY_ID("MenuTestRoot"),
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}}}) {
+            layout_internal::LayoutMenuBar();
+            layout_internal::LayoutEditDropdown(file);
+        }
+        auto commands = Clay_EndLayout(0);
+        bool foundUndo = false;
+        bool foundRedo = false;
+        for (int32_t i = 0; i < commands.length; ++i) {
+            const auto* command = Clay_RenderCommandArray_Get(&commands, i);
+            if (command->commandType != CLAY_RENDER_COMMAND_TYPE_TEXT) continue;
+            const auto& text = command->renderData.text;
+            const std::string_view label(text.stringContents.chars, text.stringContents.length);
+            if (label != "Undo" && label != "Redo") continue;
+            const bool enabled = label == "Undo" ? undoEnabled : redoEnabled;
+            const auto expected = enabled ? layout_internal::menuText : Clay_Color{150, 150, 150, 255};
+            EXPECT_FLOAT_EQ(text.textColor.r, expected.r);
+            EXPECT_FLOAT_EQ(text.textColor.g, expected.g);
+            EXPECT_FLOAT_EQ(text.textColor.b, expected.b);
+            if (label == "Undo") foundUndo = true;
+            else foundRedo = true;
+        }
+        EXPECT_TRUE(foundUndo);
+        EXPECT_TRUE(foundRedo);
+        EXPECT_TRUE(errors_.empty());
+    }
 };
 }  // namespace
+
+TEST_F(LineLayoutTest, EditMenuReflectsBothFileTypesHistoryStacks) {
+    ExpectHistoryMenu(nullptr, false, false);
+    FileText text;
+    FileMpp mpp;
+    for (FileBase* file : {static_cast<FileBase*>(&text), static_cast<FileBase*>(&mpp)}) {
+        ExpectHistoryMenu(file, false, false);
+        if (file == &text) ASSERT_TRUE(text.PasteText("hello"));
+        else ASSERT_TRUE(mpp.PasteText("\\frac{a}{b}"));
+        ExpectHistoryMenu(file, true, false);
+        ASSERT_TRUE(file->Undo());
+        ExpectHistoryMenu(file, false, true);
+        ASSERT_TRUE(file->Redo());
+        ExpectHistoryMenu(file, true, false);
+    }
+}
 
 TEST_F(LineLayoutTest,
        NumbersFollowTallRowsOnFirstFrameAndAfterResize) {

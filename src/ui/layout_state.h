@@ -10,6 +10,10 @@ namespace layout_internal {
     inline bool openRequested = false;
     inline bool docsRequested = false;
     inline bool saveRequested = false;
+    inline bool undoRequested = false;
+    inline bool redoRequested = false;
+    // Menu history actions need a fresh layout before revealing the cursor.
+    inline bool historyActivity = false;
     inline bool closeRequested = false;
     // Tab index the user clicked to activate or close this frame (if any).
     inline std::size_t selectTabRequested = SIZE_MAX;
@@ -17,6 +21,7 @@ namespace layout_internal {
     // Remember each open file's editor scroll position so switching tabs restores it.
     inline std::unordered_map<const FileBase*, Clay_Vector2> tabScroll;
     inline bool fileMenuOpen = false;
+    inline bool editMenuOpen = false;
     inline bool unsavedChangesOpen = false;
     enum class CloseAction { None, Save, Discard, Cancel };
     inline CloseAction closeAction = CloseAction::None;
@@ -40,11 +45,12 @@ namespace layout_internal {
 
     // True while any dropdown/popup menu is open (editor mouse input is paused).
     inline bool IsAnyMenuOpen() {
-        return fileMenuOpen || insertMenuOpen || mathMenuOpen;
+        return fileMenuOpen || editMenuOpen || insertMenuOpen || mathMenuOpen;
     }
 
     inline void CloseAllMenus() {
         fileMenuOpen = false;
+        editMenuOpen = false;
         insertMenuOpen = false;
         mathMenuOpen = false;
     }

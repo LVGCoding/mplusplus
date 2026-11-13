@@ -8,6 +8,18 @@
 #include "layout_tabs.h"
 
 namespace layout_internal {
+    inline void ProcessHistoryRequests(Editor& editor) {
+        FileBase* file = editor.ActiveFile();
+        if (undoRequested) {
+            undoRequested = false;
+            if (file && file->CanUndo()) historyActivity |= file->Undo();
+        }
+        if (redoRequested) {
+            redoRequested = false;
+            if (file && file->CanRedo()) historyActivity |= file->Redo();
+        }
+    }
+
     inline bool SaveActiveFile(Editor& editor, std::string& error) {
         FileBase* file = editor.ActiveFile();
         if (!file) {

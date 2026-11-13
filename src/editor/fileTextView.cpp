@@ -6,6 +6,7 @@
 #include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
 #include "ui/font.h"
+#include "ui/shortcuts.h"
 
 #include <algorithm>
 #include <cmath>
@@ -187,13 +188,26 @@ bool FileText::HandleKeyboard(const EditorView& view) {
         return ClayRaylib_MeasureText(slice, &config, &copy).width;
     };
     const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    const bool shortcut = ShortcutModifierDown();  // Command on macOS
+    const bool shortcut = IsShortcutModifierDown();  // Command on macOS
     auto pressed = [](int key) { return IsKeyPressed(key) || IsKeyPressedRepeat(key); };
     bool changed = false;
 
+    if (shortcut && IsKeyPressed(KEY_C)) {
+        const auto selected = SelectedText();
+        if (!selected.empty()) SetClipboardText(selected.c_str());
+        while (GetCharPressed() > 0) {}
+        return false;
+    }
+    if (shortcut && IsKeyPressed(KEY_V)) {
+        const char* pasted = GetClipboardText();
+        const bool inserted = pasted && PasteText(pasted);
+        while (GetCharPressed() > 0) {}
+        return inserted;
+    }
     if (shortcut && IsKeyPressed(KEY_A)) {
         SelectAll();
-        changed = true;
+        while (GetCharPressed() > 0) {}
+        return true;
     }
     // Modifier+Z undoes; Modifier+Y or Modifier+Shift+Z redoes. Held keys repeat.
     if (shortcut && pressed(KEY_Z)) {

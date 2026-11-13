@@ -6,7 +6,7 @@
 //   layout_state.h         UI state and request flags
 //   layout_editor_view.h   EditorView for the active file
 //   layout_icons.h         custom-drawn icons
-//   layout_menu.h          menu bar, File and Insert dropdowns
+//   layout_menu.h          menu bar, File, Edit and Insert dropdowns
 //   layout_math_menu.h     math popup (open/close, triggers, drawing)
 //   layout_math_menu_items.h  math popup items and what each one does
 //   layout_tabs.h          file tab bar, switching/closing tabs
@@ -83,7 +83,11 @@ bool HandleActiveFileInput(Editor& editor, Font* fonts) {
         HandleMathMenuKeys();
         return false;
     }
-    const bool activity = file->HandleInput(view);
+    bool activity = file->HandleInput(view);
+    if (historyActivity) {
+        historyActivity = false;
+        activity = true;
+    }
     CheckMathMenuKeyTriggers(*file, view);
     if (activity) {
         ResetEditorCursorBlink();
@@ -146,6 +150,12 @@ void Layout(Editor& editor) {
     }
     if (IsKeyPressed(KEY_ESCAPE) ||
         (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
+         !Clay_PointerOver(CLAY_ID("EditMenu")) &&
+         !Clay_PointerOver(CLAY_ID("EditDropdown")))) {
+        editMenuOpen = false;
+    }
+    if (IsKeyPressed(KEY_ESCAPE) ||
+        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
          !Clay_PointerOver(CLAY_ID("InsertMenu")) &&
          !Clay_PointerOver(CLAY_ID("InsertDropdown")))) {
         insertMenuOpen = false;
@@ -163,6 +173,9 @@ void Layout(Editor& editor) {
         }
         if (fileMenuOpen) {
             LayoutFileDropdown(canSave);
+        }
+        if (editMenuOpen) {
+            LayoutEditDropdown(activeFile);
         }
         if (insertMenuOpen) {
             LayoutInsertDropdown();
@@ -190,6 +203,7 @@ void ProcessLayoutActions(Editor& editor) {
     }
 
     // One error string is shared by the handlers, as before.
+    ProcessHistoryRequests(editor);
     ProcessMathMenuSelection(editor);
     ProcessMathMenuTriggers();
 
