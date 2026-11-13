@@ -105,11 +105,13 @@ if(APPLE)
     "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
 endif()
 
-# Copy assets next to the binary so the app can load them at runtime.
+# Copy assets next to the binary on every build; POST_BUILD alone misses
+# asset-only changes when the executable itself is already up to date.
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/assets)
-  add_custom_command(TARGET mplusplus POST_BUILD
+  add_custom_target(mplusplus_copy_assets
     COMMAND ${CMAKE_COMMAND} -E copy_directory
       ${CMAKE_CURRENT_SOURCE_DIR}/assets $<TARGET_FILE_DIR:mplusplus>/assets)
+  add_dependencies(mplusplus mplusplus_copy_assets)
 endif()
 
 # --- Tests ------------------------------------------------------------------
