@@ -258,12 +258,18 @@ bool FileMpp::HandleInput(const EditorView& view) {
         SelectAll();
         changed = true;
     }
-    // Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes. Held keys repeat.
+    // Use Command on macOS and Control elsewhere for undo/redo.
+#if defined(__APPLE__)
+    const bool historyModifier = IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER);
+#else
+    const bool historyModifier = ctrl;
+#endif
+    // Modifier+Z undoes; Modifier+Y or Modifier+Shift+Z redoes. Held keys repeat.
     auto pressed = [](int key) { return IsKeyPressed(key) || IsKeyPressedRepeat(key); };
-    if (ctrl && pressed(KEY_Z)) {
+    if (historyModifier && pressed(KEY_Z)) {
         changed |= shift ? Redo() : Undo();
     }
-    if (ctrl && pressed(KEY_Y)) {
+    if (historyModifier && pressed(KEY_Y)) {
         changed |= Redo();
     }
     for (const int key : {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE}) {
