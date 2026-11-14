@@ -7,153 +7,184 @@ using test::RoundTrip;
 
 // --- Text -------------------------------------------------------------------
 
-TEST(Parser, EmptyInputHasNoNodes) {
+TEST(Parser,
+     EmptyInputHasNoNodes) {
     EXPECT_EQ(ParseAndDescribe(""), "");
 }
 
-TEST(Parser, AdjacentTextIsMerged) {
+TEST(Parser,
+     AdjacentTextIsMerged) {
     EXPECT_EQ(ParseAndDescribe("x + y = 2"), R"(text("x + y = 2"))");
 }
 
-TEST(Parser, UnknownCommandIsText) {
+TEST(Parser,
+     UnknownCommandIsText) {
     EXPECT_EQ(ParseAndDescribe("a\\cdot b"), R"(text("a\cdot b"))");
 }
 
 // --- Greek ------------------------------------------------------------------
 
-TEST(Parser, GreekLetter) {
+TEST(Parser,
+     GreekLetter) {
     EXPECT_EQ(ParseAndDescribe("\\alpha"), "greek(alpha)");
 }
 
-TEST(Parser, EveryGreekLetterParses) {
-    for (int i = GreekNode::alpha; i <= GreekNode::omega; ++i) {
+TEST(Parser,
+     EveryGreekLetterParses) {
+    for (int i = GreekNode::GREEK_ALPHA; i <= GreekNode::GREEK_OMEGA; ++i) {
         const auto symbol = static_cast<GreekNode::GreekSymbolType>(i);
         const std::string name(GreekNode::SymbolName(symbol));
         EXPECT_EQ(ParseAndDescribe("\\" + name), "greek(" + name + ")");
     }
 }
 
-TEST(Parser, GreekLetterBetweenText) {
+TEST(Parser,
+     GreekLetterBetweenText) {
     EXPECT_EQ(ParseAndDescribe("2\\pi r"), R"(text("2"), greek(pi), text(" r"))");
 }
 
-TEST(Parser, GreekPrefixIsNotGreek) {
+TEST(Parser,
+     GreekPrefixIsNotGreek) {
     // \alphax is one unknown command, not \alpha followed by x.
     EXPECT_EQ(ParseAndDescribe("\\alphax"), R"(text("\alphax"))");
 }
 
 // --- Fractions --------------------------------------------------------------
 
-TEST(Parser, Fraction) {
+TEST(Parser,
+     Fraction) {
     EXPECT_EQ(ParseAndDescribe("\\frac{a}{b}"), R"(frac(line(text("a")), line(text("b"))))");
 }
 
-TEST(Parser, FractionWithEmptyArguments) {
+TEST(Parser,
+     FractionWithEmptyArguments) {
     EXPECT_EQ(ParseAndDescribe("\\frac{}{}"), "frac(line(), line())");
 }
 
-TEST(Parser, NestedFraction) {
+TEST(Parser,
+     NestedFraction) {
     EXPECT_EQ(ParseAndDescribe("\\frac{\\frac{1}{x}}{\\beta}"),
               R"(frac(line(frac(line(text("1")), line(text("x")))), line(greek(beta))))");
 }
 
-TEST(Parser, FractionAllowsSpaceBeforeArguments) {
+TEST(Parser,
+     FractionAllowsSpaceBeforeArguments) {
     EXPECT_EQ(ParseAndDescribe("\\frac {a} {b}"), R"(frac(line(text("a")), line(text("b"))))");
 }
 
-TEST(Parser, FractionMissingArgumentIsText) {
+TEST(Parser,
+     FractionMissingArgumentIsText) {
     EXPECT_EQ(ParseAndDescribe("\\frac{a}"), R"(text("\frac"), group(text("a")))");
     EXPECT_EQ(ParseAndDescribe("\\frac"), R"(text("\frac"))");
 }
 
 // --- Square roots -----------------------------------------------------------
 
-TEST(Parser, SquareRoot) {
+TEST(Parser,
+     SquareRoot) {
     EXPECT_EQ(ParseAndDescribe("\\sqrt{x}"), R"(sqrt(line(text("x"))))");
 }
 
-TEST(Parser, NthRoot) {
+TEST(Parser,
+     NthRoot) {
     EXPECT_EQ(ParseAndDescribe("\\sqrt[3]{x}"), R"(sqrt[line(text("3"))](line(text("x"))))");
 }
 
-TEST(Parser, RootContainingBracesAndBrackets) {
+TEST(Parser,
+     RootContainingBracesAndBrackets) {
     EXPECT_EQ(ParseAndDescribe("\\sqrt[{n]}]{x}"),
               R"(sqrt[line(group(text("n]")))](line(text("x"))))");
 }
 
-TEST(Parser, SqrtUnclosedRootIsText) {
+TEST(Parser,
+     SqrtUnclosedRootIsText) {
     EXPECT_EQ(ParseAndDescribe("\\sqrt[3{x}"), R"(text("\sqrt[3"), group(text("x")))");
 }
 
-TEST(Parser, SqrtMissingArgumentIsText) {
+TEST(Parser,
+     SqrtMissingArgumentIsText) {
     EXPECT_EQ(ParseAndDescribe("\\sqrt x"), R"(text("\sqrt x"))");
 }
 
 // --- Groups -----------------------------------------------------------------
 
-TEST(Parser, BareGroup) {
+TEST(Parser,
+     BareGroup) {
     EXPECT_EQ(ParseAndDescribe("x^{2}"), R"(text("x^"), group(text("2")))");
 }
 
-TEST(Parser, UnclosedGroupIsText) {
+TEST(Parser,
+     UnclosedGroupIsText) {
     EXPECT_EQ(ParseAndDescribe("{a"), R"(text("{a"))");
 }
 
-TEST(Parser, StrayClosingBraceIsText) {
+TEST(Parser,
+     StrayClosingBraceIsText) {
     EXPECT_EQ(ParseAndDescribe("a}b"), R"(text("a}b"))");
 }
 
 // --- Matrices ---------------------------------------------------------------
 
-TEST(Parser, Matrix) {
+TEST(Parser,
+     Matrix) {
     EXPECT_EQ(ParseAndDescribe("\\begin{matrix}a&b\\\\c&d\\end{matrix}"),
               R"(matrix[[line(text("a")), line(text("b"))], )"
               R"([line(text("c")), line(text("d"))]])");
 }
 
-TEST(Parser, MatrixVariantsKeepEnvironment) {
+TEST(Parser,
+     MatrixVariantsKeepEnvironment) {
     for (const char* environment : {"pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"}) {
-        const std::string env = environment;
-        EXPECT_EQ(ParseAndDescribe("\\begin{" + env + "}1\\end{" + env + "}"),
-                  env + R"([[line(text("1"))]])");
+        const std::string environmentName = environment;
+        EXPECT_EQ(
+            ParseAndDescribe("\\begin{" + environmentName + "}1\\end{" + environmentName + "}"),
+            environmentName + R"([[line(text("1"))]])");
     }
 }
 
-TEST(Parser, MatrixCellsCanContainNodes) {
+TEST(Parser,
+     MatrixCellsCanContainNodes) {
     EXPECT_EQ(ParseAndDescribe("\\begin{pmatrix}\\frac{1}{2}&\\alpha\\end{pmatrix}"),
               R"(pmatrix[[line(frac(line(text("1")), line(text("2")))), line(greek(alpha))]])");
 }
 
-TEST(Parser, MatrixWithEmptyCells) {
+TEST(Parser,
+     MatrixWithEmptyCells) {
     EXPECT_EQ(ParseAndDescribe("\\begin{matrix}&\\end{matrix}"), "matrix[[line(), line()]]");
 }
 
-TEST(Parser, NestedMatrix) {
-    EXPECT_EQ(ParseAndDescribe(
-                  "\\begin{bmatrix}\\begin{matrix}a\\end{matrix}&b\\end{bmatrix}"),
+TEST(Parser,
+     NestedMatrix) {
+    EXPECT_EQ(ParseAndDescribe("\\begin{bmatrix}\\begin{matrix}a\\end{matrix}&b\\end{bmatrix}"),
               R"(bmatrix[[line(matrix[[line(text("a"))]]), line(text("b"))]])");
 }
 
-TEST(Parser, AmpersandInsideGroupInMatrixStaysInCell) {
+TEST(Parser,
+     AmpersandInsideGroupInMatrixStaysInCell) {
     EXPECT_EQ(ParseAndDescribe("\\begin{matrix}{a&b}\\end{matrix}"),
               R"(matrix[[line(group(text("a&b")))]])");
 }
 
-TEST(Parser, MatrixWithoutEndIsText) {
-    EXPECT_EQ(ParseAndDescribe("\\begin{matrix}a&b"), R"(text("\begin"), group(text("matrix")), text("a&b"))");
+TEST(Parser,
+     MatrixWithoutEndIsText) {
+    EXPECT_EQ(ParseAndDescribe("\\begin{matrix}a&b"),
+              R"(text("\begin"), group(text("matrix")), text("a&b"))");
 }
 
-TEST(Parser, MismatchedEndIsText) {
+TEST(Parser,
+     MismatchedEndIsText) {
     EXPECT_EQ(ParseAndDescribe("\\begin{matrix}a\\end{pmatrix}"),
               R"(text("\begin"), group(text("matrix")), text("a\end"), group(text("pmatrix")))");
 }
 
-TEST(Parser, UnknownEnvironmentIsText) {
+TEST(Parser,
+     UnknownEnvironmentIsText) {
     EXPECT_EQ(ParseAndDescribe("\\begin{align}x\\end{align}"),
               R"(text("\begin"), group(text("align")), text("x\end"), group(text("align")))");
 }
 
-TEST(Parser, AmpersandOutsideMatrixIsText) {
+TEST(Parser,
+     AmpersandOutsideMatrixIsText) {
     EXPECT_EQ(ParseAndDescribe("a & b"), R"(text("a & b"))");
 }
 
@@ -162,7 +193,8 @@ TEST(Parser, AmpersandOutsideMatrixIsText) {
 
 class ParserRoundTrip : public ::testing::TestWithParam<const char*> {};
 
-TEST_P(ParserRoundTrip, ToTextReproducesSource) {
+TEST_P(ParserRoundTrip,
+       ToTextReproducesSource) {
     EXPECT_EQ(RoundTrip(GetParam()), GetParam());
 }
 

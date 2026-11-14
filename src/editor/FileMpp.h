@@ -17,8 +17,8 @@ class TextNode;
 
 // An M++ (.mpp) document currently open in the M++ editor.
 struct FileMpp : FileBase {
-    // Raw LaTeX/M++ source as read from disk. Kept so the file round-trips on
-    // save until the node tree can be serialized back to text.
+    // LaTeX/M++ source used for saving. Preserve the original bytes after loading;
+    // after an edit, regenerate this from the node tree in UpdateSource().
     std::string source;
 
     // Parsed document: one LineNode per source line, each normalized (see
@@ -44,19 +44,19 @@ struct FileMpp : FileBase {
 
     // What Backspace does next to a fraction/root/matrix. A setting later;
     // for now the default from EditorSettings.h.
-    editor_settings::StructureBackspace backspaceMode = editor_settings::structureBackspace;
+    editor_settings::StructureBackspace backspaceMode = editor_settings::STRUCTURE_BACKSPACE;
 
     // Something marked in red, deleted by pressing the same key again.
     struct PendingDelete {
-        CursorPath node;  // the node (Whole) or the matrix (Row/Column)
-        DeleteHighlight::Part part = DeleteHighlight::Part::Whole;
+        CursorPath node;  // the node (WHOLE) or the matrix (ROW/COLUMN)
+        DeleteHighlight::Part part = DeleteHighlight::Part::WHOLE;
         std::size_t row = 0;
         std::size_t column = 0;
         int key = 0;  // KEY_BACKSPACE or KEY_DELETE
     };
 
     // The wheel around a matrix cell for inserting a row or column.
-    enum class WheelDirection { Up, Down, Left, Right };
+    enum class WheelDirection { UP, DOWN, LEFT, RIGHT };
     struct InsertWheel {
         CursorPath matrix;
         std::size_t row = 0;
@@ -66,10 +66,13 @@ struct FileMpp : FileBase {
 
     FileMpp();
 
-    bool Load(const std::filesystem::path& path, std::string& error) override;
-    bool Save(const std::filesystem::path& path, std::string& error) override;
+    bool Load(const std::filesystem::path& path,
+              std::string& error) override;
+    bool Save(const std::filesystem::path& path,
+              std::string& error) override;
 
-    // Replace the document with parsed `text` and put the cursor at the start.
+    // Parse `text`, replace the document, reset the cursor and clear undo history.
+    // This does not set the saved snapshot or modified flag; Load() handles those.
     void SetSource(std::string text);
 
     // The document serialized back to M++ source.
@@ -80,7 +83,9 @@ struct FileMpp : FileBase {
     // Handle a key (raylib KEY_*): arrows, Backspace, Delete, Enter, Tab, Escape.
     // `measure` may be null (e.g. in tests); then Up/Down land at the start of
     // the target. Returns true if the cursor, content or highlights changed.
-    bool PressKey(int key, bool shift, const TextMeasure* measure);
+    bool PressKey(int key,
+                  bool shift,
+                  const TextMeasure* measure);
 
     // Type a character at the cursor. A backslash asks for the math popup
     // instead (see TakeMathMenuRequest). Returns true if anything changed.
@@ -94,7 +99,9 @@ struct FileMpp : FileBase {
 
     // Place the cursor using screen coordinates from the latest layout.
     // Returns false if no rendered position is available.
-    bool ClickAt(float x, float y, const TextMeasure* measure);
+    bool ClickAt(float x,
+                 float y,
+                 const TextMeasure* measure);
 
     // --- Selection (fileMppSelection.cpp) ----------------------------------------
 
@@ -118,21 +125,31 @@ struct FileMpp : FileBase {
 
     // The cursor position nearest to a screen point, from the last layout.
     // Used by ClickAt and by drag-selecting. In fileMppView.cpp.
-    std::optional<CursorPath> PositionAt(float x, float y, const TextMeasure* measure) const;
+    std::optional<CursorPath> PositionAt(float x,
+                                         float y,
+                                         const TextMeasure* measure) const;
 
     // --- Undo and redo (fileMppHistory.cpp) ---------------------------------------
     //
     // Each step holds copies of only the rows an edit changed, so history stays
-    // small however large the document is. Typing (and Backspace/Delete on
-    // characters) in one place is grouped into one step per word.
+    // proportional to the affected rows. Contiguous typing groups through the next space;
+    // consecutive character deletions in the same row can span word boundaries.
 
     bool Undo() override;
     bool Redo() override;
-    bool CanUndo() const override { return !undo_.empty(); }
-    bool CanRedo() const override { return !redo_.empty(); }
+    bool CanUndo() const override {
+        return !undo_.empty();
+    }
+    bool CanRedo() const override {
+        return !redo_.empty();
+    }
 
-    const std::optional<PendingDelete>& GetPendingDelete() const { return pendingDelete_; }
-    const std::optional<InsertWheel>& GetInsertWheel() const { return insertWheel_; }
+    const std::optional<PendingDelete>& GetPendingDelete() const {
+        return pendingDelete_;
+    }
+    const std::optional<InsertWheel>& GetInsertWheel() const {
+        return insertWheel_;
+    }
 
     // --- Tree lookup -------------------------------------------------------------------
 
@@ -141,7 +158,8 @@ struct FileMpp : FileBase {
 
     // The node that `path` ends in and the offset into it, or null if the path
     // doesn't lead to a TextNode.
-    TextNode* CursorText(const CursorPath& path, std::size_t* offset = nullptr) const;
+    TextNode* CursorText(const CursorPath& path,
+                         std::size_t* offset = nullptr) const;
 
     // The innermost fraction/root/matrix holding the cursor (outlined in green).
     const EditorNode* ActiveStructure() const;
@@ -175,7 +193,7 @@ private:
     // --- Undo history (fileMppHistory.cpp) ---
 
     // Edits that can be grouped with the previous step of the same kind.
-    enum class EditKind { Other, Typing, Deleting };
+    enum class EditKind { OTHER, TYPING, DELETING };
 
     struct UndoStep {
         std::size_t firstRow = 0;
@@ -195,18 +213,24 @@ private:
         std::vector<std::unique_ptr<LineNode>> rows;
         std::vector<std::string> texts;
         CursorPath cursor, anchor;
-        EditKind kind = EditKind::Other;
+        EditKind kind = EditKind::OTHER;
         bool endsGroup = false;
     };
 
     // Brackets one user action (a key, a typed character, an insert) so all
-    // the changes it makes become a single undo step. Nests.
+    // the changes it makes become a single undo step. Nested scopes share the outer
+    // snapshot, so replacing a selection does not create an extra undo step.
     class EditScope {
     public:
-        EditScope(FileMpp& file, EditKind kind, bool endsGroup = false) : file_(file) {
+        EditScope(FileMpp& file,
+                  EditKind kind,
+                  bool endsGroup = false)
+            : file_(file) {
             file_.BeginEdit(kind, endsGroup);
         }
-        ~EditScope() { file_.EndEdit(); }
+        ~EditScope() {
+            file_.EndEdit();
+        }
         EditScope(const EditScope&) = delete;
         EditScope& operator=(const EditScope&) = delete;
 
@@ -214,7 +238,7 @@ private:
         FileMpp& file_;
     };
 
-    static constexpr std::size_t maxUndoSteps = 1000;
+    static constexpr std::size_t MAX_UNDO_STEPS = 1000;
 
     std::deque<UndoStep> undo_;
     std::deque<UndoStep> redo_;
@@ -226,7 +250,8 @@ private:
     // The text last loaded or saved; nullopt for a file never saved.
     std::optional<std::string> savedSource_;
 
-    void BeginEdit(EditKind kind, bool endsGroup);
+    void BeginEdit(EditKind kind,
+                   bool endsGroup);
     void EndEdit();
     void UpdateSource();
     void ClearHistory();
@@ -237,14 +262,16 @@ private:
     std::optional<Clay_BoundingBox> CaretBox(const TextMeasure* measure) const;
     void DrawInsertWheel(const EditorView& view) const;
     void DrawSelection(const EditorView& view) const;
-    bool HandleMouse(const EditorView& view, const TextMeasure& measure);
+    bool HandleMouse(const EditorView& view,
+                     const TextMeasure& measure);
 
     void ResetCursorIfInvalid();
 
     // Called by every edit: the content changed and `source` must be updated.
     // Inside an EditScope this is done once at the end, with an undo step.
     void MarkEdited();
-    bool RequestDelete(CursorPath node, int key);
+    bool RequestDelete(CursorPath node,
+                       int key);
     bool DeleteNodeAt(const CursorPath& node);
     bool ApplyPendingDelete();
     bool HandleWheelKey(int key);

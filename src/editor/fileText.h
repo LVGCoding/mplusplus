@@ -1,7 +1,7 @@
 #pragma once
 
-#include "TextBuffer.h"
 #include "fileBase.h"
+#include "TextBuffer.h"
 
 #include <filesystem>
 #include <optional>
@@ -13,21 +13,39 @@
 // fileTextView.cpp. All the editing (text, cursor, selection, keys, undo,
 // clipboard) comes from TextBuffer, which the UI's text boxes use too.
 struct FileText : FileBase, TextBuffer {
-    bool Load(const std::filesystem::path& path, std::string& error) override;
-    bool Save(const std::filesystem::path& path, std::string& error) override;
+    bool Load(const std::filesystem::path& path,
+              std::string& error) override;
+    bool Save(const std::filesystem::path& path,
+              std::string& error) override;
 
     // FileBase's undo interface (used by the Edit menu), done by TextBuffer.
-    bool Undo() override { return TextBuffer::Undo(); }
-    bool Redo() override { return TextBuffer::Redo(); }
-    bool CanUndo() const override { return TextBuffer::CanUndo(); }
-    bool CanRedo() const override { return TextBuffer::CanRedo(); }
+    bool Undo() override {
+        return TextBuffer::Undo();
+    }
+    bool Redo() override {
+        return TextBuffer::Redo();
+    }
+    bool CanUndo() const override {
+        return TextBuffer::CanUndo();
+    }
+    bool CanRedo() const override {
+        return TextBuffer::CanRedo();
+    }
 
     // FileBase's clipboard interface (used by the Edit menu), done by TextBuffer.
-    std::string SelectedText() const override { return TextBuffer::SelectedText(); }
-    bool PasteText(std::string text) override { return TextBuffer::PasteText(std::move(text)); }
-    bool DeleteSelection() override { return TextBuffer::DeleteSelection(); }
+    std::string SelectedText() const override {
+        return TextBuffer::SelectedText();
+    }
+    bool PasteText(std::string text) override {
+        return TextBuffer::PasteText(std::move(text));
+    }
+    bool DeleteSelection() override {
+        return TextBuffer::DeleteSelection();
+    }
     // Both bases have one; they agree, TextBuffer's doesn't copy the text.
-    bool HasSelection() const { return TextBuffer::HasSelection(); }
+    bool HasSelection() const {
+        return TextBuffer::HasSelection();
+    }
 
     bool HandleInput(const EditorView& view) override;
     void LayoutContent() const override;
@@ -54,5 +72,11 @@ private:
 };
 
 // Shared helpers for reading/writing a whole file as raw bytes.
-bool ReadWholeFile(const std::filesystem::path& path, std::string& text, std::string& error);
-bool WriteWholeFile(const std::filesystem::path& path, const std::string& text, std::string& error);
+// Both return false with an error message on failure. Reading replaces `text` only
+// after success; writing leaves the supplied text unchanged even if the disk write fails.
+bool ReadWholeFile(const std::filesystem::path& path,
+                   std::string& text,
+                   std::string& error);
+bool WriteWholeFile(const std::filesystem::path& path,
+                    const std::string& text,
+                    std::string& error);

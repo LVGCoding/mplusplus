@@ -14,8 +14,10 @@ TextNode* AsText(const std::unique_ptr<EditorNode>& node) {
 }
 }  // namespace
 
-LineNode::LineNode(std::vector<std::unique_ptr<EditorNode>> children, bool braced)
-    : children_(std::move(children)), braced_(braced) {}
+LineNode::LineNode(std::vector<std::unique_ptr<EditorNode>> children,
+                   bool braced)
+    : children_(std::move(children)),
+      braced_(braced) {}
 
 std::unique_ptr<EditorNode> LineNode::EnsureLine(std::unique_ptr<EditorNode> node) {
     if (!node) {
@@ -33,7 +35,8 @@ void LineNode::AddChild(std::unique_ptr<EditorNode> child) {
     children_.push_back(std::move(child));
 }
 
-void LineNode::InsertChild(std::size_t index, std::unique_ptr<EditorNode> child) {
+void LineNode::InsertChild(std::size_t index,
+                           std::unique_ptr<EditorNode> child) {
     if (index > children_.size()) {
         index = children_.size();
     }
@@ -58,7 +61,8 @@ bool LineNode::IsBraced() const {
     return braced_;
 }
 
-std::size_t LineNode::InsertAtText(std::size_t textIndex, std::size_t offset,
+std::size_t LineNode::InsertAtText(std::size_t textIndex,
+                                   std::size_t offset,
                                    std::unique_ptr<EditorNode> node) {
     auto* text = AsText(children_.at(textIndex));
     const std::string& whole = text->GetText();
@@ -84,7 +88,8 @@ CursorPath LineNode::RemoveAndJoin(std::size_t index) {
     return {left, offset};
 }
 
-std::unique_ptr<LineNode> LineNode::SplitAt(std::size_t textIndex, std::size_t offset) {
+std::unique_ptr<LineNode> LineNode::SplitAt(std::size_t textIndex,
+                                            std::size_t offset) {
     auto* text = AsText(children_.at(textIndex));
     const std::string& whole = text->GetText();
     offset = std::min(offset, whole.size());
@@ -124,18 +129,20 @@ bool LineNode::IsEmpty() const {
 void LineNode::Render(const RenderContext& context) {
     if (IsEmpty()) {
         const float size = context.fontSize;
-        CLAY(GetClayId(),
-             {.layout = {.sizing = {CLAY_SIZING_FIXED(std::round(size * 0.6f)),
-                                    CLAY_SIZING_FIXED(std::round(size))},
-                         .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER}},
-              .border = {.color = node_style::placeholderColor, .width = CLAY_BORDER_OUTSIDE(1)}}) {
+        CLAY(
+            GetClayId(),
+            {.layout = {.sizing = {CLAY_SIZING_FIXED(std::round(size * 0.6f)),
+                                   CLAY_SIZING_FIXED(std::round(size))},
+                        .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER}},
+             .border = {.color = node_style::PLACEHOLDER_COLOR, .width = CLAY_BORDER_OUTSIDE(1)}}) {
             RenderChildren(context);
         }
         return;
     }
-    CLAY(GetClayId(), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
-                                  .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
+    CLAY(GetClayId(),
+         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                     .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
+                     .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
         RenderChildren(context);
     }
 }
@@ -144,11 +151,11 @@ void LineNode::Render(const RenderContext& context) {
 void LineNode::RenderChildren(const RenderContext& context) {
     const DeleteHighlight& marked = context.deleteHighlight;
     for (const auto& child : children_) {
-        if (marked.node == child.get() && marked.part == DeleteHighlight::Part::Whole) {
-            CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)}},
-                          .backgroundColor = node_style::deleteFillColor,
-                          .border = {.color = node_style::deleteColor,
-                                     .width = CLAY_BORDER_OUTSIDE(1)}}) {
+        if (marked.node == child.get() && marked.part == DeleteHighlight::Part::WHOLE) {
+            CLAY_AUTO_ID(
+                {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)}},
+                 .backgroundColor = node_style::DELETE_FILL_COLOR,
+                 .border = {.color = node_style::DELETE_COLOR, .width = CLAY_BORDER_OUTSIDE(1)}}) {
                 child->Render(context);
             }
         } else {
@@ -165,9 +172,9 @@ KeyResult LineNode::KeyPress(const KeyEvent& event) {
     KeyResult result = children_[index]->KeyPress(event.Descend(1));
 
     switch (result.kind) {
-    case KeyResult::Kind::Moved:
+    case KeyResult::Kind::MOVED:
         return std::move(result).Prepend({index});
-    case KeyResult::Kind::ExitRight:
+    case KeyResult::Kind::EXIT_RIGHT:
         // Enter the next child that can hold the cursor; symbols are skipped,
         // which puts the cursor in the text just after them.
         for (std::size_t next = index + 1; next < children_.size(); ++next) {
@@ -176,16 +183,16 @@ KeyResult LineNode::KeyPress(const KeyEvent& event) {
             }
         }
         return result;
-    case KeyResult::Kind::ExitLeft:
+    case KeyResult::Kind::EXIT_LEFT:
         for (std::size_t previous = index; previous-- > 0;) {
             if (auto position = children_[previous]->LastPosition(); !position.empty()) {
                 return KeyResult::Moved(JoinPath({previous}, std::move(position)));
             }
         }
         return result;
-    case KeyResult::Kind::DeleteSelf:
-        return KeyResult::WithPath(KeyResult::Kind::DeleteNode, {index});
-    case KeyResult::Kind::DeleteLeft:
+    case KeyResult::Kind::DELETE_SELF:
+        return KeyResult::WithPath(KeyResult::Kind::DELETE_NODE, {index});
+    case KeyResult::Kind::DELETE_LEFT:
         if (index == 0) {
             return result;
         }
@@ -193,15 +200,15 @@ KeyResult LineNode::KeyPress(const KeyEvent& event) {
             // Backspace at the start of a {...} group just steps out of it.
             return KeyResult::Moved(JoinPath({index - 1}, children_[index - 1]->LastPosition()));
         }
-        return KeyResult::WithPath(KeyResult::Kind::DeleteNode, {index - 1});
-    case KeyResult::Kind::DeleteRight:
+        return KeyResult::WithPath(KeyResult::Kind::DELETE_NODE, {index - 1});
+    case KeyResult::Kind::DELETE_RIGHT:
         if (index + 1 >= children_.size()) {
             return result;
         }
         if (!AsText(children_[index])) {
             return KeyResult::Moved(JoinPath({index + 1}, children_[index + 1]->FirstPosition()));
         }
-        return KeyResult::WithPath(KeyResult::Kind::DeleteNode, {index + 1});
+        return KeyResult::WithPath(KeyResult::Kind::DELETE_NODE, {index + 1});
     default:
         // Up/Down are for the enclosing structure or row; paths get our index.
         return std::move(result).Prepend({index});
@@ -210,11 +217,15 @@ KeyResult LineNode::KeyPress(const KeyEvent& event) {
 
 void LineNode::MouseClick() {}
 
-std::pair<float, float> LineNode::GetNWCorner() {
+std::pair<float,
+          float>
+LineNode::GetNWCorner() {
     return {0.0f, 0.0f};
 }
 
-std::pair<float, float> LineNode::GetSize() {
+std::pair<float,
+          float>
+LineNode::GetSize() {
     return {0.0f, 0.0f};
 }
 
@@ -256,7 +267,8 @@ CursorPath LineNode::LastPosition() const {
 
 // Pick the child drawn nearest to x. A symbol the cursor can't enter resolves
 // to the text on whichever side of it x is closer to.
-CursorPath LineNode::PositionNearX(float x, VerticalEntry entry,
+CursorPath LineNode::PositionNearX(float x,
+                                   VerticalEntry entry,
                                    const TextMeasure* measure) const {
     std::size_t best = children_.size();
     float bestDistance = std::numeric_limits<float>::max();
@@ -294,8 +306,10 @@ CursorPath LineNode::PositionNearX(float x, VerticalEntry entry,
     return LastPosition();
 }
 
-CursorPath LineNode::EraseRange(std::size_t startIndex, std::size_t startOffset,
-                                std::size_t endIndex, std::size_t endOffset) {
+CursorPath LineNode::EraseRange(std::size_t startIndex,
+                                std::size_t startOffset,
+                                std::size_t endIndex,
+                                std::size_t endOffset) {
     auto* first = AsText(children_.at(startIndex));
     auto* last = AsText(children_.at(endIndex));
     std::string joined = first->GetText().substr(0, std::min(startOffset, first->GetText().size()));
@@ -308,7 +322,8 @@ CursorPath LineNode::EraseRange(std::size_t startIndex, std::size_t startOffset,
     return {startIndex, startOffset};
 }
 
-EditorNode* LineNode::PathChild(PathView path, std::size_t& used) const {
+EditorNode* LineNode::PathChild(PathView path,
+                                std::size_t& used) const {
     if (path.empty() || path[0] >= children_.size()) {
         return nullptr;
     }
@@ -317,6 +332,8 @@ EditorNode* LineNode::PathChild(PathView path, std::size_t& used) const {
 }
 
 void LineNode::Normalize() {
+    // Preserve text order while adding empty insertion points around non-text nodes.
+    // Rebuilding the child list can change indices; callers must update cursor paths.
     std::vector<std::unique_ptr<EditorNode>> normalized;
     normalized.reserve(children_.size() * 2 + 1);
     for (auto& child : children_) {

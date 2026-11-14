@@ -18,7 +18,8 @@ private:
     std::vector<Row> cells_;
 
     // Clay id of the element around a cell, stable across frames.
-    Clay_ElementId CellId(std::size_t row, std::size_t column) const;
+    Clay_ElementId CellId(std::size_t row,
+                          std::size_t column) const;
 
     // LaTeX environment name, e.g. "matrix" or "pmatrix".
     std::string environment_ = "matrix";
@@ -27,7 +28,8 @@ public:
     // A new, empty 2x2 matrix.
     MatrixNode();
 
-    MatrixNode(std::string environment, std::vector<Row> cells);
+    MatrixNode(std::string environment,
+               std::vector<Row> cells);
 
     ~MatrixNode() override = default;
 
@@ -38,35 +40,45 @@ public:
 
     std::string ToText() const override;
 
-    std::pair<float, float> GetNWCorner() override;
+    std::pair<float,
+              float>
+    GetNWCorner() override;
 
-    std::pair<float, float> GetSize() override;
+    std::pair<float,
+              float>
+    GetSize() override;
 
     bool HasChild() override;
 
     // Arrows move between neighbouring cells; at the matrix's edge the exit is
-    // passed up. Backspace at the start of a cell reports MatrixLine (delete
-    // its row/column) and Enter reports MatrixInsert (open the insert wheel).
+    // passed up. Backspace at the start of a cell reports MATRIX_LINE (delete
+    // its row/column) and Enter reports MATRIX_INSERT (open the insert wheel).
     KeyResult KeyPress(const KeyEvent& event) override;
     CursorPath FirstPosition() const override;
     CursorPath LastPosition() const override;
-    CursorPath PositionNearX(float x, VerticalEntry entry,
+    CursorPath PositionNearX(float x,
+                             VerticalEntry entry,
                              const TextMeasure* measure) const override;
-    EditorNode* PathChild(PathView path, std::size_t& used) const override;
-    bool OutlinesSlots() const override { return true; }
+    EditorNode* PathChild(PathView path,
+                          std::size_t& used) const override;
+    bool OutlinesSlots() const override {
+        return true;
+    }
     void Normalize() override;
 
     std::size_t RowCount() const;
 
     std::size_t ColumnCount(std::size_t row) const;
 
-    EditorNode* GetCell(std::size_t row, std::size_t column) const;
+    EditorNode* GetCell(std::size_t row,
+                        std::size_t column) const;
 
     // Widest row's column count.
     std::size_t MaxColumnCount() const;
 
     // Screen box of a cell from the last frame's layout.
-    std::optional<Clay_BoundingBox> CellBounds(std::size_t row, std::size_t column) const;
+    std::optional<Clay_BoundingBox> CellBounds(std::size_t row,
+                                               std::size_t column) const;
 
     // Insert an empty row before `row` (0..RowCount()), as wide as the widest row.
     void InsertRow(std::size_t row);

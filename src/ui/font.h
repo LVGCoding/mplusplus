@@ -1,15 +1,12 @@
 #pragma once
 
-#include <cstdlib>
-#include <cstdint>
-
 #include "raylib.h"
 
-enum FontId : uint16_t { 
-  FONT_BODY = 0,
-  FONT_BOLD = 1, 
-  FONT_COUNT 
-};
+#include <cstdint>
 
+enum FontId : uint16_t { FONT_BODY = 0, FONT_BOLD = 1, FONT_COUNT };
+
+// Load the fonts indexed by FontId; reload after a display DPI change.
 void LoadFontTable(Font fonts[]);
+// Call while the graphics context is still alive.
 void UnloadFontTable(Font fonts[]);

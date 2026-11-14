@@ -12,58 +12,59 @@
 #include <utility>
 
 namespace {
-bool IsDelimiter(char c) {
-    return c == '{' || c == '}' || c == '[' || c == ']' || c == '&';
+bool IsDelimiter(char character) {
+    return character == '{' || character == '}' || character == '[' || character == ']' ||
+           character == '&';
 }
 
-bool IsSpace(char c) {
-    return std::isspace(static_cast<unsigned char>(c)) != 0;
+bool IsSpace(char character) {
+    return std::isspace(static_cast<unsigned char>(character)) != 0;
 }
 
-bool IsLetter(char c) {
-    return std::isalpha(static_cast<unsigned char>(c)) != 0;
+bool IsLetter(char character) {
+    return std::isalpha(static_cast<unsigned char>(character)) != 0;
 }
 
 using NodeList = std::vector<std::unique_ptr<EditorNode>>;
 
 // Where a sequence of nodes is being parsed; decides which token ends it.
 enum class Context {
-    TopLevel,     // ends only at end of input
-    Group,        // ends at "}"
-    OptionalArg,  // ends at "]"
-    MatrixCell,   // ends at "&", "\\" or "\end"
+    TOP_LEVEL,     // ends only at end of input
+    GROUP,         // ends at "}"
+    OPTIONAL_ARG,  // ends at "]"
+    MATRIX_CELL,   // ends at "&", "\\" or "\end"
 };
 
-// Recursive-descent parser over the token list. Every Parse* function that can
-// fail restores `pos_` on failure so the caller can fall back to plain text.
+// Recursive-descent parser over the token list. Command parsers restore position_
+// on failure so ParseSequence() can preserve the malformed command as plain text.
 class TokenParser {
 public:
     explicit TokenParser(const std::vector<std::string>& tokens) : tokens_(tokens) {}
 
     NodeList ParseAll() {
-        return ParseSequence(Context::TopLevel);
+        return ParseSequence(Context::TOP_LEVEL);
     }
 
 private:
     const std::vector<std::string>& tokens_;
-    std::size_t pos_ = 0;
+    std::size_t position_ = 0;
 
     bool AtEnd() const {
-        return pos_ >= tokens_.size();
+        return position_ >= tokens_.size();
     }
 
     const std::string& Peek() const {
-        static const std::string empty;
-        return AtEnd() ? empty : tokens_[pos_];
+        static const std::string EMPTY_TOKEN;
+        return AtEnd() ? EMPTY_TOKEN : tokens_[position_];
     }
 
     bool PeekIs(const char* token) const {
-        return !AtEnd() && tokens_[pos_] == token;
+        return !AtEnd() && tokens_[position_] == token;
     }
 
     void SkipWhitespace() {
-        while (!AtEnd() && !tokens_[pos_].empty() && IsSpace(tokens_[pos_][0])) {
-            ++pos_;
+        while (!AtEnd() && !tokens_[position_].empty() && IsSpace(tokens_[position_][0])) {
+            ++position_;
         }
     }
 
@@ -71,15 +72,15 @@ private:
         if (AtEnd()) {
             return true;
         }
-        const std::string& token = tokens_[pos_];
+        const std::string& token = tokens_[position_];
         switch (context) {
-        case Context::TopLevel:
+        case Context::TOP_LEVEL:
             return false;
-        case Context::Group:
+        case Context::GROUP:
             return token == "}";
-        case Context::OptionalArg:
+        case Context::OPTIONAL_ARG:
             return token == "]";
-        case Context::MatrixCell:
+        case Context::MATRIX_CELL:
             return token == "&" || token == "\\\\" || token == "\\end";
         }
         return false;
@@ -118,7 +119,7 @@ private:
             } else if (token.size() > 1 && token[0] == '\\') {
                 if (auto symbol = GreekNode::SymbolFromName(std::string_view(token).substr(1))) {
                     node = std::make_unique<GreekNode>(*symbol);
-                    ++pos_;
+                    ++position_;
                 }
             }
 
@@ -127,7 +128,7 @@ private:
             } else {
                 // Plain text, an unknown command, or a construct that failed to parse.
                 pendingText += token;
-                ++pos_;
+                ++position_;
             }
         }
 
@@ -135,24 +136,25 @@ private:
         return nodes;
     }
 
-    // Parses "{...}" and returns its contents, or nullptr (with pos_ unchanged)
+    // Parses "{...}" and returns its contents, or nullptr (with position_ unchanged)
     // if the brace is never closed.
     std::unique_ptr<NodeList> ParseBracedGroup() {
-        const std::size_t start = pos_;
+        const std::size_t start = position_;
         if (!PeekIs("{")) {
             return nullptr;
         }
-        ++pos_;
-        auto contents = std::make_unique<NodeList>(ParseSequence(Context::Group));
+        ++position_;
+        auto contents = std::make_unique<NodeList>(ParseSequence(Context::GROUP));
         if (!PeekIs("}")) {
-            pos_ = start;
+            position_ = start;
             return nullptr;
         }
-        ++pos_;
+        ++position_;
         return contents;
     }
 
-    // A required command argument "{...}" as an unbraced LineNode.
+    // A required command argument "{...}" as an unbraced LineNode. The enclosing
+    // command parser restores skipped whitespace if any required argument is missing.
     std::unique_ptr<EditorNode> ParseArgument() {
         SkipWhitespace();
         auto contents = ParseBracedGroup();
@@ -163,73 +165,74 @@ private:
     }
 
     std::unique_ptr<EditorNode> ParseFrac() {
-        const std::size_t start = pos_;
-        ++pos_;  // \frac
+        const std::size_t start = position_;
+        ++position_;  // \frac
         auto numerator = ParseArgument();
         auto denominator = numerator ? ParseArgument() : nullptr;
         if (!numerator || !denominator) {
-            pos_ = start;
+            position_ = start;
             return nullptr;
         }
         return std::make_unique<FracNode>(std::move(numerator), std::move(denominator));
     }
 
     std::unique_ptr<EditorNode> ParseSqrt() {
-        const std::size_t start = pos_;
-        ++pos_;  // \sqrt
+        const std::size_t start = position_;
+        ++position_;  // \sqrt
         SkipWhitespace();
 
         std::unique_ptr<EditorNode> root;
         if (PeekIs("[")) {
-            ++pos_;
-            auto contents = ParseSequence(Context::OptionalArg);
+            ++position_;
+            auto contents = ParseSequence(Context::OPTIONAL_ARG);
             if (!PeekIs("]")) {
-                pos_ = start;
+                position_ = start;
                 return nullptr;
             }
-            ++pos_;
+            ++position_;
             root = std::make_unique<LineNode>(std::move(contents));
         }
 
         auto argument = ParseArgument();
         if (!argument) {
-            pos_ = start;
+            position_ = start;
             return nullptr;
         }
         return std::make_unique<SqrtNode>(std::move(root), std::move(argument));
     }
 
     // Reads "{name}" where name is a single text token, e.g. the "{pmatrix}"
-    // after \begin. Returns an empty string (with pos_ unchanged) on failure.
+    // after \begin. Returns an empty string (with position_ unchanged) on failure.
     std::string ParseEnvironmentName() {
-        const std::size_t start = pos_;
+        const std::size_t start = position_;
         SkipWhitespace();
-        if (pos_ + 2 < tokens_.size() && tokens_[pos_] == "{" && tokens_[pos_ + 2] == "}") {
-            std::string name = tokens_[pos_ + 1];
-            pos_ += 3;
+        if (position_ + 2 < tokens_.size() && tokens_[position_] == "{" &&
+            tokens_[position_ + 2] == "}") {
+            std::string name = tokens_[position_ + 1];
+            position_ += 3;
             return name;
         }
-        pos_ = start;
+        position_ = start;
         return {};
     }
 
     std::unique_ptr<EditorNode> ParseMatrix() {
-        const std::size_t start = pos_;
-        ++pos_;  // \begin
+        const std::size_t start = position_;
+        ++position_;  // \begin
         const std::string environment = ParseEnvironmentName();
         if (!MatrixNode::IsMatrixEnvironment(environment)) {
-            pos_ = start;
+            position_ = start;
             return nullptr;
         }
 
         std::vector<MatrixNode::Row> rows(1);
         while (true) {
-            rows.back().push_back(std::make_unique<LineNode>(ParseSequence(Context::MatrixCell)));
+            rows.back().push_back(std::make_unique<LineNode>(ParseSequence(Context::MATRIX_CELL)));
             if (AtEnd()) {
                 break;  // missing \end
             }
             const std::string token = Peek();
-            ++pos_;
+            ++position_;
             if (token == "&") {
                 continue;
             }
@@ -244,7 +247,7 @@ private:
             break;  // \end of a different environment
         }
 
-        pos_ = start;
+        position_ = start;
         return nullptr;
     }
 };
@@ -259,7 +262,7 @@ std::vector<std::string> Parser::Tokenizer(const std::string& inputText) {
     std::vector<std::string> tokens;
     std::string currentToken;
 
-    auto flush = [&]() {
+    auto flushToken = [&]() {
         if (!currentToken.empty()) {
             tokens.push_back(std::move(currentToken));
             currentToken.clear();
@@ -268,37 +271,39 @@ std::vector<std::string> Parser::Tokenizer(const std::string& inputText) {
 
     std::size_t index = 0;
     while (index < inputText.size()) {
-        const char c = inputText[index];
+        const char character = inputText[index];
 
-        if (c == '\\') {
+        if (character == '\\') {
             // Command: "\name" or a single escaped character like "\\" or "\{".
-            flush();
+            flushToken();
             std::size_t end = index + 1;
             if (end < inputText.size() && IsLetter(inputText[end])) {
-                while (end < inputText.size() && IsLetter(inputText[end]))
+                while (end < inputText.size() && IsLetter(inputText[end])) {
                     ++end;
+                }
             } else if (end < inputText.size()) {
                 ++end;
             }
             tokens.push_back(inputText.substr(index, end - index));
             index = end;
-        } else if (IsDelimiter(c)) {
-            flush();
-            tokens.emplace_back(1, c);
+        } else if (IsDelimiter(character)) {
+            flushToken();
+            tokens.emplace_back(1, character);
             ++index;
-        } else if (IsSpace(c)) {
-            flush();
+        } else if (IsSpace(character)) {
+            flushToken();
             std::size_t end = index;
-            while (end < inputText.size() && IsSpace(inputText[end]))
+            while (end < inputText.size() && IsSpace(inputText[end])) {
                 ++end;
+            }
             tokens.push_back(inputText.substr(index, end - index));
             index = end;
         } else {
-            currentToken += c;
+            currentToken += character;
             ++index;
         }
     }
-    flush();
+    flushToken();
 
     return tokens;
 }

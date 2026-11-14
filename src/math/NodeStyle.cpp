@@ -1,9 +1,8 @@
 #include "NodeStyle.h"
 
+#include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
 #include "ui/font.h"
-
-#include "raylib.h"
 
 #include <cstdint>
 
@@ -11,125 +10,134 @@ namespace node_style {
 
 namespace {
 
-const Color drawColor = {static_cast<unsigned char>(textColor.r),
-                         static_cast<unsigned char>(textColor.g),
-                         static_cast<unsigned char>(textColor.b),
-                         static_cast<unsigned char>(textColor.a)};
+constexpr Color DRAW_COLOR = {static_cast<unsigned char>(TEXT_COLOR.r),
+                              static_cast<unsigned char>(TEXT_COLOR.g),
+                              static_cast<unsigned char>(TEXT_COLOR.b),
+                              static_cast<unsigned char>(TEXT_COLOR.a)};
 
 // Custom draw callbacks only receive their bounds, so the stroke thickness is
 // recovered from the element's width (which is fixed relative to font size).
-float ThicknessFromWidth(float width, float widthScale) {
+float ThicknessFromWidth(float width,
+                         float widthScale) {
     return RuleThickness(width / widthScale);
 }
 
 // The surd: a short tick, a stroke down to the bottom, then a long stroke up to
 // the top-right corner where the overline over the argument begins.
-void DrawRadical(Clay_BoundingBox b) {
-    const float t = ThicknessFromWidth(b.width, radicalWidthScale);
-    const Vector2 a = {b.x, b.y + b.height * 0.62f};
-    const Vector2 tick = {b.x + b.width * 0.2f, b.y + b.height * 0.55f};
-    const Vector2 bottom = {b.x + b.width * 0.5f, b.y + b.height - t * 0.5f};
-    const Vector2 top = {b.x + b.width, b.y + t * 0.5f};
-    DrawLineEx(a, tick, t, drawColor);
-    DrawLineEx(tick, bottom, t * 1.6f, drawColor);
-    DrawLineEx(bottom, top, t, drawColor);
+void DrawRadical(Clay_BoundingBox bounds) {
+    const float thickness = ThicknessFromWidth(bounds.width, RADICAL_WIDTH_SCALE);
+    const Vector2 start = {bounds.x, bounds.y + bounds.height * 0.62f};
+    const Vector2 tick = {bounds.x + bounds.width * 0.2f, bounds.y + bounds.height * 0.55f};
+    const Vector2 bottom = {bounds.x + bounds.width * 0.5f,
+                            bounds.y + bounds.height - thickness * 0.5f};
+    const Vector2 top = {bounds.x + bounds.width, bounds.y + thickness * 0.5f};
+    DrawLineEx(start, tick, thickness, DRAW_COLOR);
+    DrawLineEx(tick, bottom, thickness * 1.6f, DRAW_COLOR);
+    DrawLineEx(bottom, top, thickness, DRAW_COLOR);
 }
 
 // Draw a delimiter described for the left side; `right` mirrors it.
-template <Delimiter Kind, bool Right>
-void DrawDelimiter(Clay_BoundingBox b) {
-    const float t = ThicknessFromWidth(b.width, delimiterWidthScale);
-    // Point at fractions (fx, fy) of the box, mirrored for the right side.
-    auto p = [&](float fx, float fy) -> Vector2 {
-        return {b.x + b.width * (Right ? 1.0f - fx : fx), b.y + b.height * fy};
+template <Delimiter KIND,
+          bool RIGHT>
+void DrawDelimiter(Clay_BoundingBox bounds) {
+    const float thickness = ThicknessFromWidth(bounds.width, DELIMITER_WIDTH_SCALE);
+    // Point at fractions (fractionX, fractionY) of the box, mirrored for the right side.
+    auto pointAt = [&](float fractionX, float fractionY) -> Vector2 {
+        return {bounds.x + bounds.width * (RIGHT ? 1.0f - fractionX : fractionX),
+                bounds.y + bounds.height * fractionY};
     };
-    auto line = [&](Vector2 from, Vector2 to) { DrawLineEx(from, to, t, drawColor); };
+    auto drawLine = [&](Vector2 from, Vector2 to) { DrawLineEx(from, to, thickness, DRAW_COLOR); };
 
-    if constexpr (Kind == Delimiter::Paren) {
-        // Control point placed so the curve's midpoint sits at fx = 0.2.
-        DrawSplineSegmentBezierQuadratic(p(0.8f, 0.0f), p(-0.4f, 0.5f), p(0.8f, 1.0f), t,
-                                         drawColor);
-    } else if constexpr (Kind == Delimiter::Bracket) {
-        line(p(0.75f, 0.0f), p(0.3f, 0.0f));
-        line(p(0.3f, 0.0f), p(0.3f, 1.0f));
-        line(p(0.3f, 1.0f), p(0.75f, 1.0f));
-    } else if constexpr (Kind == Delimiter::Brace) {
-        line(p(0.85f, 0.0f), p(0.5f, 0.06f));
-        line(p(0.5f, 0.06f), p(0.5f, 0.44f));
-        line(p(0.5f, 0.44f), p(0.15f, 0.5f));
-        line(p(0.15f, 0.5f), p(0.5f, 0.56f));
-        line(p(0.5f, 0.56f), p(0.5f, 0.94f));
-        line(p(0.5f, 0.94f), p(0.85f, 1.0f));
-    } else if constexpr (Kind == Delimiter::Bar) {
-        line(p(0.5f, 0.0f), p(0.5f, 1.0f));
-    } else if constexpr (Kind == Delimiter::DoubleBar) {
-        line(p(0.35f, 0.0f), p(0.35f, 1.0f));
-        line(p(0.65f, 0.0f), p(0.65f, 1.0f));
+    if constexpr (KIND == Delimiter::PAREN) {
+        // Control point placed so the curve's midpoint sits at fractionX = 0.2.
+        DrawSplineSegmentBezierQuadratic(
+            pointAt(0.8f, 0.0f), pointAt(-0.4f, 0.5f), pointAt(0.8f, 1.0f), thickness, DRAW_COLOR);
+    } else if constexpr (KIND == Delimiter::BRACKET) {
+        drawLine(pointAt(0.75f, 0.0f), pointAt(0.3f, 0.0f));
+        drawLine(pointAt(0.3f, 0.0f), pointAt(0.3f, 1.0f));
+        drawLine(pointAt(0.3f, 1.0f), pointAt(0.75f, 1.0f));
+    } else if constexpr (KIND == Delimiter::BRACE) {
+        drawLine(pointAt(0.85f, 0.0f), pointAt(0.5f, 0.06f));
+        drawLine(pointAt(0.5f, 0.06f), pointAt(0.5f, 0.44f));
+        drawLine(pointAt(0.5f, 0.44f), pointAt(0.15f, 0.5f));
+        drawLine(pointAt(0.15f, 0.5f), pointAt(0.5f, 0.56f));
+        drawLine(pointAt(0.5f, 0.56f), pointAt(0.5f, 0.94f));
+        drawLine(pointAt(0.5f, 0.94f), pointAt(0.85f, 1.0f));
+    } else if constexpr (KIND == Delimiter::BAR) {
+        drawLine(pointAt(0.5f, 0.0f), pointAt(0.5f, 1.0f));
+    } else if constexpr (KIND == Delimiter::DOUBLE_BAR) {
+        drawLine(pointAt(0.35f, 0.0f), pointAt(0.35f, 1.0f));
+        drawLine(pointAt(0.65f, 0.0f), pointAt(0.65f, 1.0f));
     }
 }
 
 // Clay keeps a pointer to the custom data until rendering, so these must be
 // static.
-const ClayRaylibCustomDraw radicalDraw = {DrawRadical};
+const ClayRaylibCustomDraw RADICAL_DRAW = {DrawRadical};
 
-template <Delimiter Kind, bool Right>
-const ClayRaylibCustomDraw delimiterDraw = {DrawDelimiter<Kind, Right>};
+template <Delimiter KIND, bool RIGHT>
+const ClayRaylibCustomDraw DELIMITER_DRAW = {DrawDelimiter<KIND, RIGHT>};
 
-template <Delimiter Kind>
+template <Delimiter KIND>
 const ClayRaylibCustomDraw* DelimiterDraw(bool right) {
-    return right ? &delimiterDraw<Kind, true> : &delimiterDraw<Kind, false>;
+    return right ? &DELIMITER_DRAW<KIND, true> : &DELIMITER_DRAW<KIND, false>;
 }
 
-void StretchedSymbol(const ClayRaylibCustomDraw* draw, float width) {
+void StretchedSymbol(const ClayRaylibCustomDraw* draw,
+                     float width) {
     CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIXED(width), CLAY_SIZING_GROW(0)}},
                   .custom = {.customData = const_cast<ClayRaylibCustomDraw*>(draw)}}) {}
 }
 
-} // namespace
+}  // namespace
 
-void Text(std::string_view text, float fontSize) {
+void Text(std::string_view text,
+          float fontSize) {
     if (text.empty()) {
         return;
     }
     const Clay_String string = {.isStaticallyAllocated = false,
                                 .length = static_cast<int32_t>(text.size()),
                                 .chars = text.data()};
-    CLAY_TEXT(string, {.textColor = textColor,
-                       .fontId = FONT_BODY,
-                       .fontSize = static_cast<uint16_t>(fontSize),
-                       .wrapMode = CLAY_TEXT_WRAP_NONE});
+    CLAY_TEXT(string,
+              {.textColor = TEXT_COLOR,
+               .fontId = FONT_BODY,
+               .fontSize = static_cast<uint16_t>(fontSize),
+               .wrapMode = CLAY_TEXT_WRAP_NONE});
 }
 
 void Placeholder(float fontSize) {
     CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIXED(std::round(fontSize * 0.6f)),
                                         CLAY_SIZING_FIXED(std::round(fontSize))}},
-                  .border = {.color = placeholderColor, .width = CLAY_BORDER_OUTSIDE(1)}}) {}
+                  .border = {.color = PLACEHOLDER_COLOR, .width = CLAY_BORDER_OUTSIDE(1)}}) {}
 }
 
 void Radical(float fontSize) {
-    StretchedSymbol(&radicalDraw, std::round(fontSize * radicalWidthScale));
+    StretchedSymbol(&RADICAL_DRAW, std::round(fontSize * RADICAL_WIDTH_SCALE));
 }
 
-void DelimiterSymbol(Delimiter kind, bool right, float fontSize) {
+void DelimiterSymbol(Delimiter kind,
+                     bool right,
+                     float fontSize) {
     const ClayRaylibCustomDraw* draw = nullptr;
     switch (kind) {
-    case Delimiter::Paren:
-        draw = DelimiterDraw<Delimiter::Paren>(right);
+    case Delimiter::PAREN:
+        draw = DelimiterDraw<Delimiter::PAREN>(right);
         break;
-    case Delimiter::Bracket:
-        draw = DelimiterDraw<Delimiter::Bracket>(right);
+    case Delimiter::BRACKET:
+        draw = DelimiterDraw<Delimiter::BRACKET>(right);
         break;
-    case Delimiter::Brace:
-        draw = DelimiterDraw<Delimiter::Brace>(right);
+    case Delimiter::BRACE:
+        draw = DelimiterDraw<Delimiter::BRACE>(right);
         break;
-    case Delimiter::Bar:
-        draw = DelimiterDraw<Delimiter::Bar>(right);
+    case Delimiter::BAR:
+        draw = DelimiterDraw<Delimiter::BAR>(right);
         break;
-    case Delimiter::DoubleBar:
-        draw = DelimiterDraw<Delimiter::DoubleBar>(right);
+    case Delimiter::DOUBLE_BAR:
+        draw = DelimiterDraw<Delimiter::DOUBLE_BAR>(right);
         break;
     }
-    StretchedSymbol(draw, std::round(fontSize * delimiterWidthScale));
+    StretchedSymbol(draw, std::round(fontSize * DELIMITER_WIDTH_SCALE));
 }
 
-} // namespace node_style
+}  // namespace node_style

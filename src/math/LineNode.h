@@ -13,7 +13,7 @@
 // After Normalize(), children alternate between TextNodes and other nodes,
 // starting and ending with a (possibly empty) TextNode, and no two TextNodes
 // are adjacent. So every place the cursor can be is a TextNode offset, and each
-// on-screen position has exactly one cursor path.
+// insertion point within a line has one canonical cursor path.
 class LineNode : public EditorNode {
 private:
     std::vector<std::unique_ptr<EditorNode>> children_;
@@ -26,15 +26,18 @@ private:
 public:
     LineNode() = default;
 
-    explicit LineNode(std::vector<std::unique_ptr<EditorNode>> children, bool braced = false);
+    explicit LineNode(std::vector<std::unique_ptr<EditorNode>> children,
+                      bool braced = false);
 
     // `node` as a LineNode: itself if it already is one, otherwise wrapped in a
     // new LineNode (an empty one for null).
     static std::unique_ptr<EditorNode> EnsureLine(std::unique_ptr<EditorNode> node);
 
+    // Construction helpers do not normalize automatically. Call Normalize() before editing.
     void AddChild(std::unique_ptr<EditorNode> child);
 
-    void InsertChild(std::size_t index, std::unique_ptr<EditorNode> child);
+    void InsertChild(std::size_t index,
+                     std::unique_ptr<EditorNode> child);
 
     void RemoveChild(std::size_t index);
 
@@ -50,8 +53,10 @@ public:
     // --- Editing (keep the Normalize() invariant) --------------------------------
 
     // Insert `node` at byte `offset` in the TextNode at `textIndex`, splitting
-    // that text around it. Returns the new node's child index.
-    std::size_t InsertAtText(std::size_t textIndex, std::size_t offset,
+    // that text around it. Requires a normalized line, a valid textIndex and a non-null node.
+    // Returns the new node's child index.
+    std::size_t InsertAtText(std::size_t textIndex,
+                             std::size_t offset,
                              std::unique_ptr<EditorNode> node);
 
     // Remove the non-text child at `index` and join the texts on either side.
@@ -60,7 +65,8 @@ public:
 
     // Move everything after byte `offset` of the TextNode at `textIndex` into a
     // new line, which is returned.
-    std::unique_ptr<LineNode> SplitAt(std::size_t textIndex, std::size_t offset);
+    std::unique_ptr<LineNode> SplitAt(std::size_t textIndex,
+                                      std::size_t offset);
 
     // Move all of `other`'s children onto the end of this line.
     void Append(LineNode& other);
@@ -82,17 +88,23 @@ public:
 
     std::string ToText() const override;
 
-    std::pair<float, float> GetNWCorner() override;
+    std::pair<float,
+              float>
+    GetNWCorner() override;
 
-    std::pair<float, float> GetSize() override;
+    std::pair<float,
+              float>
+    GetSize() override;
 
     bool HasChild() override;
 
     CursorPath FirstPosition() const override;
     CursorPath LastPosition() const override;
-    CursorPath PositionNearX(float x, VerticalEntry entry,
+    CursorPath PositionNearX(float x,
+                             VerticalEntry entry,
                              const TextMeasure* measure) const override;
-    EditorNode* PathChild(PathView path, std::size_t& used) const override;
+    EditorNode* PathChild(PathView path,
+                          std::size_t& used) const override;
     void Normalize() override;
 
     // --- Selection ------------------------------------------------------------------
@@ -101,7 +113,8 @@ public:
     // `startOffset` of the TextNode at `startIndex` up to byte `endOffset` of
     // the TextNode at `endIndex` (start must come first). The texts at either
     // end are joined. Returns the cursor position where the range was.
-    CursorPath EraseRange(std::size_t startIndex, std::size_t startOffset, std::size_t endIndex,
+    CursorPath EraseRange(std::size_t startIndex,
+                          std::size_t startOffset,
+                          std::size_t endIndex,
                           std::size_t endOffset);
-
 };

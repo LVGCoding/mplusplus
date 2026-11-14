@@ -23,7 +23,6 @@ public:
 
     std::string text;
 
-    // Where the cursor is.
     std::size_t cursorPos = 0;
 
     // The other end of the selection. When it equals cursorPos, nothing is selected.
@@ -46,7 +45,9 @@ public:
     // Enter. Shift extends the selection. `measure` may be null (e.g. in
     // tests); then Up/Down keep the column in characters. Returns true if the
     // text, cursor or selection changed.
-    bool PressKey(int key, bool shift, const LineMeasure* measure);
+    bool PressKey(int key,
+                  bool shift,
+                  const LineMeasure* measure);
 
     // Type a character at the cursor, replacing the selection.
     bool TypeCharacter(char32_t codepoint);
@@ -55,11 +56,14 @@ public:
     // characters (filtered by `accept`) and the shortcuts select all,
     // undo/redo, cut, copy and paste (Command on macOS, Control elsewhere).
     // Returns true if the text, cursor or selection changed.
-    bool HandleKeyboard(const LineMeasure* measure, const CharacterFilter& accept = {});
+    bool HandleKeyboard(const LineMeasure* measure,
+                        const CharacterFilter& accept = {});
 
     // --- Selection and clipboard ----------------------------------------------------
 
-    bool HasSelection() const { return selectionStart != cursorPos; }
+    bool HasSelection() const {
+        return selectionStart != cursorPos;
+    }
     void SelectAll();
     std::string SelectedText() const;
     // Delete the selection. Returns false if nothing was selected.
@@ -69,20 +73,25 @@ public:
 
     // --- Undo and redo ----------------------------------------------------------------
     //
-    // Typing and deleting characters group into one step per word; anything
-    // else (Enter, deleting a selection, paste) is a step of its own.
+    // Contiguous typing groups through the next space; consecutive character deletions
+    // also group together and can span words. Enter, deleting a selection and pasting
+    // each get their own step.
 
     bool Undo();
     bool Redo();
-    bool CanUndo() const { return !undo_.empty(); }
-    bool CanRedo() const { return !redo_.empty(); }
+    bool CanUndo() const {
+        return !undo_.empty();
+    }
+    bool CanRedo() const {
+        return !redo_.empty();
+    }
 
 protected:
-    // Called after every change to `text` (including undo and redo).
+    // Called after edits, undo, redo and Reset(), even if Reset() leaves the text unchanged.
     virtual void TextChanged() {}
 
 private:
-    enum class EditKind { Other, Typing, Deleting };
+    enum class EditKind { OTHER, TYPING, DELETING };
 
     // One undo step: at `position`, `removed` was replaced by `inserted`.
     struct UndoStep {
@@ -91,7 +100,7 @@ private:
         std::string inserted;
         std::size_t cursorBefore = 0, anchorBefore = 0;
         std::size_t cursorAfter = 0, anchorAfter = 0;
-        EditKind kind = EditKind::Other;
+        EditKind kind = EditKind::OTHER;
     };
 
     static constexpr std::size_t MAX_UNDO_STEPS = 1000;
@@ -107,11 +116,16 @@ private:
     // True while the next typed/deleted character may join undo_.back().
     bool groupOpen_ = false;
 
-    // The one way the text changes: replace [start, end) with `inserted`, put
+    // Apply an edit: replace [start, end) with `inserted`, put
     // the cursor after it, and record an undo step.
-    void Replace(std::size_t start, std::size_t end, std::string inserted, EditKind kind,
+    void Replace(std::size_t start,
+                 std::size_t end,
+                 std::string inserted,
+                 EditKind kind,
                  bool endsGroup = false);
-    bool MoveVertically(bool down, bool shift, const LineMeasure* measure);
+    bool MoveVertically(bool down,
+                        bool shift,
+                        const LineMeasure* measure);
     // Keep the cursor and selection inside the text (callers may set them directly).
     void ClampPositions();
 };

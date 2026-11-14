@@ -2,7 +2,6 @@
 
 #include "LineNode.h"
 #include "NodeStyle.h"
-
 #include "raylib.h"
 
 #include <algorithm>
@@ -19,8 +18,10 @@ MatrixNode::MatrixNode() {
     }
 }
 
-MatrixNode::MatrixNode(std::string environment, std::vector<Row> cells)
-    : cells_(std::move(cells)), environment_(std::move(environment)) {}
+MatrixNode::MatrixNode(std::string environment,
+                       std::vector<Row> cells)
+    : cells_(std::move(cells)),
+      environment_(std::move(environment)) {}
 
 namespace {
 struct Delimiters {
@@ -30,20 +31,32 @@ struct Delimiters {
 
 Delimiters DelimitersFor(const std::string& environment) {
     using node_style::Delimiter;
-    if (environment == "pmatrix") return {true, Delimiter::Paren};
-    if (environment == "bmatrix") return {true, Delimiter::Bracket};
-    if (environment == "Bmatrix") return {true, Delimiter::Brace};
-    if (environment == "vmatrix") return {true, Delimiter::Bar};
-    if (environment == "Vmatrix") return {true, Delimiter::DoubleBar};
-    return {false, Delimiter::Paren};
+    if (environment == "pmatrix") {
+        return {true, Delimiter::PAREN};
+    }
+    if (environment == "bmatrix") {
+        return {true, Delimiter::BRACKET};
+    }
+    if (environment == "Bmatrix") {
+        return {true, Delimiter::BRACE};
+    }
+    if (environment == "vmatrix") {
+        return {true, Delimiter::BAR};
+    }
+    if (environment == "Vmatrix") {
+        return {true, Delimiter::DOUBLE_BAR};
+    }
+    return {false, Delimiter::PAREN};
 }
 }  // namespace
 
-Clay_ElementId MatrixNode::CellId(std::size_t row, std::size_t column) const {
-    // Rows can be ragged, so number cells by a fixed stride rather than by
-    // the current column count.
-    return Clay__HashStringWithOffset(CLAY_STRING("MatrixCell"),
-                                      static_cast<uint32_t>(row * 1024 + column), GetId());
+Clay_ElementId MatrixNode::CellId(std::size_t row,
+                                  std::size_t column) const {
+    // Keep cell ids stable when ragged rows change width. This stride assumes
+    // fewer than CELL_ID_STRIDE columns; ids are used to recover last-frame geometry.
+    constexpr std::size_t CELL_ID_STRIDE = 1024;
+    return Clay__HashStringWithOffset(
+        CLAY_STRING("MatrixCell"), static_cast<uint32_t>(row * CELL_ID_STRIDE + column), GetId());
 }
 
 // Clay has no grid layout, so the matrix is laid out as columns of centred
@@ -69,7 +82,7 @@ void MatrixNode::Render(const RenderContext& context) {
     const Delimiters delimiters = DelimitersFor(environment_);
     const auto columnGap = static_cast<uint16_t>(std::round(fontSize));
     const auto rowGap = static_cast<uint16_t>(std::round(fontSize * 0.3f));
-    const auto pad = static_cast<uint16_t>(std::round(fontSize * 0.15f));
+    const auto padding = static_cast<uint16_t>(std::round(fontSize * 0.15f));
     const bool outlined = context.activeStructure == this;
     const DeleteHighlight& marked = context.deleteHighlight;
     // Cells in the row/column marked for deletion are drawn in red.
@@ -78,25 +91,26 @@ void MatrixNode::Render(const RenderContext& context) {
             return false;
         }
         switch (marked.part) {
-        case DeleteHighlight::Part::Row:
+        case DeleteHighlight::Part::ROW:
             return row == marked.index;
-        case DeleteHighlight::Part::Column:
+        case DeleteHighlight::Part::COLUMN:
             return column == marked.index;
-        case DeleteHighlight::Part::Whole:
+        case DeleteHighlight::Part::WHOLE:
             return true;
         }
         return false;
     };
 
-    CLAY(GetClayId(), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                                  .childGap = pad,
-                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
-                                  .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
+    CLAY(GetClayId(),
+         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                     .childGap = padding,
+                     .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
+                     .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
         if (delimiters.present) {
             node_style::DelimiterSymbol(delimiters.kind, false, fontSize);
         }
         CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                                 .padding = {pad, pad, pad, pad},
+                                 .padding = {padding, padding, padding, padding},
                                  .childGap = columnGap,
                                  .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
             for (std::size_t column = 0; column < columns; ++column) {
@@ -117,12 +131,13 @@ void MatrixNode::Render(const RenderContext& context) {
                                 CLAY(CellId(row, column),
                                      {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
                                                  .padding = CLAY_PADDING_ALL(1)},
-                                      .backgroundColor = red ? node_style::deleteFillColor
+                                      .backgroundColor = red ? node_style::DELETE_FILL_COLOR
                                                              : Clay_Color{0, 0, 0, 0},
-                                      .border = {.color = red ? node_style::deleteColor
-                                                              : node_style::slotOutlineColor,
-                                                 .width = border ? Clay_BorderWidth{1, 1, 1, 1, 0}
-                                                                 : Clay_BorderWidth{0, 0, 0, 0, 0}}}) {
+                                      .border = {.color = red ? node_style::DELETE_COLOR
+                                                              : node_style::SLOT_OUTLINE_COLOR,
+                                                 .width = border
+                                                              ? Clay_BorderWidth{1, 1, 1, 1, 0}
+                                                              : Clay_BorderWidth{0, 0, 0, 0, 0}}}) {
                                     if (cells_[row][column]) {
                                         cells_[row][column]->Render(context);
                                     } else {
@@ -153,19 +168,20 @@ KeyResult MatrixNode::KeyPress(const KeyEvent& event) {
         return {};  // would split the cell when saved
     }
     KeyResult result = cell->KeyPress(event.Descend(used));
-    if (result.kind == KeyResult::Kind::Ignored && event.key == KEY_ENTER) {
-        return KeyResult::WithPath(KeyResult::Kind::MatrixInsert, {row, column});
+    if (result.kind == KeyResult::Kind::IGNORED && event.key == KEY_ENTER) {
+        return KeyResult::WithPath(KeyResult::Kind::MATRIX_INSERT, {row, column});
     }
-    if (result.kind == KeyResult::Kind::DeleteLeft) {
-        return KeyResult::WithPath(KeyResult::Kind::MatrixLine, {row, column});
+    if (result.kind == KeyResult::Kind::DELETE_LEFT) {
+        return KeyResult::WithPath(KeyResult::Kind::MATRIX_LINE, {row, column});
     }
-    if (result.kind == KeyResult::Kind::DeleteRight) {
+    if (result.kind == KeyResult::Kind::DELETE_RIGHT) {
         return {};
     }
 
-    // Cell (r, c) if it exists and can hold the cursor.
-    auto enter = [&](std::size_t r, std::size_t c, auto&& position) -> KeyResult {
-        EditorNode* target = GetCell(r, c);
+    // Enter the target cell only if it exists and can hold the cursor.
+    auto enter =
+        [&](std::size_t targetRow, std::size_t targetColumn, auto&& position) -> KeyResult {
+        EditorNode* target = GetCell(targetRow, targetColumn);
         if (!target) {
             return {};
         }
@@ -173,7 +189,7 @@ KeyResult MatrixNode::KeyPress(const KeyEvent& event) {
         if (path.empty()) {
             return {};
         }
-        return KeyResult::Moved(JoinPath({r, c}, std::move(path)));
+        return KeyResult::Moved(JoinPath({targetRow, targetColumn}, std::move(path)));
     };
     auto nearX = [&](VerticalEntry entry) {
         return [&event, entry](const EditorNode& node) {
@@ -183,46 +199,53 @@ KeyResult MatrixNode::KeyPress(const KeyEvent& event) {
 
     KeyResult moved;
     switch (result.kind) {
-    case KeyResult::Kind::Moved:
+    case KeyResult::Kind::MOVED:
         return std::move(result).Prepend({row, column});
-    case KeyResult::Kind::ExitLeft:
+    case KeyResult::Kind::EXIT_LEFT:
         if (column > 0) {
-            moved = enter(row, column - 1, [](const EditorNode& n) { return n.LastPosition(); });
+            moved =
+                enter(row, column - 1, [](const EditorNode& node) { return node.LastPosition(); });
         }
         break;
-    case KeyResult::Kind::ExitRight:
-        moved = enter(row, column + 1, [](const EditorNode& n) { return n.FirstPosition(); });
+    case KeyResult::Kind::EXIT_RIGHT:
+        moved = enter(row, column + 1, [](const EditorNode& node) { return node.FirstPosition(); });
         break;
-    case KeyResult::Kind::ExitUp:
+    case KeyResult::Kind::EXIT_UP:
         if (row > 0) {
             const std::size_t above = ColumnCount(row - 1);
             if (above > 0) {
-                moved = enter(row - 1, std::min(column, above - 1), nearX(VerticalEntry::FromBelow));
+                moved =
+                    enter(row - 1, std::min(column, above - 1), nearX(VerticalEntry::FROM_BELOW));
             }
         }
         break;
-    case KeyResult::Kind::ExitDown:
+    case KeyResult::Kind::EXIT_DOWN:
         if (row + 1 < cells_.size()) {
             const std::size_t below = ColumnCount(row + 1);
             if (below > 0) {
-                moved = enter(row + 1, std::min(column, below - 1), nearX(VerticalEntry::FromAbove));
+                moved =
+                    enter(row + 1, std::min(column, below - 1), nearX(VerticalEntry::FROM_ABOVE));
             }
         }
         break;
     default:
         break;
     }
-    if (moved.kind == KeyResult::Kind::Moved) {
+    if (moved.kind == KeyResult::Kind::MOVED) {
         return moved;
     }
     return std::move(result).Prepend({row, column});
 }
 
 void MatrixNode::MouseClick() {}
-std::pair<float, float> MatrixNode::GetNWCorner() {
+std::pair<float,
+          float>
+MatrixNode::GetNWCorner() {
     return {0.0f, 0.0f};
 }
-std::pair<float, float> MatrixNode::GetSize() {
+std::pair<float,
+          float>
+MatrixNode::GetSize() {
     return {0.0f, 0.0f};
 }
 
@@ -240,12 +263,13 @@ CursorPath MatrixNode::LastPosition() const {
 }
 
 // From above, the top row; from below, the bottom row; in the column nearest x.
-CursorPath MatrixNode::PositionNearX(float x, VerticalEntry entry,
+CursorPath MatrixNode::PositionNearX(float x,
+                                     VerticalEntry entry,
                                      const TextMeasure* measure) const {
     if (cells_.empty()) {
         return {};
     }
-    const std::size_t row = entry == VerticalEntry::FromAbove ? 0 : cells_.size() - 1;
+    const std::size_t row = entry == VerticalEntry::FROM_ABOVE ? 0 : cells_.size() - 1;
     std::size_t best = 0;
     float bestDistance = -1.0f;
     for (std::size_t column = 0; column < cells_[row].size(); ++column) {
@@ -264,7 +288,8 @@ CursorPath MatrixNode::PositionNearX(float x, VerticalEntry entry,
     return cell ? JoinPath({row, best}, cell->PositionNearX(x, entry, measure)) : CursorPath{};
 }
 
-EditorNode* MatrixNode::PathChild(PathView path, std::size_t& used) const {
+EditorNode* MatrixNode::PathChild(PathView path,
+                                  std::size_t& used) const {
     if (path.size() < 2) {
         return nullptr;
     }
@@ -280,7 +305,8 @@ std::size_t MatrixNode::MaxColumnCount() const {
     return columns;
 }
 
-std::optional<Clay_BoundingBox> MatrixNode::CellBounds(std::size_t row, std::size_t column) const {
+std::optional<Clay_BoundingBox> MatrixNode::CellBounds(std::size_t row,
+                                                       std::size_t column) const {
     return LastLayoutBounds(CellId(row, column));
 }
 
@@ -320,6 +346,7 @@ bool MatrixNode::RemoveColumn(std::size_t column) {
     if (MaxColumnCount() <= 1) {
         return false;
     }
+    // Validate every row before mutating any, so a refusal leaves the matrix intact.
     for (const auto& row : cells_) {
         if (row.size() == 1 && column == 0) {
             return false;
@@ -373,7 +400,8 @@ std::size_t MatrixNode::ColumnCount(std::size_t row) const {
     return row < cells_.size() ? cells_[row].size() : 0;
 }
 
-EditorNode* MatrixNode::GetCell(std::size_t row, std::size_t column) const {
+EditorNode* MatrixNode::GetCell(std::size_t row,
+                                std::size_t column) const {
     if (row >= cells_.size() || column >= cells_[row].size()) {
         return nullptr;
     }
@@ -385,9 +413,9 @@ const std::string& MatrixNode::GetEnvironment() const {
 }
 
 bool MatrixNode::IsMatrixEnvironment(const std::string& name) {
-    static const std::array<std::string_view, 6> environments = {
+    static constexpr std::array<std::string_view, 6> ENVIRONMENTS = {
         "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"};
-    for (const auto environment : environments) {
+    for (const auto environment : ENVIRONMENTS) {
         if (environment == name) {
             return true;
         }

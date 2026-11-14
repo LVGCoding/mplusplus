@@ -10,7 +10,7 @@ std::optional<std::filesystem::path> ShowOpenFileDialog(std::string& error) {
         error = NFD_GetError();
         return std::nullopt;
     }
-    defer(NFD_Quit());
+    DEFER(NFD_Quit());
 
     nfdnchar_t* selectedPath = nullptr;
     nfdopendialognargs_t options{};
@@ -24,19 +24,20 @@ std::optional<std::filesystem::path> ShowOpenFileDialog(std::string& error) {
         return std::nullopt;
     }
 
-    defer(NFD_FreePathN(selectedPath));
+    // Copy the native path before releasing the dialog library's allocation.
+    DEFER(NFD_FreePathN(selectedPath));
     return std::filesystem::path(selectedPath);
 }
 
-std::optional<std::filesystem::path> ShowSaveFileDialog(
-    const std::filesystem::path& defaultName, std::string& error) {
+std::optional<std::filesystem::path> ShowSaveFileDialog(const std::filesystem::path& defaultName,
+                                                        std::string& error) {
     error.clear();
 
     if (NFD_Init() != NFD_OKAY) {
         error = NFD_GetError();
         return std::nullopt;
     }
-    defer(NFD_Quit());
+    DEFER(NFD_Quit());
 
     nfdnchar_t* selectedPath = nullptr;
     nfdsavedialognargs_t options{};
@@ -51,6 +52,7 @@ std::optional<std::filesystem::path> ShowSaveFileDialog(
         return std::nullopt;
     }
 
-    defer(NFD_FreePathN(selectedPath));
+    // Copy the native path before releasing the dialog library's allocation.
+    DEFER(NFD_FreePathN(selectedPath));
     return std::filesystem::path(selectedPath);
 }

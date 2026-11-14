@@ -21,14 +21,14 @@ std::string Describe(const EditorNode* node);
 
 template <typename Node>
 std::string DescribeList(const std::vector<std::unique_ptr<Node>>& nodes) {
-    std::string out;
+    std::string description;
     for (std::size_t i = 0; i < nodes.size(); ++i) {
         if (i > 0) {
-            out += ", ";
+            description += ", ";
         }
-        out += Describe(nodes[i].get());
+        description += Describe(nodes[i].get());
     }
-    return out;
+    return description;
 }
 
 // Compact, readable description of a node tree, so tests can compare whole
@@ -47,40 +47,40 @@ inline std::string Describe(const EditorNode* node) {
         return "greek(" + std::string(GreekNode::SymbolName(greek->GetSymbol())) + ")";
     }
     if (auto* line = dynamic_cast<const LineNode*>(node)) {
-        std::string out = line->IsBraced() ? "group(" : "line(";
+        std::string description = line->IsBraced() ? "group(" : "line(";
         for (std::size_t i = 0; i < line->ChildCount(); ++i) {
             if (i > 0) {
-                out += ", ";
+                description += ", ";
             }
-            out += Describe(line->GetChild(i));
+            description += Describe(line->GetChild(i));
         }
-        return out + ")";
+        return description + ")";
     }
-    if (auto* frac = dynamic_cast<const FracNode*>(node)) {
-        auto [numerator, denominator] = frac->GetChildren();
+    if (auto* fraction = dynamic_cast<const FracNode*>(node)) {
+        auto [numerator, denominator] = fraction->GetChildren();
         return "frac(" + Describe(numerator) + ", " + Describe(denominator) + ")";
     }
-    if (auto* sqrt = dynamic_cast<const SqrtNode*>(node)) {
-        auto [root, argument] = sqrt->GetChildren();
-        std::string out = "sqrt";
+    if (auto* squareRoot = dynamic_cast<const SqrtNode*>(node)) {
+        auto [root, argument] = squareRoot->GetChildren();
+        std::string description = "sqrt";
         if (root) {
-            out += "[" + Describe(root) + "]";
+            description += "[" + Describe(root) + "]";
         }
-        return out + "(" + Describe(argument) + ")";
+        return description + "(" + Describe(argument) + ")";
     }
     if (auto* matrix = dynamic_cast<const MatrixNode*>(node)) {
-        std::string out = matrix->GetEnvironment() + "[";
+        std::string description = matrix->GetEnvironment() + "[";
         for (std::size_t row = 0; row < matrix->RowCount(); ++row) {
-            out += row > 0 ? ", [" : "[";
+            description += row > 0 ? ", [" : "[";
             for (std::size_t column = 0; column < matrix->ColumnCount(row); ++column) {
                 if (column > 0) {
-                    out += ", ";
+                    description += ", ";
                 }
-                out += Describe(matrix->GetCell(row, column));
+                description += Describe(matrix->GetCell(row, column));
             }
-            out += "]";
+            description += "]";
         }
-        return out + "]";
+        return description + "]";
     }
     return "unknown";
 }
@@ -92,11 +92,11 @@ inline std::string ParseAndDescribe(const std::string& source) {
 
 // Parse `source` and serialize it back with ToText().
 inline std::string RoundTrip(const std::string& source) {
-    std::string out;
+    std::string serializedText;
     for (const auto& node : Parser().ParseText(source)) {
-        out += node->ToText();
+        serializedText += node->ToText();
     }
-    return out;
+    return serializedText;
 }
 
 }  // namespace test

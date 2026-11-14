@@ -1,7 +1,6 @@
 #include "TextNode.h"
 
 #include "NodeStyle.h"
-
 #include "raylib.h"
 
 #include <algorithm>
@@ -9,8 +8,8 @@
 #include <utility>
 
 namespace {
-bool IsContinuationByte(char c) {
-    return (static_cast<unsigned char>(c) & 0xC0) == 0x80;
+bool IsContinuationByte(char character) {
+    return (static_cast<unsigned char>(character) & 0xC0) == 0x80;
 }
 
 std::string EncodeUtf8(char32_t codepoint) {
@@ -26,8 +25,9 @@ TextNode::TextNode(std::string text) : text_(std::move(text)) {}
 // Empty text still gets a line-tall element for the cursor to sit in.
 void TextNode::Render(const RenderContext& context) {
     fontSize_ = context.fontSize;
-    CLAY(GetClayId(), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(context.fontSize)},
-                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
+    CLAY(GetClayId(),
+         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(context.fontSize)},
+                     .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
         node_style::Text(text_, context.fontSize);
     }
 }
@@ -40,34 +40,34 @@ KeyResult TextNode::KeyPress(const KeyEvent& event) {
         return KeyResult::Moved({offset + character.size()}, true);
     }
     switch (event.key) {
-    case KEY_BACKSPACE:
+    case KEY_BACKSPACE: {
         if (offset == 0) {
-            return KeyResult::Exit(KeyResult::Kind::DeleteLeft);
-        } else {
-            const std::size_t previous = PreviousCharacter(offset);
-            text_.erase(previous, offset - previous);
-            return KeyResult::Moved({previous}, true);
+            return KeyResult::Exit(KeyResult::Kind::DELETE_LEFT);
         }
+        const std::size_t previous = PreviousCharacter(offset);
+        text_.erase(previous, offset - previous);
+        return KeyResult::Moved({previous}, true);
+    }
     case KEY_DELETE:
         if (offset == text_.size()) {
-            return KeyResult::Exit(KeyResult::Kind::DeleteRight);
+            return KeyResult::Exit(KeyResult::Kind::DELETE_RIGHT);
         }
         text_.erase(offset, NextCharacter(offset) - offset);
         return KeyResult::Moved({offset}, true);
     case KEY_LEFT:
         if (offset == 0) {
-            return KeyResult::Exit(KeyResult::Kind::ExitLeft);
+            return KeyResult::Exit(KeyResult::Kind::EXIT_LEFT);
         }
         return KeyResult::Moved({PreviousCharacter(offset)});
     case KEY_RIGHT:
         if (offset == text_.size()) {
-            return KeyResult::Exit(KeyResult::Kind::ExitRight);
+            return KeyResult::Exit(KeyResult::Kind::EXIT_RIGHT);
         }
         return KeyResult::Moved({NextCharacter(offset)});
     case KEY_UP:
-        return KeyResult::Exit(KeyResult::Kind::ExitUp);
+        return KeyResult::Exit(KeyResult::Kind::EXIT_UP);
     case KEY_DOWN:
-        return KeyResult::Exit(KeyResult::Kind::ExitDown);
+        return KeyResult::Exit(KeyResult::Kind::EXIT_DOWN);
     default:
         return {};
     }
@@ -75,11 +75,15 @@ KeyResult TextNode::KeyPress(const KeyEvent& event) {
 
 void TextNode::MouseClick() {}
 
-std::pair<float, float> TextNode::GetNWCorner() {
+std::pair<float,
+          float>
+TextNode::GetNWCorner() {
     return {0.0f, 0.0f};
 }
 
-std::pair<float, float> TextNode::GetSize() {
+std::pair<float,
+          float>
+TextNode::GetSize() {
     return {0.0f, 0.0f};
 }
 
@@ -99,12 +103,14 @@ CursorPath TextNode::LastPosition() const {
     return {text_.size()};
 }
 
-CursorPath TextNode::PositionNearX(float x, VerticalEntry /*entry*/,
+CursorPath TextNode::PositionNearX(float x,
+                                   VerticalEntry /*entry*/,
                                    const TextMeasure* measure) const {
     const auto bounds = LastLayoutBounds(GetClayId());
     if (!bounds || !measure) {
         return FirstPosition();
     }
+    // Compare measured prefixes rather than glyph widths to match the rendered text.
     std::size_t best = 0;
     float bestDistance = std::abs(bounds->x - x);
     for (std::size_t offset = NextCharacter(0); offset <= text_.size();

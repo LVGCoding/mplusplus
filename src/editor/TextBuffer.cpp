@@ -151,11 +151,11 @@ bool TextBuffer::MoveVertically(bool down,
         if (measure) {
             return (*measure)(std::string_view(text).substr(from, to - from));
         }
-        float characters = 0;  // no fonts (tests): columns in characters
+        float characterCount = 0;  // Without a font, count UTF-8 characters as columns.
         for (std::size_t i = from; i < to; i = NextCharacter(text, i)) {
-            ++characters;
+            ++characterCount;
         }
-        return characters;
+        return characterCount;
     };
 
     const std::size_t previousCursor = cursorPos;
@@ -226,14 +226,15 @@ std::string TextBuffer::SelectedText() const {
 bool TextBuffer::PasteText(std::string pasted) {
     if (singleLine) {
         // Keep it on one line: each line break becomes a space.
-        std::string flat;
+        std::string flattenedText;
         for (std::size_t i = 0; i < pasted.size(); ++i) {
+            // Treat CRLF as one line break rather than inserting two spaces.
             if (pasted[i] == '\r' && i + 1 < pasted.size() && pasted[i + 1] == '\n') {
                 continue;
             }
-            flat += pasted[i] == '\n' || pasted[i] == '\r' ? ' ' : pasted[i];
+            flattenedText += pasted[i] == '\n' || pasted[i] == '\r' ? ' ' : pasted[i];
         }
-        pasted = std::move(flat);
+        pasted = std::move(flattenedText);
     }
     if (pasted.empty()) {
         return false;
@@ -277,6 +278,7 @@ void TextBuffer::Replace(std::size_t start,
     goalX_.reset();
     step.cursorAfter = cursorPos;
     step.anchorAfter = selectionStart;
+    // A new edit discards the alternate future represented by redo history.
     redo_.clear();
 
     // Join the previous step if this carries straight on from it.

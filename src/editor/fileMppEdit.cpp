@@ -7,7 +7,6 @@
 // insert wheel live in one place.
 
 #include "FileMpp.h"
-
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/TextNode.h"
@@ -19,11 +18,13 @@
 #include <utility>
 
 namespace {
-CursorPath Prefix(const CursorPath& path, std::size_t dropFromEnd) {
+CursorPath Prefix(const CursorPath& path,
+                  std::size_t dropFromEnd) {
     return CursorPath(path.begin(), path.end() - static_cast<std::ptrdiff_t>(dropFromEnd));
 }
 
-CursorPath Concat(CursorPath prefix, const CursorPath& rest) {
+CursorPath Concat(CursorPath prefix,
+                  const CursorPath& rest) {
     prefix.insert(prefix.end(), rest.begin(), rest.end());
     return prefix;
 }
@@ -46,7 +47,8 @@ EditorNode* FileMpp::NodeAt(PathView path) const {
     return node;
 }
 
-TextNode* FileMpp::CursorText(const CursorPath& path, std::size_t* offset) const {
+TextNode* FileMpp::CursorText(const CursorPath& path,
+                              std::size_t* offset) const {
     if (path.size() < 2) {
         return nullptr;
     }
@@ -75,16 +77,20 @@ bool FileMpp::TakeMathMenuRequest() {
 }
 
 bool FileMpp::PasteText(std::string text) {
-    if (text.empty()) return false;
+    if (text.empty()) {
+        return false;
+    }
     FileMpp pasted;
     pasted.SetSource(std::move(text));
-    EditScope scope(*this, EditKind::Other);
+    EditScope scope(*this, EditKind::OTHER);
     DeleteSelection();
     pendingDelete_.reset();
     insertWheel_.reset();
     const CursorPath linePath = Prefix(cursorPos, 2);
     auto* line = dynamic_cast<LineNode*>(NodeAt(linePath));
-    if (!line) return false;
+    if (!line) {
+        return false;
+    }
 
     // Slots are single lines; retain pasted math objects but treat document
     // line breaks as whitespace when pasting inside a fraction/root/cell.
@@ -114,16 +120,18 @@ bool FileMpp::PasteText(std::string text) {
     return true;
 }
 
-bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
+bool FileMpp::PressKey(int key,
+                       bool shift,
+                       const TextMeasure* measure) {
     ResetCursorIfInvalid();
     // Only these keys edit (arrows, Tab and Escape just move or toggle marks).
     // Deleting single characters groups into one undo step, like typing.
     std::optional<EditScope> scope;
     if (key == KEY_BACKSPACE || key == KEY_DELETE) {
         const bool characters = !pendingDelete_ && !insertWheel_ && !GetSelection();
-        scope.emplace(*this, characters ? EditKind::Deleting : EditKind::Other);
+        scope.emplace(*this, characters ? EditKind::DELETING : EditKind::OTHER);
     } else if (key == KEY_ENTER) {
-        scope.emplace(*this, EditKind::Other);
+        scope.emplace(*this, EditKind::OTHER);
     }
     if (insertWheel_) {
         return HandleWheelKey(key);
@@ -132,10 +140,10 @@ bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
         if (key == pendingDelete_->key) {
             return ApplyPendingDelete();
         }
-        if (key == KEY_TAB && pendingDelete_->part != DeleteHighlight::Part::Whole) {
-            pendingDelete_->part = pendingDelete_->part == DeleteHighlight::Part::Row
-                                       ? DeleteHighlight::Part::Column
-                                       : DeleteHighlight::Part::Row;
+        if (key == KEY_TAB && pendingDelete_->part != DeleteHighlight::Part::WHOLE) {
+            pendingDelete_->part = pendingDelete_->part == DeleteHighlight::Part::ROW
+                                       ? DeleteHighlight::Part::COLUMN
+                                       : DeleteHighlight::Part::ROW;
             return true;
         }
         // Any other key cancels; Escape does nothing else.
@@ -197,7 +205,7 @@ bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
 
     CursorPath next;
     switch (result.kind) {
-    case KeyResult::Kind::Moved:
+    case KeyResult::Kind::MOVED:
         next = JoinPath({row}, std::move(result.path));
         if (result.changed) {
             cursorPos = next;
@@ -206,29 +214,31 @@ bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
             return true;
         }
         break;
-    case KeyResult::Kind::ExitLeft:
+    case KeyResult::Kind::EXIT_LEFT:
         if (row > 0) {
             next = JoinPath({row - 1}, content[row - 1]->LastPosition());
         }
         break;
-    case KeyResult::Kind::ExitRight:
+    case KeyResult::Kind::EXIT_RIGHT:
         if (row + 1 < content.size()) {
             next = JoinPath({row + 1}, content[row + 1]->FirstPosition());
         }
         break;
-    case KeyResult::Kind::ExitUp:
+    case KeyResult::Kind::EXIT_UP:
         if (row > 0) {
-            next = JoinPath({row - 1}, content[row - 1]->PositionNearX(
-                                           event.cursorX, VerticalEntry::FromBelow, measure));
+            next = JoinPath(
+                {row - 1},
+                content[row - 1]->PositionNearX(event.cursorX, VerticalEntry::FROM_BELOW, measure));
         }
         break;
-    case KeyResult::Kind::ExitDown:
+    case KeyResult::Kind::EXIT_DOWN:
         if (row + 1 < content.size()) {
-            next = JoinPath({row + 1}, content[row + 1]->PositionNearX(
-                                           event.cursorX, VerticalEntry::FromAbove, measure));
+            next = JoinPath(
+                {row + 1},
+                content[row + 1]->PositionNearX(event.cursorX, VerticalEntry::FROM_ABOVE, measure));
         }
         break;
-    case KeyResult::Kind::DeleteLeft:
+    case KeyResult::Kind::DELETE_LEFT:
         // Backspace at the start of a row joins it onto the row above.
         if (row == 0) {
             return false;
@@ -239,7 +249,7 @@ bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
         selectionStart = cursorPos;
         MarkEdited();
         return true;
-    case KeyResult::Kind::DeleteRight:
+    case KeyResult::Kind::DELETE_RIGHT:
         // Delete at the end of a row pulls the next row up.
         if (row + 1 >= content.size()) {
             return false;
@@ -248,22 +258,22 @@ bool FileMpp::PressKey(int key, bool shift, const TextMeasure* measure) {
         content.erase(content.begin() + static_cast<std::ptrdiff_t>(row) + 1);
         MarkEdited();
         return true;
-    case KeyResult::Kind::DeleteNode:
+    case KeyResult::Kind::DELETE_NODE:
         return RequestDelete(JoinPath({row}, std::move(result.path)), key);
-    case KeyResult::Kind::MatrixLine: {
+    case KeyResult::Kind::MATRIX_LINE: {
         const CursorPath cell = JoinPath({row}, std::move(result.path));
-        pendingDelete_ = PendingDelete{Prefix(cell, 2), DeleteHighlight::Part::Row,
-                                       cell[cell.size() - 2], cell.back(), key};
+        pendingDelete_ = PendingDelete{
+            Prefix(cell, 2), DeleteHighlight::Part::ROW, cell[cell.size() - 2], cell.back(), key};
         return true;
     }
-    case KeyResult::Kind::MatrixInsert: {
+    case KeyResult::Kind::MATRIX_INSERT: {
         const CursorPath cell = JoinPath({row}, std::move(result.path));
         insertWheel_ = InsertWheel{Prefix(cell, 2), cell[cell.size() - 2], cell.back(), {}};
         return true;
     }
-    case KeyResult::Kind::DeleteSelf:
+    case KeyResult::Kind::DELETE_SELF:
         return false;  // rows are never deleted this way
-    case KeyResult::Kind::Ignored:
+    case KeyResult::Kind::IGNORED:
         // Enter directly on a row (not inside an object) splits the row.
         if (key == KEY_ENTER && cursorPos.size() == 3) {
             auto rest = content[row]->SplitAt(cursorPos[1], cursorPos[2]);
@@ -310,13 +320,13 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
         return false;
     }
     // A space ends the word, so each word (with its space) undoes in one go.
-    EditScope scope(*this, EditKind::Typing, codepoint == U' ');
+    EditScope scope(*this, EditKind::TYPING, codepoint == U' ');
     DeleteSelection();  // typing replaces the selection
     KeyEvent event;
     event.codepoint = codepoint;
     event.path = PathView(cursorPos).subspan(1);
     KeyResult result = content[cursorPos[0]]->KeyPress(event);
-    if (result.kind != KeyResult::Kind::Moved) {
+    if (result.kind != KeyResult::Kind::MOVED) {
         return false;
     }
     cursorPos = JoinPath({cursorPos[0]}, std::move(result.path));
@@ -329,7 +339,7 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
 
 bool FileMpp::InsertNode(std::unique_ptr<EditorNode> node) {
     ResetCursorIfInvalid();
-    EditScope scope(*this, EditKind::Other);
+    EditScope scope(*this, EditKind::OTHER);
     pendingDelete_.reset();
     insertWheel_.reset();
     DeleteSelection();
@@ -338,8 +348,8 @@ bool FileMpp::InsertNode(std::unique_ptr<EditorNode> node) {
     if (!line || !node) {
         return false;
     }
-    const std::size_t index = line->InsertAtText(cursorPos[cursorPos.size() - 2], cursorPos.back(),
-                                                 std::move(node));
+    const std::size_t index =
+        line->InsertAtText(cursorPos[cursorPos.size() - 2], cursorPos.back(), std::move(node));
     // Move into the new object; one the cursor can't enter is stepped over.
     CursorPath inside = JoinPath({index}, line->GetChild(index)->FirstPosition());
     if (inside.empty()) {
@@ -351,7 +361,8 @@ bool FileMpp::InsertNode(std::unique_ptr<EditorNode> node) {
     return true;
 }
 
-bool FileMpp::RequestDelete(CursorPath node, int key) {
+bool FileMpp::RequestDelete(CursorPath node,
+                            int key) {
     EditorNode* target = NodeAt(node);
     if (!target) {
         return false;
@@ -359,10 +370,10 @@ bool FileMpp::RequestDelete(CursorPath node, int key) {
     // Symbols like \alpha go at once, like a character; objects with slots
     // follow the setting.
     const bool symbol = target->FirstPosition().empty();
-    if (symbol || backspaceMode == editor_settings::StructureBackspace::DeleteImmediately) {
+    if (symbol || backspaceMode == editor_settings::StructureBackspace::DELETE_IMMEDIATELY) {
         return DeleteNodeAt(node);
     }
-    pendingDelete_ = PendingDelete{std::move(node), DeleteHighlight::Part::Whole, 0, 0, key};
+    pendingDelete_ = PendingDelete{std::move(node), DeleteHighlight::Part::WHOLE, 0, 0, key};
     return true;
 }
 
@@ -385,14 +396,14 @@ bool FileMpp::DeleteNodeAt(const CursorPath& node) {
 bool FileMpp::ApplyPendingDelete() {
     const PendingDelete pending = *pendingDelete_;
     pendingDelete_.reset();
-    if (pending.part == DeleteHighlight::Part::Whole) {
+    if (pending.part == DeleteHighlight::Part::WHOLE) {
         return DeleteNodeAt(pending.node);
     }
     auto* matrix = dynamic_cast<MatrixNode*>(NodeAt(pending.node));
     if (!matrix) {
         return true;
     }
-    const bool removed = pending.part == DeleteHighlight::Part::Row
+    const bool removed = pending.part == DeleteHighlight::Part::ROW
                              ? matrix->RemoveRow(pending.row)
                              : matrix->RemoveColumn(pending.column);
     if (!removed) {
@@ -402,7 +413,8 @@ bool FileMpp::ApplyPendingDelete() {
     const std::size_t row = std::min(pending.row, matrix->RowCount() - 1);
     const std::size_t columns = matrix->ColumnCount(row);
     const std::size_t column = std::min(pending.column, columns > 0 ? columns - 1 : 0);
-    cursorPos = Concat(pending.node, JoinPath({row, column}, matrix->GetCell(row, column)->FirstPosition()));
+    cursorPos = Concat(pending.node,
+                       JoinPath({row, column}, matrix->GetCell(row, column)->FirstPosition()));
     selectionStart = cursorPos;
     MarkEdited();
     return true;
@@ -412,16 +424,16 @@ bool FileMpp::HandleWheelKey(int key) {
     InsertWheel& wheel = *insertWheel_;
     switch (key) {
     case KEY_UP:
-        wheel.direction = WheelDirection::Up;
+        wheel.direction = WheelDirection::UP;
         return true;
     case KEY_DOWN:
-        wheel.direction = WheelDirection::Down;
+        wheel.direction = WheelDirection::DOWN;
         return true;
     case KEY_LEFT:
-        wheel.direction = WheelDirection::Left;
+        wheel.direction = WheelDirection::LEFT;
         return true;
     case KEY_RIGHT:
-        wheel.direction = WheelDirection::Right;
+        wheel.direction = WheelDirection::RIGHT;
         return true;
     case KEY_ESCAPE:
         insertWheel_.reset();
@@ -441,22 +453,23 @@ bool FileMpp::HandleWheelKey(int key) {
     std::size_t row = chosen.row;
     std::size_t column = chosen.column;
     switch (*chosen.direction) {
-    case WheelDirection::Up:
+    case WheelDirection::UP:
         matrix->InsertRow(row);
         break;
-    case WheelDirection::Down:
+    case WheelDirection::DOWN:
         matrix->InsertRow(++row);
         break;
-    case WheelDirection::Left:
+    case WheelDirection::LEFT:
         matrix->InsertColumn(column);
         break;
-    case WheelDirection::Right:
+    case WheelDirection::RIGHT:
         matrix->InsertColumn(++column);
         break;
     }
     // Move into the new cell.
     column = std::min(column, matrix->ColumnCount(row) - 1);
-    cursorPos = Concat(chosen.matrix, JoinPath({row, column}, matrix->GetCell(row, column)->FirstPosition()));
+    cursorPos = Concat(chosen.matrix,
+                       JoinPath({row, column}, matrix->GetCell(row, column)->FirstPosition()));
     selectionStart = cursorPos;
     MarkEdited();
     return true;

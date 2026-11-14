@@ -9,11 +9,11 @@ namespace editor_settings {
 // (or at the start of its first slot).
 enum class StructureBackspace {
     // First press marks the object in red, a second press deletes it.
-    HighlightThenDelete,
+    HIGHLIGHT_THEN_DELETE,
     // One press deletes it.
-    DeleteImmediately,
+    DELETE_IMMEDIATELY,
 };
 
-inline constexpr StructureBackspace structureBackspace = StructureBackspace::HighlightThenDelete;
+inline constexpr StructureBackspace STRUCTURE_BACKSPACE = StructureBackspace::HIGHLIGHT_THEN_DELETE;
 
 }  // namespace editor_settings

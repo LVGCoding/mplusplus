@@ -6,51 +6,57 @@
 #include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
 #include "ui/font.h"
-#include "ui/shortcuts.h"
 
 #include <algorithm>
 #include <cmath>
 
-using editor_style::fontSize;
-using editor_style::lineHeight;
-using editor_style::padding;
+using editor_style::FONT_SIZE;
+using editor_style::LINE_HEIGHT;
+using editor_style::PADDING;
 
 namespace {
-constexpr Clay_Color textColor = {20, 20, 20, 255};
-constexpr Color cursorColor = {20, 20, 20, 255};
-constexpr Color selectionColor = {65, 105, 168, 80};
+constexpr Clay_Color TEXT_COLOR = {20, 20, 20, 255};
+constexpr float CURSOR_WIDTH = 2.0f;
+constexpr Color CURSOR_COLOR = {20, 20, 20, 255};
+constexpr Color SELECTION_COLOR = {65, 105, 168, 80};
 
 // On-screen width of text[start, end) in the editor font.
-float TextWidth(const std::string& text, std::size_t start, std::size_t end, Font font) {
+float TextWidth(const std::string& text,
+                std::size_t start,
+                std::size_t end,
+                Font font) {
     Clay_StringSlice slice = {.length = static_cast<int32_t>(end - start),
                               .chars = text.c_str() + start,
                               .baseChars = text.c_str()};
-    Clay_TextElementConfig config = {.fontId = FONT_BODY, .fontSize = fontSize};
-    return ClayRaylib_MeasureText(slice, &config, &font).width;
+    Clay_TextElementConfig config = {.fontId = FONT_BODY, .fontSize = FONT_SIZE};
+    return ClayRaylibMeasureText(slice, &config, &font).width;
 }
 
 // Top-left screen position of the character at byte offset `position`.
-Vector2 PositionOf(const std::string& text, std::size_t position, const EditorView& view) {
+Vector2 PositionOf(const std::string& text,
+                   std::size_t position,
+                   const EditorView& view) {
     position = std::min(position, text.size());
     const auto newline = position == 0 ? std::string::npos : text.rfind('\n', position - 1);
     const auto lineStart = newline == std::string::npos ? 0 : newline + 1;
     const auto row = std::count(text.begin(), text.begin() + position, '\n');
-    return {view.content.x + padding + TextWidth(text, lineStart, position, view.fonts[FONT_BODY]),
-            view.content.y + padding + row * lineHeight};
+    return {view.content.x + PADDING + TextWidth(text, lineStart, position, view.fonts[FONT_BODY]),
+            view.content.y + PADDING + row * LINE_HEIGHT};
 }
 }  // namespace
 
 // --- Layout -----------------------------------------------------------------
 
 void FileText::LayoutContent() const {
+    // Clay borrows the text until the frame renders; document edits run before layout.
     Clay_String clayText = {.isStaticallyAllocated = false,
                             .length = static_cast<int32_t>(text.size()),
                             .chars = text.c_str()};
     CLAY_TEXT(clayText,
-              {.textColor = textColor,
+              {.textColor = TEXT_COLOR,
                .fontId = FONT_BODY,
-               .fontSize = fontSize,
-               .lineHeight = lineHeight,
+               .fontSize = FONT_SIZE,
+               .lineHeight = LINE_HEIGHT,
                .wrapMode = CLAY_TEXT_WRAP_NEWLINES});
 }
 
@@ -83,19 +89,22 @@ void FileText::DrawSelection(const EditorView& view) const {
         const auto lineEnd = newline == std::string::npos ? text.size() : newline;
         const auto from = std::max(start, lineStart);
         const auto to = std::min(end, lineEnd);
-        const float y = view.content.y + padding + row * lineHeight;
-        if (from <= to && y + lineHeight > view.viewport.y &&
+        const float y = view.content.y + PADDING + row * LINE_HEIGHT;
+        if (from <= to && y + LINE_HEIGHT > view.viewport.y &&
             y < view.viewport.y + view.viewport.height) {
-            const float x = view.content.x + padding + TextWidth(text, lineStart, from, font);
+            const float x = view.content.x + PADDING + TextWidth(text, lineStart, from, font);
             float width = TextWidth(text, from, to, font);
             // Give a selected newline (including blank lines) a visible highlight.
-            if (newline != std::string::npos && end > newline)
-                width += fontSize / 2.0f;
-            if (width > 0)
-                DrawRectangleRec({x, y, width, float(lineHeight)}, selectionColor);
+            if (newline != std::string::npos && end > newline) {
+                width += FONT_SIZE / 2.0f;
+            }
+            if (width > 0) {
+                DrawRectangleRec({x, y, width, float(LINE_HEIGHT)}, SELECTION_COLOR);
+            }
         }
-        if (newline == std::string::npos)
+        if (newline == std::string::npos) {
             break;
+        }
         lineStart = newline + 1;
         ++row;
     }
@@ -108,13 +117,13 @@ void FileText::DrawCursor(const EditorView& view) const {
     }
     const Vector2 cursor = PositionOf(text, cursorPos, view);
     BeginEditorClip(view);
-    DrawRectangleRec({cursor.x, cursor.y, 2, float(lineHeight)}, cursorColor);
+    DrawRectangleRec({cursor.x, cursor.y, CURSOR_WIDTH, float(LINE_HEIGHT)}, CURSOR_COLOR);
     EndScissorMode();
 }
 
 std::optional<Rectangle> FileText::CursorBounds(const EditorView& view) const {
     const Vector2 cursor = PositionOf(text, cursorPos, view);
-    return Rectangle{cursor.x, cursor.y, 2, float(lineHeight)};
+    return Rectangle{cursor.x, cursor.y, CURSOR_WIDTH, float(LINE_HEIGHT)};
 }
 
 // --- Input ------------------------------------------------------------------
@@ -149,7 +158,7 @@ bool FileText::HandleMouse(const EditorView& view) {
 
     // Find the line under the mouse, then the character boundary nearest to it.
     const int row = std::max(
-        0, static_cast<int>(std::floor((mouse.y - view.content.y - padding) / lineHeight)));
+        0, static_cast<int>(std::floor((mouse.y - view.content.y - PADDING) / LINE_HEIGHT)));
     std::size_t start = 0;
     for (int i = 0; i < row && start < text.size(); ++i) {
         const auto newline = text.find('\n', start);
@@ -157,7 +166,7 @@ bool FileText::HandleMouse(const EditorView& view) {
     }
     const auto newline = text.find('\n', start);
     const auto end = newline == std::string::npos ? text.size() : newline;
-    const float targetX = mouse.x - view.content.x - padding;
+    const float targetX = mouse.x - view.content.x - PADDING;
     const Font font = view.fonts[FONT_BODY];
     float x = 0;
     std::size_t position = start;
@@ -166,8 +175,9 @@ bool FileText::HandleMouse(const EditorView& view) {
         GetCodepointNext(text.c_str() + position, &bytes);
         const auto next = std::min(position + std::max(bytes, 1), end);
         const float width = TextWidth(text, position, next, font);
-        if (targetX < x + width / 2)
+        if (targetX < x + width / 2) {
             break;
+        }
         x += width;
         position = next;
     }

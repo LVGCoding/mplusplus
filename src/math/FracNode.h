@@ -15,7 +15,8 @@ private:
 public:
     FracNode() = default;
 
-    FracNode(std::unique_ptr<EditorNode> numerator, std::unique_ptr<EditorNode> denominator);
+    FracNode(std::unique_ptr<EditorNode> numerator,
+             std::unique_ptr<EditorNode> denominator);
 
     ~FracNode() override = default;
 
@@ -26,9 +27,13 @@ public:
 
     std::string ToText() const override;
 
-    std::pair<float, float> GetNWCorner() override;
+    std::pair<float,
+              float>
+    GetNWCorner() override;
 
-    std::pair<float, float> GetSize() override;
+    std::pair<float,
+              float>
+    GetSize() override;
 
     bool HasChild() override;
 
@@ -38,14 +43,20 @@ public:
     KeyResult KeyPress(const KeyEvent& event) override;
     CursorPath FirstPosition() const override;
     CursorPath LastPosition() const override;
-    CursorPath PositionNearX(float x, VerticalEntry entry,
+    CursorPath PositionNearX(float x,
+                             VerticalEntry entry,
                              const TextMeasure* measure) const override;
-    EditorNode* PathChild(PathView path, std::size_t& used) const override;
-    bool OutlinesSlots() const override { return true; }
+    EditorNode* PathChild(PathView path,
+                          std::size_t& used) const override;
+    bool OutlinesSlots() const override {
+        return true;
+    }
     void Normalize() override;
 
     // {numerator, denominator}; either may be null.
-    std::pair<EditorNode*, EditorNode*> GetChildren() const;
+    std::pair<EditorNode*,
+              EditorNode*>
+    GetChildren() const;
 
     void SetChildren(std::unique_ptr<EditorNode> numerator,
                      std::unique_ptr<EditorNode> denominator);

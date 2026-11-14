@@ -11,7 +11,8 @@ namespace {
 // newlines in top-level text start a new row; newlines inside a node (e.g. a
 // matrix written over several lines) belong to that node.
 std::vector<std::unique_ptr<LineNode>> SplitIntoRows(std::vector<std::unique_ptr<EditorNode>> nodes,
-                                                     bool& crlf) {
+                                                     bool& usesCrlf) {
+    // Retain at least one row, including for an empty document or a trailing newline.
     std::vector<std::vector<std::unique_ptr<EditorNode>>> rows(1);
     for (auto& node : nodes) {
         auto* text = dynamic_cast<TextNode*>(node.get());
@@ -25,8 +26,9 @@ std::vector<std::unique_ptr<LineNode>> SplitIntoRows(std::vector<std::unique_ptr
             const std::size_t newline = whole.find('\n', start);
             std::string line = whole.substr(start, newline - start);
             if (newline != std::string::npos && !line.empty() && line.back() == '\r') {
+                // Normalize row content; keep the document's line-ending convention separately.
                 line.pop_back();
-                crlf = true;
+                usesCrlf = true;
             }
             if (!line.empty()) {
                 rows.back().push_back(std::make_unique<TextNode>(std::move(line)));
@@ -54,7 +56,8 @@ FileMpp::FileMpp() {
     SetSource({});
 }
 
-bool FileMpp::Load(const std::filesystem::path& path, std::string& error) {
+bool FileMpp::Load(const std::filesystem::path& path,
+                   std::string& error) {
     std::string text;
     if (!ReadWholeFile(path, text, error)) {
         return false;
@@ -66,7 +69,8 @@ bool FileMpp::Load(const std::filesystem::path& path, std::string& error) {
     return true;
 }
 
-bool FileMpp::Save(const std::filesystem::path& path, std::string& error) {
+bool FileMpp::Save(const std::filesystem::path& path,
+                   std::string& error) {
     if (!WriteWholeFile(path, source, error)) {
         return false;
     }
@@ -78,9 +82,9 @@ bool FileMpp::Save(const std::filesystem::path& path, std::string& error) {
 
 void FileMpp::SetSource(std::string text) {
     source = std::move(text);
-    bool crlf = false;
-    content = SplitIntoRows(Parser().ParseText(source), crlf);
-    lineEnding_ = crlf ? "\r\n" : "\n";
+    bool usesCrlf = false;
+    content = SplitIntoRows(Parser().ParseText(source), usesCrlf);
+    lineEnding_ = usesCrlf ? "\r\n" : "\n";
     cursorPos = JoinPath({0}, content.front()->FirstPosition());
     selectionStart = cursorPos;
     goalX_.reset();

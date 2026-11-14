@@ -14,9 +14,8 @@
 //   layout_unsaved_popup.h unsaved-changes modal
 //   layout_actions.h       handling the requested actions
 
-#include "layout_common.h"
-
 #include "layout_actions.h"
+#include "layout_common.h"
 #include "layout_editor_view.h"
 #include "layout_math_menu.h"
 #include "layout_menu.h"
@@ -32,32 +31,37 @@ bool IsLayoutModalOpen() {
     return unsavedChangesOpen;
 }
 
-void UpdateLayoutScroll(float wheelX, float wheelY, float deltaTime, bool textChanged) {
-    constexpr float scrollIdleDelay = 0.15f;
-    static float idleTime = scrollIdleDelay;
+void UpdateLayoutScroll(float wheelX,
+                        float wheelY,
+                        float deltaTime,
+                        bool cursorActivity) {
+    constexpr float SCROLL_IDLE_DELAY = 0.15f;
+    static float idleTime = SCROLL_IDLE_DELAY;
     static bool interrupted = false;
 
     // Trackpads deliver inertia as more wheel events, even with Clay drag scrolling disabled.
     if (wheelX != 0 || wheelY != 0) {
         idleTime = 0;
     } else {
-        idleTime = std::min(idleTime + deltaTime, scrollIdleDelay);
+        idleTime = std::min(idleTime + deltaTime, SCROLL_IDLE_DELAY);
     }
-    if (textChanged && idleTime < scrollIdleDelay) {
+    if (cursorActivity && idleTime < SCROLL_IDLE_DELAY) {
         interrupted = true;
     }
-    if (idleTime >= scrollIdleDelay) {
+    if (idleTime >= SCROLL_IDLE_DELAY) {
         interrupted = false;
     }
     const bool blocked = interrupted || IsLayoutModalOpen();
-    Clay_UpdateScrollContainers(false,
-        blocked ? Clay_Vector2{0, 0} : Clay_Vector2{wheelX, wheelY}, deltaTime);
+    Clay_UpdateScrollContainers(
+        false, blocked ? Clay_Vector2{0, 0} : Clay_Vector2{wheelX, wheelY}, deltaTime);
 }
 
-bool HandleActiveFileInput(Editor& editor, Font* fonts) {
+bool HandleActiveFileInput(Editor& editor,
+                           Font* fonts) {
     if (IsLayoutModalOpen()) {
         // Don't let characters typed over the popup reach the editor later.
-        while (GetCharPressed() > 0) {}
+        while (GetCharPressed() > 0) {
+        }
         return false;
     }
     FileBase* file = editor.ActiveFile();
@@ -74,7 +78,8 @@ bool HandleActiveFileInput(Editor& editor, Font* fonts) {
         saveRequested = true;
         fileMenuOpen = false;
         // Consume the shortcut so it cannot type into the document or math popup.
-        while (GetCharPressed() > 0) {}
+        while (GetCharPressed() > 0) {
+        }
         return false;
     }
     const EditorView view = MakeEditorView(fonts);
@@ -95,7 +100,8 @@ bool HandleActiveFileInput(Editor& editor, Font* fonts) {
     return activity;
 }
 
-bool ScrollEditorCursorIntoView(Editor& editor, Font* fonts) {
+bool ScrollEditorCursorIntoView(Editor& editor,
+                                Font* fonts) {
     const FileBase* file = editor.ActiveFile();
     auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
     const auto workspace = Clay_GetElementData(CLAY_ID("Workspace"));
@@ -108,28 +114,32 @@ bool ScrollEditorCursorIntoView(Editor& editor, Font* fonts) {
         return false;
     }
     const Rectangle cursor = *cursorBounds;
-    const float viewportTop = workspace.boundingBox.y + editorPadding;
-    const float viewportBottom = workspace.boundingBox.y + workspace.boundingBox.height - editorPadding;
+    const float viewportTop = workspace.boundingBox.y + EDITOR_PADDING;
+    const float viewportBottom =
+        workspace.boundingBox.y + workspace.boundingBox.height - EDITOR_PADDING;
     float offset = scroll.scrollPosition->y;
     if (cursor.y + cursor.height > viewportBottom) {
         offset -= cursor.y + cursor.height - viewportBottom;
     } else if (cursor.y < viewportTop) {
         offset += viewportTop - cursor.y;
     }
-    const float minimumOffset = std::min(0.0f,
-        scroll.scrollContainerDimensions.height - scroll.contentDimensions.height);
+    const float minimumOffset =
+        std::min(0.0f, scroll.scrollContainerDimensions.height - scroll.contentDimensions.height);
     offset = std::clamp(offset, minimumOffset, 0.0f);
 
-    const float viewportLeft = workspace.boundingBox.x + editorPadding;
-    const float viewportRight = workspace.boundingBox.x + workspace.boundingBox.width - editorPadding - 2;
+    const float viewportLeft = workspace.boundingBox.x + EDITOR_PADDING;
+    const float viewportRight =
+        workspace.boundingBox.x + workspace.boundingBox.width - EDITOR_PADDING - 2;
     float horizontalOffset = scroll.scrollPosition->x;
     if (cursor.x + cursor.width > viewportRight) {
         horizontalOffset -= cursor.x + cursor.width - viewportRight;
     } else if (cursor.x < viewportLeft) {
         horizontalOffset += viewportLeft - cursor.x;
     }
-    horizontalOffset = std::clamp(horizontalOffset,
-        std::min(0.0f, scroll.scrollContainerDimensions.width - scroll.contentDimensions.width), 0.0f);
+    horizontalOffset = std::clamp(
+        horizontalOffset,
+        std::min(0.0f, scroll.scrollContainerDimensions.width - scroll.contentDimensions.width),
+        0.0f);
     if (offset == scroll.scrollPosition->y && horizontalOffset == scroll.scrollPosition->x) {
         return false;
     }
@@ -140,23 +150,22 @@ bool ScrollEditorCursorIntoView(Editor& editor, Font* fonts) {
 
 void Layout(Editor& editor) {
     const FileBase* activeFile = editor.ActiveFile();
-    if (!activeFile) ResetEditorCursorBlink();
+    if (!activeFile) {
+        ResetEditorCursorBlink();
+    }
     const bool canSave = activeFile && !activeFile->path.empty();
     if (IsKeyPressed(KEY_ESCAPE) ||
-        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
-         !Clay_PointerOver(CLAY_ID("FileMenu")) &&
+        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !Clay_PointerOver(CLAY_ID("FileMenu")) &&
          !Clay_PointerOver(CLAY_ID("FileDropdown")))) {
         fileMenuOpen = false;
     }
     if (IsKeyPressed(KEY_ESCAPE) ||
-        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
-         !Clay_PointerOver(CLAY_ID("EditMenu")) &&
+        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !Clay_PointerOver(CLAY_ID("EditMenu")) &&
          !Clay_PointerOver(CLAY_ID("EditDropdown")))) {
         editMenuOpen = false;
     }
     if (IsKeyPressed(KEY_ESCAPE) ||
-        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
-         !Clay_PointerOver(CLAY_ID("InsertMenu")) &&
+        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !Clay_PointerOver(CLAY_ID("InsertMenu")) &&
          !Clay_PointerOver(CLAY_ID("InsertDropdown")))) {
         insertMenuOpen = false;
     }
@@ -165,7 +174,7 @@ void Layout(Editor& editor) {
     CLAY(CLAY_ID("Root"),
          {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
                      .layoutDirection = CLAY_TOP_TO_BOTTOM},
-          .backgroundColor = editorColor}) {
+          .backgroundColor = EDITOR_COLOR}) {
         LayoutTitleBar(activeFile);
         LayoutMenuBar();
         if (activeFile) {
@@ -202,7 +211,7 @@ void ProcessLayoutActions(Editor& editor) {
         return;
     }
 
-    // One error string is shared by the handlers, as before.
+    // Apply document mutations after rendering, when Clay no longer borrows their strings.
     ProcessHistoryRequests(editor);
     ProcessClipboardRequests(editor);
     ProcessMathMenuSelection(editor);
@@ -215,10 +224,15 @@ void ProcessLayoutActions(Editor& editor) {
     ProcessOpenRequest(editor, error);
 }
 
-void DrawActiveFileOverlay(Editor& editor, Font* fonts) {
-    if (IsLayoutModalOpen() || IsAnyMenuOpen()) return;
+void DrawActiveFileOverlay(Editor& editor,
+                           Font* fonts) {
+    if (IsLayoutModalOpen() || IsAnyMenuOpen()) {
+        return;
+    }
     const FileBase* file = editor.ActiveFile();
-    if (!file) return;
+    if (!file) {
+        return;
+    }
 
     // Show the cursor solid for a moment after switching files.
     static const FileBase* previousFile = nullptr;

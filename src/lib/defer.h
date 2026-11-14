@@ -1,14 +1,26 @@
-#ifndef defer
-template <typename F> struct privDefer {
-  F f;
-  privDefer(F f) : f(f) {}
-  ~privDefer() { f(); }
+#pragma once
+
+// Run cleanup at scope exit, including early returns. Callbacks capture by reference,
+// so referenced resources must outlive the guard. Guards run in reverse declaration order.
+template <typename Callback>
+class ScopeExit {
+public:
+    explicit ScopeExit(Callback callback) : callback_(callback) {}
+
+    ~ScopeExit() {
+        callback_();
+    }
+
+private:
+    Callback callback_;
 };
 
-template <typename F> privDefer<F> defer_func(F f) { return privDefer<F>(f); }
+template <typename Callback>
+ScopeExit<Callback> MakeScopeExit(Callback callback) {
+    return ScopeExit<Callback>(callback);
+}
 
-#define DEFER_1(x, y) x##y
-#define DEFER_2(x, y) DEFER_1(x, y)
-#define DEFER_3(x) DEFER_2(x, __COUNTER__)
-#define defer(code) auto DEFER_3(_defer_) = defer_func([&]() { code; })
-#endif
+// Expand the counter before token pasting so each cleanup guard has a unique local name.
+#define DEFER_JOIN_DIRECT(left, right) left##right
+#define DEFER_JOIN(left, right) DEFER_JOIN_DIRECT(left, right)
+#define DEFER(code) auto DEFER_JOIN(deferredCleanup, __COUNTER__) = MakeScopeExit([&]() { code; })

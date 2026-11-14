@@ -7,15 +7,18 @@
 
 namespace {
 // The cursor is drawn this much taller than the font size.
-constexpr float cursorExtraHeight = 2.0f;
-constexpr float cursorWidth = 2.0f;
+constexpr float CURSOR_EXTRA_HEIGHT = 2.0f;
+constexpr float CURSOR_WIDTH = 2.0f;
 
 std::optional<Clay_BoundingBox> LastBounds(Clay_ElementId id) {
     const Clay_ElementData data = Clay_GetElementData(id);
     return data.found ? std::optional(data.boundingBox) : std::nullopt;
 }
 
-Clay_String Slice(const std::string& text, std::size_t from, std::size_t to) {
+// Clay borrows this text; the buffer must remain unchanged until rendering finishes.
+Clay_String Slice(const std::string& text,
+                  std::size_t from,
+                  std::size_t to) {
     return {.isStaticallyAllocated = false,
             .length = static_cast<int32_t>(to - from),
             .chars = text.c_str() + from};
@@ -38,6 +41,7 @@ void TextInput::Clear() {
 }
 
 bool TextInput::HandleKeyboard(const TextBuffer::CharacterFilter& accept) {
+    // Cursor movement restarts blinking, but callers need to know only about text changes.
     const std::string before = buffer.text;
     if (buffer.HandleKeyboard(nullptr, accept)) {
         Touch();
@@ -50,15 +54,14 @@ bool TextInput::HandleMouse(Font* fonts) {
         dragging_ = false;
         return false;
     }
-    const auto box = LastBounds(PartId(Box));
-    const auto row = LastBounds(PartId(Row));
+    const auto box = LastBounds(PartId(BOX));
+    const auto row = LastBounds(PartId(ROW));
     if (!box || !row || !fonts) {
         return false;
     }
     const Vector2 mouse = GetMousePosition();
-    const bool clicked =
-        IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
-        CheckCollisionPointRec(mouse, {box->x, box->y, box->width, box->height});
+    const bool clicked = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
+                         CheckCollisionPointRec(mouse, {box->x, box->y, box->width, box->height});
     if (clicked) {
         dragging_ = true;
     }
@@ -71,10 +74,9 @@ bool TextInput::HandleMouse(Font* fonts) {
     const std::string& text = buffer.text;
     Clay_TextElementConfig config = {.fontId = fontId_, .fontSize = fontSize_};
     auto widthTo = [&](std::size_t end) {
-        const Clay_StringSlice slice = {.length = static_cast<int32_t>(end),
-                                        .chars = text.c_str(),
-                                        .baseChars = text.c_str()};
-        return ClayRaylib_MeasureText(slice, &config, fonts).width;
+        const Clay_StringSlice slice = {
+            .length = static_cast<int32_t>(end), .chars = text.c_str(), .baseChars = text.c_str()};
+        return ClayRaylibMeasureText(slice, &config, fonts).width;
     };
     const float target = mouse.x - row->x;
     std::size_t position = 0;
@@ -82,8 +84,8 @@ bool TextInput::HandleMouse(Font* fonts) {
     while (position < text.size()) {
         int bytes = 0;
         GetCodepointNext(text.c_str() + position, &bytes);
-        const std::size_t next = std::min(position + static_cast<std::size_t>(std::max(bytes, 1)),
-                                          text.size());
+        const std::size_t next =
+            std::min(position + static_cast<std::size_t>(std::max(bytes, 1)), text.size());
         const float nextX = widthTo(next);
         if (target < (x + nextX) / 2) {
             break;
@@ -110,13 +112,13 @@ bool TextInput::HandleMouse(Font* fonts) {
 // Uses last frame's positions: scroll just enough that the cursor is inside
 // the box, and don't leave empty space at the right once the text fits.
 void TextInput::ScrollCursorIntoView() {
-    const auto box = LastBounds(PartId(Box));
-    const auto row = LastBounds(PartId(Row));
-    const auto cursor = LastBounds(PartId(CursorMarker));
+    const auto box = LastBounds(PartId(BOX));
+    const auto row = LastBounds(PartId(ROW));
+    const auto cursor = LastBounds(PartId(CURSOR_MARKER));
     if (!box || !row || !cursor) {
         return;
     }
-    const float visible = box->width - cursorWidth;
+    const float visible = box->width - CURSOR_WIDTH;
     const float cursorX = cursor->x - box->x;  // already includes scroll_
     if (cursorX < 0) {
         scroll_ -= cursorX;
@@ -136,11 +138,14 @@ void TextInput::Layout(const Style& style) {
     const std::size_t anchor = std::min(buffer.selectionStart, text.size());
     const std::size_t selectedFrom = std::min(cursor, anchor);
     const std::size_t selectedTo = std::max(cursor, anchor);
-    const float height = static_cast<float>(style.fontSize) + cursorExtraHeight;
+    const float height = static_cast<float>(style.fontSize) + CURSOR_EXTRA_HEIGHT;
 
+    constexpr double CURSOR_SOLID_SECONDS = 0.7;
+    constexpr double CURSOR_BLINK_SECONDS = 0.5;
     const double elapsed = GetTime() - lastActivity_;
     const bool cursorVisible =
-        elapsed < 0.7 || static_cast<int>((elapsed - 0.7) / 0.5) % 2 == 0;
+        elapsed < CURSOR_SOLID_SECONDS ||
+        static_cast<int>((elapsed - CURSOR_SOLID_SECONDS) / CURSOR_BLINK_SECONDS) % 2 == 0;
 
     const Clay_TextElementConfig textConfig = {.textColor = style.textColor,
                                                .fontId = style.fontId,
@@ -154,24 +159,27 @@ void TextInput::Layout(const Style& style) {
     // Takes no space, so moving the cursor never shifts the text; the bar
     // floats over the text from here.
     auto cursorMarker = [&] {
-        CLAY(PartId(CursorMarker),
+        CLAY(PartId(CURSOR_MARKER),
              {.layout = {.sizing = {CLAY_SIZING_FIXED(0), CLAY_SIZING_FIXED(height)}}}) {
-            CLAY(PartId(CursorBar),
-                 {.layout = {.sizing = {CLAY_SIZING_FIXED(cursorWidth), CLAY_SIZING_FIXED(height)}},
-                  .backgroundColor = cursorVisible ? style.cursorColor : Clay_Color{0, 0, 0, 0},
-                  .floating = {.offset = {-cursorWidth / 2, 0},
-                               .zIndex = style.zIndex,
-                               .pointerCaptureMode = CLAY_POINTER_CAPTURE_MODE_PASSTHROUGH,
-                               .attachTo = CLAY_ATTACH_TO_PARENT,
-                               .clipTo = CLAY_CLIP_TO_ATTACHED_PARENT}}) {}
+            CLAY(
+                PartId(CURSOR_BAR),
+                {.layout = {.sizing = {CLAY_SIZING_FIXED(CURSOR_WIDTH), CLAY_SIZING_FIXED(height)}},
+                 .backgroundColor = cursorVisible ? style.cursorColor : Clay_Color{0, 0, 0, 0},
+                 .floating = {.offset = {-CURSOR_WIDTH / 2, 0},
+                              .zIndex = style.zIndex,
+                              .pointerCaptureMode = CLAY_POINTER_CAPTURE_MODE_PASSTHROUGH,
+                              .attachTo = CLAY_ATTACH_TO_PARENT,
+                              .clipTo = CLAY_CLIP_TO_ATTACHED_PARENT}}) {}
         }
     };
 
-    CLAY(PartId(Box), {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIT(height)},
-                                  .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
-                       .clip = {.horizontal = true, .childOffset = {scroll_, 0}}}) {
-        CLAY(PartId(Row), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                                      .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
+    CLAY(PartId(BOX),
+         {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIT(height)},
+                     .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
+          .clip = {.horizontal = true, .childOffset = {scroll_, 0}}}) {
+        CLAY(PartId(ROW),
+             {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                         .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
             if (text.empty()) {
                 cursorMarker();
                 if (!style.placeholder.empty()) {
@@ -188,9 +196,9 @@ void TextInput::Layout(const Style& style) {
                     cursorMarker();
                 }
                 if (selectedFrom < selectedTo) {
-                    CLAY(PartId(Selected), {.layout = {.sizing = {CLAY_SIZING_FIT(0),
-                                                                  CLAY_SIZING_FIT(0)}},
-                                            .backgroundColor = style.selectionColor}) {
+                    CLAY(PartId(SELECTED),
+                         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)}},
+                          .backgroundColor = style.selectionColor}) {
                         textPiece(selectedFrom, selectedTo);
                     }
                     if (cursor == selectedTo) {

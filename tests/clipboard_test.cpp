@@ -3,7 +3,8 @@
 
 #include <gtest/gtest.h>
 
-TEST(ClipboardText, CopiesForwardAndReversedSelectionsWithoutChangingText) {
+TEST(ClipboardText,
+     CopiesForwardAndReversedSelectionsWithoutChangingText) {
     FileText file;
     file.text = "aé日z\nnext";
     file.selectionStart = 1;
@@ -16,7 +17,8 @@ TEST(ClipboardText, CopiesForwardAndReversedSelectionsWithoutChangingText) {
     EXPECT_TRUE(file.SelectedText().empty());
 }
 
-TEST(ClipboardText, PasteReplacesSelectionAndPreservesMultilineUtf8) {
+TEST(ClipboardText,
+     PasteReplacesSelectionAndPreservesMultilineUtf8) {
     FileText file;
     file.text = "before old after";
     file.selectionStart = 10;
@@ -30,7 +32,8 @@ TEST(ClipboardText, PasteReplacesSelectionAndPreservesMultilineUtf8) {
     EXPECT_EQ(file.text, "before é日\nsecond! after");
 }
 
-TEST(ClipboardText, EmptyPasteKeepsSelectionAndContent) {
+TEST(ClipboardText,
+     EmptyPasteKeepsSelectionAndContent) {
     FileText file;
     file.text = "keep";
     file.selectionStart = 0;
@@ -40,7 +43,8 @@ TEST(ClipboardText, EmptyPasteKeepsSelectionAndContent) {
     EXPECT_FALSE(file.modified);
 }
 
-TEST(ClipboardText, PasteReplacesSelectionAsOneUndoStepAndClearsRedo) {
+TEST(ClipboardText,
+     PasteReplacesSelectionAsOneUndoStepAndClearsRedo) {
     FileText file;
     file.text = "before old after";
     file.selectionStart = 10;
@@ -61,7 +65,8 @@ TEST(ClipboardText, PasteReplacesSelectionAsOneUndoStepAndClearsRedo) {
     EXPECT_FALSE(file.CanRedo());
 }
 
-TEST(ClipboardMpp, CopiesPartialTextAndWholeObjectsAcrossRows) {
+TEST(ClipboardMpp,
+     CopiesPartialTextAndWholeObjectsAcrossRows) {
     FileMpp file;
     file.SetSource("ab\\frac{x}{y}cd\nlast");
     file.selectionStart = {0, 0, 1};
@@ -72,7 +77,8 @@ TEST(ClipboardMpp, CopiesPartialTextAndWholeObjectsAcrossRows) {
     EXPECT_FALSE(file.CanUndo());
 }
 
-TEST(ClipboardMpp, CopiesJustTheSelectedTextInsideASlot) {
+TEST(ClipboardMpp,
+     CopiesJustTheSelectedTextInsideASlot) {
     FileMpp file;
     file.SetSource("\\frac{1234}{z}");
     file.selectionStart = {0, 1, 0, 0, 1};
@@ -80,7 +86,8 @@ TEST(ClipboardMpp, CopiesJustTheSelectedTextInsideASlot) {
     EXPECT_EQ(file.SelectedText(), "23");
 }
 
-TEST(ClipboardMpp, SelectionAcrossMatrixCellsCopiesTheWholeMatrix) {
+TEST(ClipboardMpp,
+     SelectionAcrossMatrixCellsCopiesTheWholeMatrix) {
     FileMpp file;
     const std::string matrix = "\\begin{matrix}abcd&efgh\\end{matrix}";
     file.SetSource("before" + matrix + "after");
@@ -89,7 +96,8 @@ TEST(ClipboardMpp, SelectionAcrossMatrixCellsCopiesTheWholeMatrix) {
     EXPECT_EQ(file.SelectedText(), matrix);
 }
 
-TEST(ClipboardMpp, PasteParsesObjectsAndSplicesRowsAtCursor) {
+TEST(ClipboardMpp,
+     PasteParsesObjectsAndSplicesRowsAtCursor) {
     FileMpp file;
     file.SetSource("abcc");
     file.cursorPos = file.selectionStart = {0, 0, 2};
@@ -107,7 +115,8 @@ TEST(ClipboardMpp, PasteParsesObjectsAndSplicesRowsAtCursor) {
     EXPECT_EQ(file.ContentText(), "abONE\n\\frac{x}{y}TWOcc");
 }
 
-TEST(ClipboardMpp, PasteReplacesSelectionAsOneUndoStep) {
+TEST(ClipboardMpp,
+     PasteReplacesSelectionAsOneUndoStep) {
     FileMpp file;
     const std::string original = "a\\sqrt{x}b\nlast";
     file.SetSource(original);
@@ -121,7 +130,8 @@ TEST(ClipboardMpp, PasteReplacesSelectionAsOneUndoStep) {
     EXPECT_FALSE(file.CanUndo());
 }
 
-TEST(ClipboardMpp, PasteInsideSlotPreservesNestedObjectsAndUsesSpacesForLineBreaks) {
+TEST(ClipboardMpp,
+     PasteInsideSlotPreservesNestedObjectsAndUsesSpacesForLineBreaks) {
     FileMpp file;
     file.SetSource("\\frac{pq}{z}");
     file.cursorPos = file.selectionStart = {0, 1, 0, 0, 1};
@@ -134,7 +144,8 @@ TEST(ClipboardMpp, PasteInsideSlotPreservesNestedObjectsAndUsesSpacesForLineBrea
     EXPECT_EQ(file.ContentText(), "\\frac{pq}{z}");
 }
 
-TEST(ClipboardMpp, CopyPasteRoundTripsWholeDocumentIncludingEmptyRows) {
+TEST(ClipboardMpp,
+     CopyPasteRoundTripsWholeDocumentIncludingEmptyRows) {
     FileMpp source;
     source.SetSource("\\sqrt[3]{x}\n\n\\begin{matrix}a&b\\\\c&d\\end{matrix}\n");
     source.SelectAll();
@@ -145,7 +156,8 @@ TEST(ClipboardMpp, CopyPasteRoundTripsWholeDocumentIncludingEmptyRows) {
     ASSERT_NE(target.CursorText(target.cursorPos), nullptr);
 }
 
-TEST(ClipboardMpp, EmptyPasteDoesNotDeleteSelectionOrCreateHistory) {
+TEST(ClipboardMpp,
+     EmptyPasteDoesNotDeleteSelectionOrCreateHistory) {
     FileMpp file;
     file.SetSource("keep");
     file.SelectAll();
