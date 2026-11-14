@@ -80,7 +80,7 @@ bool HandleActiveFileInput(Editor& editor, Font* fonts) {
     const EditorView view = MakeEditorView(fonts);
     if (mathMenuOpen) {
         // The math popup takes the keyboard while it is open.
-        HandleMathMenuKeys();
+        HandleMathMenuKeys(fonts);
         return false;
     }
     bool activity = file->HandleInput(view);

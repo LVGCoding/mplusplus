@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ui/TextInput.h"
+
 // UI state shared between building the layout and processing its actions.
 // Clicks only set request flags here; ProcessLayoutActions acts on them later.
 
@@ -42,8 +44,8 @@ namespace layout_internal {
     inline Clay_Vector2 mathMenuPosition = {0, 0};
     // Index of the math item clicked this frame (if any); run after rendering.
     inline std::size_t mathMenuItemRequested = SIZE_MAX;
-    // Text typed into the popup's search bar (after the backslash).
-    inline std::string mathMenuQuery;
+    // The popup's search bar: what has been typed after the backslash.
+    inline TextInput mathMenuSearch{"MathMenuSearchInput"};
     // Highlighted entry in the filtered list, moved with Up/Down.
     inline std::size_t mathMenuSelected = 0;
 

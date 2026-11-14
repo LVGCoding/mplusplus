@@ -1,4 +1,5 @@
-// Editing plain text files (FileText): cursor keys, typing, deleting, undo.
+// TextBuffer: editing plain text (cursor keys, typing, deleting, undo,
+// clipboard). Used by FileText and by TextInput boxes in the UI.
 //
 // Every change to the text goes through Replace(), which also records it for
 // undo as "at this position, this text was replaced by that text". Undo puts
@@ -6,9 +7,10 @@
 // Backspace/Delete on single characters) in one place joins the previous step
 // until a space is typed or the cursor moves, so undo goes a word at a time.
 
-#include "fileText.h"
+#include "TextBuffer.h"
 
 #include "raylib.h"
+#include "ui/shortcuts.h"
 
 #include <algorithm>
 #include <utility>
@@ -57,9 +59,24 @@ std::string EncodeUtf8(char32_t codepoint) {
 
 // --- Cursor movement ----------------------------------------------------------
 
-bool FileText::PressKey(int key, bool shift, const LineMeasure* measure) {
+void TextBuffer::ClampPositions() {
     cursorPos = std::min(cursorPos, text.size());
     selectionStart = std::min(selectionStart, text.size());
+}
+
+void TextBuffer::Reset(std::string newText) {
+    text = std::move(newText);
+    cursorPos = 0;
+    selectionStart = 0;
+    goalX_.reset();
+    undo_.clear();
+    redo_.clear();
+    groupOpen_ = false;
+    TextChanged();
+}
+
+bool TextBuffer::PressKey(int key, bool shift, const LineMeasure* measure) {
+    ClampPositions();
     const std::size_t start = std::min(selectionStart, cursorPos);
     const std::size_t end = std::max(selectionStart, cursorPos);
     const bool selected = start != end;
@@ -83,6 +100,9 @@ bool FileText::PressKey(int key, bool shift, const LineMeasure* measure) {
     }
     case KEY_UP:
     case KEY_DOWN:
+        if (singleLine) {
+            return false;  // the owner's (e.g. moving through a result list)
+        }
         return MoveVertically(key == KEY_DOWN, shift, measure);
     case KEY_BACKSPACE:
         if (DeleteSelection()) {
@@ -103,6 +123,9 @@ bool FileText::PressKey(int key, bool shift, const LineMeasure* measure) {
         Replace(cursorPos, NextCharacter(text, cursorPos), {}, EditKind::Deleting);
         return true;
     case KEY_ENTER:
+        if (singleLine) {
+            return false;  // the owner's (e.g. submit)
+        }
         Replace(start, end, "\n", EditKind::Other);
         return true;
     default:
@@ -114,7 +137,7 @@ bool FileText::PressKey(int key, bool shift, const LineMeasure* measure) {
 // The x is kept across repeated presses, so passing through a short line
 // doesn't lose the column. On the first line Up goes to the start of the
 // text, and on the last line Down goes to the end, as in most editors.
-bool FileText::MoveVertically(bool down, bool shift, const LineMeasure* measure) {
+bool TextBuffer::MoveVertically(bool down, bool shift, const LineMeasure* measure) {
     auto width = [&](std::size_t from, std::size_t to) -> float {
         if (measure) {
             return (*measure)(std::string_view(text).substr(from, to - from));
@@ -163,7 +186,7 @@ bool FileText::MoveVertically(bool down, bool shift, const LineMeasure* measure)
     return cursorPos != previousCursor || selectionStart != previousAnchor;
 }
 
-void FileText::SelectAll() {
+void TextBuffer::SelectAll() {
     selectionStart = 0;
     cursorPos = text.size();
     goalX_.reset();
@@ -171,19 +194,46 @@ void FileText::SelectAll() {
 
 // --- Editing ---------------------------------------------------------------------
 
-bool FileText::TypeCharacter(char32_t codepoint) {
+bool TextBuffer::TypeCharacter(char32_t codepoint) {
     if (codepoint < 32 || codepoint == 127) {
         return false;
     }
-    cursorPos = std::min(cursorPos, text.size());
-    selectionStart = std::min(selectionStart, text.size());
+    ClampPositions();
     // A space ends the word, so each word (with its space) undoes in one go.
     Replace(std::min(selectionStart, cursorPos), std::max(selectionStart, cursorPos),
             EncodeUtf8(codepoint), EditKind::Typing, codepoint == U' ');
     return true;
 }
 
-bool FileText::DeleteSelection() {
+std::string TextBuffer::SelectedText() const {
+    const auto start = std::min({selectionStart, cursorPos, text.size()});
+    const auto end = std::min(std::max(selectionStart, cursorPos), text.size());
+    return text.substr(start, end - start);
+}
+
+bool TextBuffer::PasteText(std::string pasted) {
+    if (singleLine) {
+        // Keep it on one line: each line break becomes a space.
+        std::string flat;
+        for (std::size_t i = 0; i < pasted.size(); ++i) {
+            if (pasted[i] == '\r' && i + 1 < pasted.size() && pasted[i + 1] == '\n') {
+                continue;
+            }
+            flat += pasted[i] == '\n' || pasted[i] == '\r' ? ' ' : pasted[i];
+        }
+        pasted = std::move(flat);
+    }
+    if (pasted.empty()) {
+        return false;
+    }
+    ClampPositions();
+    Replace(std::min(selectionStart, cursorPos), std::max(selectionStart, cursorPos),
+            std::move(pasted), EditKind::Other);
+    return true;
+}
+
+bool TextBuffer::DeleteSelection() {
+    ClampPositions();
     if (selectionStart == cursorPos) {
         return false;
     }
@@ -192,7 +242,7 @@ bool FileText::DeleteSelection() {
     return true;
 }
 
-void FileText::Replace(std::size_t start, std::size_t end, std::string inserted, EditKind kind,
+void TextBuffer::Replace(std::size_t start, std::size_t end, std::string inserted, EditKind kind,
                        bool endsGroup) {
     UndoStep step;
     step.position = start;
@@ -242,14 +292,10 @@ void FileText::Replace(std::size_t start, std::size_t end, std::string inserted,
         }
     }
     groupOpen_ = kind != EditKind::Other && !endsGroup;
-    UpdateModified();
+    TextChanged();
 }
 
-void FileText::UpdateModified() {
-    modified = !savedText_ || text != *savedText_;
-}
-
-bool FileText::Undo() {
+bool TextBuffer::Undo() {
     if (undo_.empty()) {
         return false;
     }
@@ -261,11 +307,11 @@ bool FileText::Undo() {
     redo_.push_back(std::move(step));
     groupOpen_ = false;
     goalX_.reset();
-    UpdateModified();
+    TextChanged();
     return true;
 }
 
-bool FileText::Redo() {
+bool TextBuffer::Redo() {
     if (redo_.empty()) {
         return false;
     }
@@ -277,6 +323,74 @@ bool FileText::Redo() {
     undo_.push_back(std::move(step));
     groupOpen_ = false;
     goalX_.reset();
-    UpdateModified();
+    TextChanged();
     return true;
+}
+
+// --- Keyboard ------------------------------------------------------------------------
+
+bool TextBuffer::HandleKeyboard(const LineMeasure* measure, const CharacterFilter& accept) {
+    const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    const bool shortcut = IsShortcutModifierDown();  // Command on macOS
+    auto pressed = [](int key) { return IsKeyPressed(key) || IsKeyPressedRepeat(key); };
+    // Shortcut letters must not also be typed (GetCharPressed can report them).
+    auto dropTypedCharacters = [] {
+        while (GetCharPressed() > 0) {
+        }
+    };
+
+    if (shortcut) {
+        if (IsKeyPressed(KEY_A)) {
+            SelectAll();
+            dropTypedCharacters();
+            return true;
+        }
+        if (IsKeyPressed(KEY_C)) {
+            if (const std::string selected = SelectedText(); !selected.empty()) {
+                SetClipboardText(selected.c_str());
+            }
+            dropTypedCharacters();
+            return false;
+        }
+        if (IsKeyPressed(KEY_X)) {
+            const std::string selected = SelectedText();
+            if (!selected.empty()) {
+                SetClipboardText(selected.c_str());
+            }
+            dropTypedCharacters();
+            return !selected.empty() && DeleteSelection();
+        }
+        if (IsKeyPressed(KEY_V)) {
+            const char* pasted = GetClipboardText();
+            dropTypedCharacters();
+            return pasted && PasteText(pasted);
+        }
+        // Z undoes; Y or Shift+Z redoes. Held keys repeat.
+        if (pressed(KEY_Z)) {
+            dropTypedCharacters();
+            return shift ? Redo() : Undo();
+        }
+        if (pressed(KEY_Y)) {
+            dropTypedCharacters();
+            return Redo();
+        }
+    }
+
+    bool changed = false;
+    for (const int key :
+         {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE, KEY_ENTER}) {
+        if (pressed(key)) {
+            changed |= PressKey(key, shift, measure);
+        }
+    }
+    if (pressed(KEY_KP_ENTER)) {
+        changed |= PressKey(KEY_ENTER, shift, measure);
+    }
+    while (const int codepoint = GetCharPressed()) {
+        const auto character = static_cast<char32_t>(codepoint);
+        if (!accept || accept(character)) {
+            changed |= TypeCharacter(character);
+        }
+    }
+    return changed;
 }

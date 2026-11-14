@@ -1,55 +1,33 @@
 #pragma once
 
+#include "TextBuffer.h"
 #include "fileBase.h"
 
-#include <cstddef>
-#include <deque>
 #include <filesystem>
-#include <functional>
 #include <optional>
 #include <string>
-#include <string_view>
+#include <utility>
 
 // A plain text file currently open in the M++ editor.
-// Loading/saving lives in fileText.cpp; rendering and input in fileTextView.cpp.
-struct FileText : FileBase {
-    std::string text;
-
-    // Position where the cursor is located in the text.
-    std::size_t cursorPos = 0;
-
-    // Starting position of the selected text.
-    // When selectionStart == cursorPos, nothing is selected.
-    std::size_t selectionStart = 0;
-
-    // Width in pixels of a piece of one line, for keeping the column on Up/Down.
-    using LineMeasure = std::function<float(std::string_view)>;
-
+// Loading/saving lives in fileText.cpp; rendering and mouse input in
+// fileTextView.cpp. All the editing (text, cursor, selection, keys, undo,
+// clipboard) comes from TextBuffer, which the UI's text boxes use too.
+struct FileText : FileBase, TextBuffer {
     bool Load(const std::filesystem::path& path, std::string& error) override;
     bool Save(const std::filesystem::path& path, std::string& error) override;
 
-    // --- Editing (fileTextEdit.cpp) ----------------------------------------------
+    // FileBase's undo interface (used by the Edit menu), done by TextBuffer.
+    bool Undo() override { return TextBuffer::Undo(); }
+    bool Redo() override { return TextBuffer::Redo(); }
+    bool CanUndo() const override { return TextBuffer::CanUndo(); }
+    bool CanRedo() const override { return TextBuffer::CanRedo(); }
 
-    // Handle a key (raylib KEY_*): arrows, Backspace, Delete, Enter. Shift
-    // extends the selection. `measure` may be null (e.g. in tests); then Up/Down
-    // keep the column in characters. Returns true if anything changed.
-    bool PressKey(int key, bool shift, const LineMeasure* measure);
-
-    // Type a character at the cursor, replacing the selection.
-    bool TypeCharacter(char32_t codepoint);
-
-    void SelectAll();
-
-    // Undo and redo. Typing and deleting characters group into one step per
-    // word; anything else (Enter, deleting a selection) is a step of its own.
-    bool Undo() override;
-    bool Redo() override;
-    bool CanUndo() const override { return !undo_.empty(); }
-    bool CanRedo() const override { return !redo_.empty(); }
-
-    std::string SelectedText() const override;
-    bool PasteText(std::string text) override;
-    bool DeleteSelection() override;
+    // FileBase's clipboard interface (used by the Edit menu), done by TextBuffer.
+    std::string SelectedText() const override { return TextBuffer::SelectedText(); }
+    bool PasteText(std::string text) override { return TextBuffer::PasteText(std::move(text)); }
+    bool DeleteSelection() override { return TextBuffer::DeleteSelection(); }
+    // Both bases have one; they agree, TextBuffer's doesn't copy the text.
+    bool HasSelection() const { return TextBuffer::HasSelection(); }
 
     bool HandleInput(const EditorView& view) override;
     void LayoutContent() const override;
@@ -57,46 +35,18 @@ struct FileText : FileBase {
     void DrawOverlay(const EditorView& view) const override;
     std::optional<Rectangle> CursorBounds(const EditorView& view) const override;
 
+protected:
+    // Keeps `modified` in step with the text, so undoing back to what was
+    // saved clears it.
+    void TextChanged() override;
+
 private:
     // True while a mouse drag that started in this file's editor is selecting text.
     bool dragging_ = false;
 
-    // Pixel (or character) column kept across consecutive Up/Down presses, so
-    // the cursor returns to it after passing through shorter lines. Only valid
-    // while the cursor is still at goalPos_, where the last Up/Down left it.
-    std::optional<float> goalX_;
-    std::size_t goalPos_ = 0;
-
-    enum class EditKind { Other, Typing, Deleting };
-
-    // One undo step: at `position`, `removed` was replaced by `inserted`.
-    struct UndoStep {
-        std::size_t position = 0;
-        std::string removed;
-        std::string inserted;
-        std::size_t cursorBefore = 0, anchorBefore = 0;
-        std::size_t cursorAfter = 0, anchorAfter = 0;
-        EditKind kind = EditKind::Other;
-    };
-
-    static constexpr std::size_t maxUndoSteps = 1000;
-
-    std::deque<UndoStep> undo_;
-    std::deque<UndoStep> redo_;
-    // True while the next typed/deleted character may join undo_.back().
-    bool groupOpen_ = false;
     // The text last loaded or saved; nullopt for a file never saved.
     std::optional<std::string> savedText_;
 
-    // The one way the text changes: replace [start, end) with `inserted`, put
-    // the cursor after it, and record an undo step.
-    void Replace(std::size_t start, std::size_t end, std::string inserted, EditKind kind,
-                 bool endsGroup = false);
-    bool MoveVertically(bool down, bool shift, const LineMeasure* measure);
-    void UpdateModified();
-
-    // Apply this frame's typed characters and editing keys. Returns true if anything changed.
-    bool HandleKeyboard(const EditorView& view);
     // Click/drag to place the cursor and select. Returns true if the cursor or selection moved.
     bool HandleMouse(const EditorView& view);
     void DrawSelection(const EditorView& view) const;

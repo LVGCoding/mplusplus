@@ -124,7 +124,11 @@ bool FileText::HandleInput(const EditorView& view) {
     const auto previousAnchor = selectionStart;
 
     const bool clicked = HandleMouse(view);
-    const bool changed = HandleKeyboard(view);
+    const Font font = view.fonts[FONT_BODY];
+    const LineMeasure measure = [font](std::string_view piece) {
+        return TextWidth(std::string(piece), 0, piece.size(), font);
+    };
+    const bool changed = HandleKeyboard(&measure);
     return clicked || changed || previousCursor != cursorPos || previousAnchor != selectionStart;
 }
 
@@ -173,63 +177,4 @@ bool FileText::HandleMouse(const EditorView& view) {
         selectionStart = position;
     }
     return clicked;
-}
-
-// Reads this frame's keys and passes them to PressKey/TypeCharacter
-// (fileTextEdit.cpp), which do the editing.
-bool FileText::HandleKeyboard(const EditorView& view) {
-    const Font font = view.fonts[FONT_BODY];
-    const LineMeasure measure = [font](std::string_view piece) {
-        Clay_StringSlice slice = {.length = static_cast<int32_t>(piece.size()),
-                                  .chars = piece.data(),
-                                  .baseChars = piece.data()};
-        Clay_TextElementConfig config = {.fontId = FONT_BODY, .fontSize = fontSize};
-        Font copy = font;
-        return ClayRaylib_MeasureText(slice, &config, &copy).width;
-    };
-    const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    const bool shortcut = IsShortcutModifierDown();  // Command on macOS
-    auto pressed = [](int key) { return IsKeyPressed(key) || IsKeyPressedRepeat(key); };
-    bool changed = false;
-
-    if (shortcut && IsKeyPressed(KEY_C)) {
-        CopyToClipboard();
-        while (GetCharPressed() > 0) {}
-        return false;
-    }
-    if (shortcut && IsKeyPressed(KEY_X)) {
-        const bool cut = CutToClipboard();
-        while (GetCharPressed() > 0) {}
-        return cut;
-    }
-    if (shortcut && IsKeyPressed(KEY_V)) {
-        const bool inserted = PasteFromClipboard();
-        while (GetCharPressed() > 0) {}
-        return inserted;
-    }
-    if (shortcut && IsKeyPressed(KEY_A)) {
-        SelectAll();
-        while (GetCharPressed() > 0) {}
-        return true;
-    }
-    // Modifier+Z undoes; Modifier+Y or Modifier+Shift+Z redoes. Held keys repeat.
-    if (shortcut && pressed(KEY_Z)) {
-        changed |= shift ? Redo() : Undo();
-    }
-    if (shortcut && pressed(KEY_Y)) {
-        changed |= Redo();
-    }
-    for (const int key :
-         {KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_BACKSPACE, KEY_DELETE, KEY_ENTER}) {
-        if (pressed(key)) {
-            changed |= PressKey(key, shift, &measure);
-        }
-    }
-    if (pressed(KEY_KP_ENTER)) {
-        changed |= PressKey(KEY_ENTER, shift, &measure);
-    }
-    while (const int codepoint = GetCharPressed()) {
-        changed |= TypeCharacter(static_cast<char32_t>(codepoint));
-    }
-    return changed;
 }

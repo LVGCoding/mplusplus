@@ -57,7 +57,7 @@ namespace layout_internal {
         mathMenuOpen = true;
         mathMenuPosition = position;
         mathMenuItemRequested = SIZE_MAX;
-        mathMenuQuery.clear();
+        mathMenuSearch.Clear();
         mathMenuSelected = 0;
         ResetEditorCursorBlink();  // search-bar cursor starts solid
         // Start at the top of the list if it was scrolled before.
@@ -67,7 +67,7 @@ namespace layout_internal {
     inline void CloseMathMenu() {
         mathMenuOpen = false;
         mathMenuItemRequested = SIZE_MAX;
-        mathMenuQuery.clear();
+        mathMenuSearch.Clear();
     }
 
     // Indices into MathMenuItems() matching the search text (case-insensitive,
@@ -78,7 +78,7 @@ namespace layout_internal {
             for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             return out;
         };
-        const std::string query = lower(mathMenuQuery);
+        const std::string query = lower(mathMenuSearch.Text());
         std::vector<std::size_t> starts, contains;
         const auto& items = MathMenuItems();
         for (std::size_t i = 0; i < items.size(); ++i) {
@@ -122,32 +122,25 @@ namespace layout_internal {
         }
     }
 
-    // Keyboard control while the popup is open; the editor gets no input then.
-    // Typing filters the list, Up/Down choose, Enter inserts, and Backspace on
-    // an empty search closes the popup (like deleting the backslash).
-    inline void HandleMathMenuKeys() {
+    // Keyboard and mouse while the popup is open; the editor gets no input then.
+    // The search bar is a TextInput, so it edits like the text editor (cursor
+    // keys, selection, undo, clipboard). Up/Down choose, Enter/Tab insert, and
+    // Backspace on an empty search closes the popup (like deleting the backslash).
+    inline void HandleMathMenuKeys(Font* fonts) {
         if (!mathMenuOpen) return;
-        bool queryChanged = false;
-        while (const int codepoint = GetCharPressed()) {
-            if (codepoint > 32 && codepoint < 127 && codepoint != '\\') {
-                mathMenuQuery += static_cast<char>(codepoint);
-                mathMenuSelected = 0;
-                queryChanged = true;
-            }
+        if (mathMenuSearch.Text().empty() &&
+            (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))) {
+            CloseMathMenu();
+            return;
         }
-        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
-            if (mathMenuQuery.empty()) {
-                CloseMathMenu();
-                return;
-            }
-            mathMenuQuery.pop_back();
-            mathMenuSelected = 0;
-            queryChanged = true;
-        }
+        mathMenuSearch.HandleMouse(fonts);
+        // Item names have no spaces or backslashes.
+        const bool queryChanged = mathMenuSearch.HandleKeyboard(
+            [](char32_t c) { return c != U' ' && c != U'\\'; });
         // New search results start at the top, where the selection is.
         if (queryChanged) {
+            mathMenuSelected = 0;
             ResetMathMenuScroll();
-            ResetEditorCursorBlink();
         }
         const auto filtered = FilteredMathItems();
         if (filtered.empty()) return;
@@ -222,17 +215,7 @@ namespace layout_internal {
         }
     }
 
-    // Blinking text cursor at the end of the search text. Same timing as the
-    // editor's cursor: solid for a moment after typing, then blinking.
-    inline void MathMenuSearchCursor() {
-        const double elapsed = GetTime() - lastCursorActivity;
-        const bool visible = elapsed < 0.7 || static_cast<int>((elapsed - 0.7) / 0.5) % 2 == 0;
-        CLAY(CLAY_ID("MathMenuSearchCursor"),
-             {.layout = {.sizing = {CLAY_SIZING_FIXED(2), CLAY_SIZING_FIXED(20)}},
-              .backgroundColor = visible ? menuText : Clay_Color{0, 0, 0, 0}}) {}
-    }
-
-    // Search bar: shows what has been typed since the backslash.
+    // Search bar: the magnifier icon and the search text box.
     inline void MathMenuSearchBar() {
         CLAY(CLAY_ID("MathMenuSearch"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(mathMenuSearchHeight)},
@@ -244,29 +227,13 @@ namespace layout_internal {
             CLAY(CLAY_ID("MathMenuSearchIcon"),
                  {.layout = {.sizing = {CLAY_SIZING_FIXED(16), CLAY_SIZING_FIXED(16)}},
                   .custom = {.customData = &searchIcon}}) {}
-            if (mathMenuQuery.empty()) {
-                // Cursor flush against the placeholder, so it doesn't read as a divider.
-                CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                                         .childGap = 1,
-                                         .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
-                    MathMenuSearchCursor();
-                    CLAY_TEXT(CLAY_STRING("Search..."),
-                              {.textColor = {150, 150, 150, 255}, .fontId = FONT_BODY,
-                               .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
-                }
-            } else {
-                Clay_String query = {.isStaticallyAllocated = false,
-                                     .length = static_cast<int32_t>(mathMenuQuery.size()),
-                                     .chars = mathMenuQuery.c_str()};
-                // No gap between the text and the cursor right after it.
-                CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                                         .childGap = 1,
-                                         .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
-                    CLAY_TEXT(query, {.textColor = menuText, .fontId = FONT_BODY,
-                                      .fontSize = 18, .wrapMode = CLAY_TEXT_WRAP_NONE});
-                    MathMenuSearchCursor();
-                }
-            }
+            TextInput::Style style;
+            style.fontSize = 18;
+            style.textColor = menuText;
+            style.cursorColor = menuText;
+            style.placeholder = "Search...";
+            style.zIndex = 6;  // above the popup (5)
+            mathMenuSearch.Layout(style);
         }
     }
 

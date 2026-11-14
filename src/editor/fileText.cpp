@@ -4,20 +4,6 @@
 #include <fstream>
 #include <utility>
 
-std::string FileText::SelectedText() const {
-  const auto start = std::min({selectionStart, cursorPos, text.size()});
-  const auto end = std::min(std::max(selectionStart, cursorPos), text.size());
-  return text.substr(start, end - start);
-}
-
-bool FileText::PasteText(std::string pasted) {
-  if (pasted.empty()) return false;
-  const auto start = std::min({selectionStart, cursorPos, text.size()});
-  const auto end = std::min(std::max(selectionStart, cursorPos), text.size());
-  Replace(start, end, std::move(pasted), EditKind::Other);
-  return true;
-}
-
 bool ReadWholeFile(const std::filesystem::path &path, std::string &text,
                    std::string &error) {
   error.clear();
@@ -67,16 +53,12 @@ bool WriteWholeFile(const std::filesystem::path &path, const std::string &text,
 }
 
 bool FileText::Load(const std::filesystem::path &path, std::string &error) {
-  if (!ReadWholeFile(path, text, error)) {
+  std::string loaded;
+  if (!ReadWholeFile(path, loaded, error)) {
     return false;
   }
-  cursorPos = 0;
-  selectionStart = 0;
-  goalX_.reset();
-  undo_.clear();
-  redo_.clear();
-  groupOpen_ = false;
-  savedText_ = text;
+  savedText_ = loaded;
+  Reset(std::move(loaded));
   this->path = path;
   modified = false;
   return true;
@@ -90,4 +72,8 @@ bool FileText::Save(const std::filesystem::path &path, std::string &error) {
   this->path = path;
   modified = false;
   return true;
+}
+
+void FileText::TextChanged() {
+  modified = !savedText_ || text != *savedText_;
 }

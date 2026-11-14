@@ -34,16 +34,6 @@ struct EditorView {
     bool cursorVisible = true;
 };
 
-// The modifier for editor shortcuts (undo/redo, select all): Command on
-// macOS, Control elsewhere.
-inline bool ShortcutModifierDown() {
-#if defined(__APPLE__)
-    return IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER);
-#else
-    return IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-#endif
-}
-
 // Restrict drawing to the visible editor area. Pair with EndScissorMode().
 inline void BeginEditorClip(const EditorView& view) {
     BeginScissorMode(static_cast<int>(std::ceil(view.viewport.x)),

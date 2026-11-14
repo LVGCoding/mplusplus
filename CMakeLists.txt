@@ -67,7 +67,7 @@ add_library(mplusplus_core STATIC
   src/editor/fileBase.cpp
   src/editor/fileText.cpp
   src/editor/fileTextView.cpp
-  src/editor/fileTextEdit.cpp
+  src/editor/TextBuffer.cpp
   src/editor/fileMpp.cpp
   src/editor/fileMppView.cpp
   src/editor/fileMppEdit.cpp
@@ -83,6 +83,7 @@ add_library(mplusplus_core STATIC
   src/parser/parser.cpp
   src/ui/clay_impl.cpp
   src/ui/clay_renderer_raylib.cpp
+  src/ui/TextInput.cpp
 )
 target_include_directories(mplusplus_core PUBLIC src)
 target_link_libraries(mplusplus_core PUBLIC raylib clay)
