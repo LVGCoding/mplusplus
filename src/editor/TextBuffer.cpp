@@ -1,11 +1,12 @@
 // TextBuffer: editing plain text (cursor keys, typing, deleting, undo,
 // clipboard). Used by FileText and by TextInput boxes in the UI.
 //
-// Every change to the text goes through Replace(), which also records it for
+// New edits go through Replace(), which also records them for
 // undo as "at this position, this text was replaced by that text". Undo puts
 // the removed text back; redo puts the inserted text back. Typing (and
 // Backspace/Delete on single characters) in one place joins the previous step
-// until a space is typed or the cursor moves, so undo goes a word at a time.
+// while edits remain contiguous. A typed space ends a group; consecutive
+// character deletions can span word boundaries.
 
 #include "TextBuffer.h"
 
@@ -17,7 +18,8 @@
 
 namespace {
 // Byte offset of the UTF-8 character before `position`.
-std::size_t PreviousCharacter(const std::string& text, std::size_t position) {
+std::size_t PreviousCharacter(const std::string& text,
+                              std::size_t position) {
     if (position == 0) {
         return 0;
     }
@@ -29,7 +31,8 @@ std::size_t PreviousCharacter(const std::string& text, std::size_t position) {
 }
 
 // Byte offset of the UTF-8 character after `position`.
-std::size_t NextCharacter(const std::string& text, std::size_t position) {
+std::size_t NextCharacter(const std::string& text,
+                          std::size_t position) {
     if (position >= text.size()) {
         return text.size();
     }
@@ -40,12 +43,14 @@ std::size_t NextCharacter(const std::string& text, std::size_t position) {
     return position;
 }
 
-std::size_t LineStart(const std::string& text, std::size_t position) {
+std::size_t LineStart(const std::string& text,
+                      std::size_t position) {
     const auto newline = position == 0 ? std::string::npos : text.rfind('\n', position - 1);
     return newline == std::string::npos ? 0 : newline + 1;
 }
 
-std::size_t LineEnd(const std::string& text, std::size_t position) {
+std::size_t LineEnd(const std::string& text,
+                    std::size_t position) {
     const auto newline = text.find('\n', position);
     return newline == std::string::npos ? text.size() : newline;
 }
@@ -75,7 +80,9 @@ void TextBuffer::Reset(std::string newText) {
     TextChanged();
 }
 
-bool TextBuffer::PressKey(int key, bool shift, const LineMeasure* measure) {
+bool TextBuffer::PressKey(int key,
+                          bool shift,
+                          const LineMeasure* measure) {
     ClampPositions();
     const std::size_t start = std::min(selectionStart, cursorPos);
     const std::size_t end = std::max(selectionStart, cursorPos);
@@ -111,7 +118,7 @@ bool TextBuffer::PressKey(int key, bool shift, const LineMeasure* measure) {
         if (cursorPos == 0) {
             return false;
         }
-        Replace(PreviousCharacter(text, cursorPos), cursorPos, {}, EditKind::Deleting);
+        Replace(PreviousCharacter(text, cursorPos), cursorPos, {}, EditKind::DELETING);
         return true;
     case KEY_DELETE:
         if (DeleteSelection()) {
@@ -120,13 +127,13 @@ bool TextBuffer::PressKey(int key, bool shift, const LineMeasure* measure) {
         if (cursorPos == text.size()) {
             return false;
         }
-        Replace(cursorPos, NextCharacter(text, cursorPos), {}, EditKind::Deleting);
+        Replace(cursorPos, NextCharacter(text, cursorPos), {}, EditKind::DELETING);
         return true;
     case KEY_ENTER:
         if (singleLine) {
             return false;  // the owner's (e.g. submit)
         }
-        Replace(start, end, "\n", EditKind::Other);
+        Replace(start, end, "\n", EditKind::OTHER);
         return true;
     default:
         return false;
@@ -137,7 +144,9 @@ bool TextBuffer::PressKey(int key, bool shift, const LineMeasure* measure) {
 // The x is kept across repeated presses, so passing through a short line
 // doesn't lose the column. On the first line Up goes to the start of the
 // text, and on the last line Down goes to the end, as in most editors.
-bool TextBuffer::MoveVertically(bool down, bool shift, const LineMeasure* measure) {
+bool TextBuffer::MoveVertically(bool down,
+                                bool shift,
+                                const LineMeasure* measure) {
     auto width = [&](std::size_t from, std::size_t to) -> float {
         if (measure) {
             return (*measure)(std::string_view(text).substr(from, to - from));
@@ -200,8 +209,11 @@ bool TextBuffer::TypeCharacter(char32_t codepoint) {
     }
     ClampPositions();
     // A space ends the word, so each word (with its space) undoes in one go.
-    Replace(std::min(selectionStart, cursorPos), std::max(selectionStart, cursorPos),
-            EncodeUtf8(codepoint), EditKind::Typing, codepoint == U' ');
+    Replace(std::min(selectionStart, cursorPos),
+            std::max(selectionStart, cursorPos),
+            EncodeUtf8(codepoint),
+            EditKind::TYPING,
+            codepoint == U' ');
     return true;
 }
 
@@ -227,8 +239,10 @@ bool TextBuffer::PasteText(std::string pasted) {
         return false;
     }
     ClampPositions();
-    Replace(std::min(selectionStart, cursorPos), std::max(selectionStart, cursorPos),
-            std::move(pasted), EditKind::Other);
+    Replace(std::min(selectionStart, cursorPos),
+            std::max(selectionStart, cursorPos),
+            std::move(pasted),
+            EditKind::OTHER);
     return true;
 }
 
@@ -237,13 +251,18 @@ bool TextBuffer::DeleteSelection() {
     if (selectionStart == cursorPos) {
         return false;
     }
-    Replace(std::min(selectionStart, cursorPos), std::max(selectionStart, cursorPos), {},
-            EditKind::Other);
+    Replace(std::min(selectionStart, cursorPos),
+            std::max(selectionStart, cursorPos),
+            {},
+            EditKind::OTHER);
     return true;
 }
 
-void TextBuffer::Replace(std::size_t start, std::size_t end, std::string inserted, EditKind kind,
-                       bool endsGroup) {
+void TextBuffer::Replace(std::size_t start,
+                         std::size_t end,
+                         std::string inserted,
+                         EditKind kind,
+                         bool endsGroup) {
     UndoStep step;
     step.position = start;
     step.removed = text.substr(start, end - start);
@@ -262,15 +281,15 @@ void TextBuffer::Replace(std::size_t start, std::size_t end, std::string inserte
 
     // Join the previous step if this carries straight on from it.
     bool joined = false;
-    if (groupOpen_ && !undo_.empty() && kind != EditKind::Other) {
+    if (groupOpen_ && !undo_.empty() && kind != EditKind::OTHER) {
         UndoStep& last = undo_.back();
         const bool continues = last.kind == kind && last.cursorAfter == step.cursorBefore &&
                                step.anchorBefore == step.cursorBefore;
-        if (continues && kind == EditKind::Typing && step.removed.empty() &&
+        if (continues && kind == EditKind::TYPING && step.removed.empty() &&
             last.position + last.inserted.size() == start) {
             last.inserted += step.inserted;
             joined = true;
-        } else if (continues && kind == EditKind::Deleting && last.inserted.empty()) {
+        } else if (continues && kind == EditKind::DELETING && last.inserted.empty()) {
             if (start + step.removed.size() == last.position) {  // Backspace
                 last.removed.insert(0, step.removed);
                 last.position = start;
@@ -287,11 +306,11 @@ void TextBuffer::Replace(std::size_t start, std::size_t end, std::string inserte
     }
     if (!joined) {
         undo_.push_back(std::move(step));
-        if (undo_.size() > maxUndoSteps) {
+        if (undo_.size() > MAX_UNDO_STEPS) {
             undo_.pop_front();
         }
     }
-    groupOpen_ = kind != EditKind::Other && !endsGroup;
+    groupOpen_ = kind != EditKind::OTHER && !endsGroup;
     TextChanged();
 }
 
@@ -329,7 +348,8 @@ bool TextBuffer::Redo() {
 
 // --- Keyboard ------------------------------------------------------------------------
 
-bool TextBuffer::HandleKeyboard(const LineMeasure* measure, const CharacterFilter& accept) {
+bool TextBuffer::HandleKeyboard(const LineMeasure* measure,
+                                const CharacterFilter& accept) {
     const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
     const bool shortcut = IsShortcutModifierDown();  // Command on macOS
     auto pressed = [](int key) { return IsKeyPressed(key) || IsKeyPressedRepeat(key); };

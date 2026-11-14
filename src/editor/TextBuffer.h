@@ -94,7 +94,7 @@ private:
         EditKind kind = EditKind::Other;
     };
 
-    static constexpr std::size_t maxUndoSteps = 1000;
+    static constexpr std::size_t MAX_UNDO_STEPS = 1000;
 
     // Pixel (or character) column kept across consecutive Up/Down presses, so
     // the cursor returns to it after passing through shorter lines. Only valid
