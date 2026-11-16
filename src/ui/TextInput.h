@@ -40,7 +40,9 @@ public:
 
     TextBuffer buffer{/*singleLine=*/true};
 
-    const std::string& Text() const { return buffer.text; }
+    const std::string& Text() const {
+        return buffer.text;
+    }
 
     // Empty the box and forget its undo history.
     void Clear();
@@ -68,8 +70,10 @@ private:
     uint16_t fontId_ = FONT_BODY;
     uint16_t fontSize_ = 18;
 
-    enum Part : uint32_t { Box, Row, CursorMarker, CursorBar, Selected };
+    enum Part : uint32_t { BOX, ROW, CURSOR_MARKER, CURSOR_BAR, SELECTED };
     Clay_ElementId PartId(Part part) const;
     void ScrollCursorIntoView();
-    void Touch() { lastActivity_ = GetTime(); }
+    void Touch() {
+        lastActivity_ = GetTime();
+    }
 };

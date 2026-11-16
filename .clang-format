@@ -20,7 +20,7 @@ AllowShortLoopsOnASingleLine: false
 SpaceBeforeParens: ControlStatements
 SpacesInParentheses: false
 SpaceInEmptyParentheses: false
-SpaceInCStyleCastParentheses: false
+SpacesInCStyleCastParentheses: false
 PointerAlignment: Left
 ReferenceAlignment: Left
 

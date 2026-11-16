@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <random>
@@ -17,7 +18,7 @@
 class EditorNode;
 
 // Position of the cursor in the node tree: indices from the document root down
-// to a TextNode, ending with a byte offset into that TextNode's text. Each node
+// to a TextNode, ending with a byte offset on a UTF-8 character boundary. Each node
 // type consumes its own indices:
 //   LineNode   [child]           FracNode   [0 numerator | 1 denominator]
 //   SqrtNode   [0 index | 1 argument]       MatrixNode [row, column]
@@ -30,16 +31,16 @@ using PathView = std::span<const std::size_t>;
 using TextMeasure = std::function<float(std::string_view text, float fontSize)>;
 
 // Which side the cursor comes from when it moves vertically into a node.
-enum class VerticalEntry { FromAbove, FromBelow };
+enum class VerticalEntry { FROM_ABOVE, FROM_BELOW };
 
 // What is marked in red, waiting for a second Backspace to delete it.
 struct DeleteHighlight {
-    enum class Part { Whole, Row, Column };
+    enum class Part { WHOLE, ROW, COLUMN };
 
-    // The node itself (Whole), or the matrix whose row/column is marked.
+    // The node itself (WHOLE), or the matrix whose row/column is marked.
     const EditorNode* node = nullptr;
-    Part part = Part::Whole;
-    std::size_t index = 0;  // row or column for Row/Column
+    Part part = Part::WHOLE;
+    std::size_t index = 0;  // row or column for ROW/COLUMN
 };
 
 struct RenderContext {
@@ -85,50 +86,56 @@ struct KeyEvent {
 };
 
 // What a KeyEvent did, or what the parent should do about it.
-//   Moved        - `path` is the new cursor position, relative to the node that
+//   MOVED         - `path` is the new cursor position, relative to the node that
 //                  returned it. `changed` is set if the content was edited.
-//   Exit*        - the cursor would leave this node in that direction; the
+//   EXIT_*        - the cursor would leave this node in that direction; the
 //                  parent decides where it goes.
-//   DeleteLeft   - Backspace at the very start of this node.
-//   DeleteRight  - Delete at the very end of this node.
-//   DeleteSelf   - this node asks its parent to delete it (e.g. Backspace at the
+//   DELETE_LEFT   - Backspace at the very start of this node.
+//   DELETE_RIGHT  - Delete at the very end of this node.
+//   DELETE_SELF   - this node asks its parent to delete it (e.g. Backspace at the
 //                  start of a fraction's numerator).
-//   DeleteNode   - `path` leads to a node that should be deleted.
-//   MatrixLine   - `path` leads to a matrix cell [.., row, column]; Backspace at
+//   DELETE_NODE   - `path` leads to a node that should be deleted.
+//   MATRIX_LINE   - `path` leads to a matrix cell [.., row, column]; Backspace at
 //                  its start asks to delete that row (or column).
-//   MatrixInsert - `path` leads to a matrix cell; Enter asks to insert a row or
+//   MATRIX_INSERT - `path` leads to a matrix cell; Enter asks to insert a row or
 //                  column next to it.
-//   Ignored      - the key does nothing here.
+//   IGNORED       - the key does nothing here.
 struct KeyResult {
     enum class Kind {
-        Ignored,
-        Moved,
-        ExitLeft,
-        ExitRight,
-        ExitUp,
-        ExitDown,
-        DeleteLeft,
-        DeleteRight,
-        DeleteSelf,
-        DeleteNode,
-        MatrixLine,
-        MatrixInsert,
+        IGNORED,
+        MOVED,
+        EXIT_LEFT,
+        EXIT_RIGHT,
+        EXIT_UP,
+        EXIT_DOWN,
+        DELETE_LEFT,
+        DELETE_RIGHT,
+        DELETE_SELF,
+        DELETE_NODE,
+        MATRIX_LINE,
+        MATRIX_INSERT,
     };
 
-    Kind kind = Kind::Ignored;
+    Kind kind = Kind::IGNORED;
     CursorPath path;
     bool changed = false;
 
-    static KeyResult Moved(CursorPath path, bool changed = false) {
-        return {Kind::Moved, std::move(path), changed};
+    static KeyResult Moved(CursorPath path,
+                           bool changed = false) {
+        return {Kind::MOVED, std::move(path), changed};
     }
-    static KeyResult Exit(Kind kind) { return {kind, {}, false}; }
-    static KeyResult WithPath(Kind kind, CursorPath path) { return {kind, std::move(path), false}; }
+    static KeyResult Exit(Kind kind) {
+        return {kind, {}, false};
+    }
+    static KeyResult WithPath(Kind kind,
+                              CursorPath path) {
+        return {kind, std::move(path), false};
+    }
 
     // Prefix this node's own indices onto a child's result path.
     KeyResult Prepend(std::initializer_list<std::size_t> indices) && {
-        if (kind == Kind::Moved || kind == Kind::DeleteNode || kind == Kind::MatrixLine ||
-            kind == Kind::MatrixInsert) {
+        if (kind == Kind::MOVED || kind == Kind::DELETE_NODE || kind == Kind::MATRIX_LINE ||
+            kind == Kind::MATRIX_INSERT) {
             path.insert(path.begin(), indices);
         }
         return std::move(*this);
@@ -136,7 +143,8 @@ struct KeyResult {
 };
 
 // `prefix` followed by `rest`; an empty `rest` (no valid position) stays empty.
-inline CursorPath JoinPath(std::initializer_list<std::size_t> prefix, CursorPath rest) {
+inline CursorPath JoinPath(std::initializer_list<std::size_t> prefix,
+                           CursorPath rest) {
     if (rest.empty()) {
         return {};
     }
@@ -179,8 +187,13 @@ public:
     // Serialize this node (and its children) back to M++/LaTeX source.
     virtual std::string ToText() const = 0;
 
-    virtual std::pair<float, float> GetNWCorner() = 0;
-    virtual std::pair<float, float> GetSize() = 0;
+    // Legacy geometry hooks; current cursor placement uses LastLayoutBounds() instead.
+    virtual std::pair<float,
+                      float>
+    GetNWCorner() = 0;
+    virtual std::pair<float,
+                      float>
+    GetSize() = 0;
     virtual bool HasChild() = 0;
 
     // --- Cursor ---------------------------------------------------------------
@@ -196,14 +209,16 @@ public:
 
     // The position closest to screen x when the cursor moves into this node
     // vertically, using the last frame's layout. Falls back to FirstPosition().
-    virtual CursorPath PositionNearX(float /*x*/, VerticalEntry /*entry*/,
+    virtual CursorPath PositionNearX(float /*x*/,
+                                     VerticalEntry /*entry*/,
                                      const TextMeasure* /*measure*/) const {
         return FirstPosition();
     }
 
     // The child that `path` points into and how many indices that consumed, or
     // nullptr if the path ends here or is invalid.
-    virtual EditorNode* PathChild(PathView /*path*/, std::size_t& /*used*/) const {
+    virtual EditorNode* PathChild(PathView /*path*/,
+                                  std::size_t& /*used*/) const {
         return nullptr;
     }
 
@@ -218,14 +233,20 @@ public:
     // --- Identity ---------------------------------------------------------------
 
     // Random id assigned at construction; stable for the node's lifetime.
-    std::uint32_t GetId() const { return id_; }
+    std::uint32_t GetId() const {
+        return id_;
+    }
 
     // Clay element id for this node, consistent across frames so Clay can
     // track the element (hover, scroll, element data) between layouts.
-    Clay_ElementId GetClayId() const { return CLAY_IDI("EditorNode", id_); }
+    Clay_ElementId GetClayId() const {
+        return CLAY_IDI("EditorNode", id_);
+    }
 
 protected:
-    void CopyIdFrom(const EditorNode& other) { id_ = other.id_; }
+    void CopyIdFrom(const EditorNode& other) {
+        id_ = other.id_;
+    }
 
     // Clone() of a child that may be null.
     static std::unique_ptr<EditorNode> CloneOf(const std::unique_ptr<EditorNode>& node) {
@@ -234,8 +255,8 @@ protected:
 
 private:
     static std::uint32_t GenerateId() {
-        static std::mt19937 rng{std::random_device{}()};
-        return rng();
+        static std::mt19937 randomGenerator{std::random_device{}()};
+        return randomGenerator();
     }
 
     std::uint32_t id_;

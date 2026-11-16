@@ -5,31 +5,31 @@
 #include "layout_common.h"
 
 namespace layout_internal {
-    inline constexpr Clay_Color menuText = {20, 20, 20, 255};
-    inline constexpr Clay_Color menuHover = {205, 205, 205, 255};
+inline constexpr Clay_Color MENU_TEXT = {20, 20, 20, 255};
+inline constexpr Clay_Color MENU_HOVER = {205, 205, 205, 255};
 
-    // Look sampled from UIMockup1.pptx
-    inline constexpr Clay_Color titleBarColor = {78, 167, 46, 255};
-    inline constexpr Clay_Color menuBarColor = {232, 232, 232, 255};
-    inline constexpr Clay_Color dropdownColor = {209, 209, 209, 255};
-    inline constexpr Clay_Color gutterColor = {232, 232, 232, 255};
-    inline constexpr Clay_Color dividerColor = {209, 209, 209, 255};
-    inline constexpr Clay_Color editorColor = {255, 255, 255, 255};
-    inline constexpr uint16_t editorFontSize = editor_style::fontSize;
-    inline constexpr uint16_t editorLineHeight = editor_style::lineHeight;
-    inline constexpr float gutterWidth = 46;
-    inline constexpr Clay_Color terminalBorderColor = {174, 174, 174, 255};
-    inline constexpr int gutterMinLines = 20;
-    inline constexpr float editorPadding = editor_style::padding;
+// Look sampled from UIMockup1.pptx
+inline constexpr Clay_Color TITLE_BAR_COLOR = {78, 167, 46, 255};
+inline constexpr Clay_Color MENU_BAR_COLOR = {232, 232, 232, 255};
+inline constexpr Clay_Color DROPDOWN_COLOR = {209, 209, 209, 255};
+inline constexpr Clay_Color GUTTER_COLOR = {232, 232, 232, 255};
+inline constexpr Clay_Color DIVIDER_COLOR = {209, 209, 209, 255};
+inline constexpr Clay_Color EDITOR_COLOR = {255, 255, 255, 255};
+inline constexpr uint16_t EDITOR_FONT_SIZE = editor_style::FONT_SIZE;
+inline constexpr uint16_t EDITOR_LINE_HEIGHT = editor_style::LINE_HEIGHT;
+inline constexpr float GUTTER_WIDTH = 46;
+inline constexpr Clay_Color TERMINAL_BORDER_COLOR = {174, 174, 174, 255};
+inline constexpr int GUTTER_MIN_LINES = 20;
+inline constexpr float EDITOR_PADDING = editor_style::PADDING;
 
-    // Math popup size. The item list scrolls (mouse wheel / trackpad) once it is
-    // taller than mathMenuListMaxHeight; the search bar stays fixed above it.
-    inline constexpr float mathMenuWidth = 320;
-    inline constexpr float mathMenuListMaxHeight = 300;
-    inline constexpr float mathMenuItemHeight = 34;
-    inline constexpr float mathMenuCornerRadius = 12;
-    inline constexpr float mathMenuSearchHeight = 34;
-    inline constexpr uint16_t mathMenuFontSize = 20;
-    // Font size of the rendered node previews on the right of each math item.
-    inline constexpr float mathMenuPreviewFontSize = 18;
-}
+// Math popup size. The item list scrolls (mouse wheel / trackpad) once it is
+// taller than MATH_MENU_LIST_MAX_HEIGHT; the search bar stays fixed above it.
+inline constexpr float MATH_MENU_WIDTH = 320;
+inline constexpr float MATH_MENU_LIST_MAX_HEIGHT = 300;
+inline constexpr float MATH_MENU_ITEM_HEIGHT = 34;
+inline constexpr float MATH_MENU_CORNER_RADIUS = 12;
+inline constexpr float MATH_MENU_SEARCH_HEIGHT = 34;
+inline constexpr uint16_t MATH_MENU_FONT_SIZE = 20;
+// Font size of the rendered node previews on the right of each math item.
+inline constexpr float MATH_MENU_PREVIEW_FONT_SIZE = 18;
+}  // namespace layout_internal

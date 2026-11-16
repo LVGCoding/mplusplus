@@ -24,22 +24,27 @@ public:
 
     // Typing inserts at the cursor and Backspace/Delete remove one character.
     // Left/Right move one character, leaving at either end; Up/Down always leave.
-    // At either end, Backspace/Delete report DeleteLeft/DeleteRight.
+    // At either end, Backspace/Delete report DELETE_LEFT/DELETE_RIGHT.
     KeyResult KeyPress(const KeyEvent& event) override;
 
     void MouseClick() override;
 
     std::string ToText() const override;
 
-    std::pair<float, float> GetNWCorner() override;
+    std::pair<float,
+              float>
+    GetNWCorner() override;
 
-    std::pair<float, float> GetSize() override;
+    std::pair<float,
+              float>
+    GetSize() override;
 
     bool HasChild() override;
 
     CursorPath FirstPosition() const override;
     CursorPath LastPosition() const override;
-    CursorPath PositionNearX(float x, VerticalEntry entry,
+    CursorPath PositionNearX(float x,
+                             VerticalEntry entry,
                              const TextMeasure* measure) const override;
 
     // Screen box of the cursor at byte `offset`, from the last frame's layout:

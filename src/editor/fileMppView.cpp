@@ -9,17 +9,16 @@
 // Editing (typing, deleting, the matrix insert wheel) is in fileMppEdit.cpp,
 // and what a selection covers is in fileMppSelection.cpp.
 
-#include "FileMpp.h"
-
 #include "clay.h"
+#include "FileMpp.h"
 #include "math/FracNode.h"
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
 #include "math/TextNode.h"
 #include "raylib.h"
-#include "ui/EditorView.h"
 #include "ui/clay_renderer_raylib.h"
+#include "ui/EditorView.h"
 #include "ui/font.h"
 #include "ui/shortcuts.h"
 
@@ -28,19 +27,19 @@
 #include <limits>
 
 namespace {
-constexpr Color cursorColor = {20, 20, 20, 255};
-constexpr float cursorWidth = 2.0f;
-constexpr Color selectionColor = {65, 105, 168, 80};  // same as plain text files
+constexpr Color CURSOR_COLOR = {20, 20, 20, 255};
+constexpr float CURSOR_WIDTH = 2.0f;
+constexpr Color SELECTION_COLOR = {65, 105, 168, 80};  // same as plain text files
 
 // Matrix insert wheel.
-constexpr float wheelGap = 6.0f;          // between the cell and the ring
-constexpr float wheelThickness = 52.0f;   // width of the ring
-constexpr float wheelFontSize = 13.0f;
-constexpr Color wheelFill = {245, 245, 245, 235};
-constexpr Color wheelChosen = {46, 160, 67, 240};
-constexpr Color wheelEdge = {150, 150, 150, 255};
-constexpr Color wheelShadow = {0, 0, 0, 40};
-constexpr Color wheelText = {40, 40, 40, 255};
+constexpr float WHEEL_GAP = 6.0f;         // between the cell and the ring
+constexpr float WHEEL_THICKNESS = 52.0f;  // width of the ring
+constexpr float WHEEL_FONT_SIZE = 13.0f;
+constexpr Color WHEEL_FILL = {245, 245, 245, 235};
+constexpr Color WHEEL_CHOSEN = {46, 160, 67, 240};
+constexpr Color WHEEL_EDGE = {150, 150, 150, 255};
+constexpr Color WHEEL_SHADOW = {0, 0, 0, 40};
+constexpr Color WHEEL_TEXT = {40, 40, 40, 255};
 
 // Measures text the same way Clay does when laying out a TextNode.
 TextMeasure MakeMeasure(Font* fonts) {
@@ -50,7 +49,7 @@ TextMeasure MakeMeasure(Font* fonts) {
                                   .baseChars = text.data()};
         Clay_TextElementConfig config = {.fontId = FONT_BODY,
                                          .fontSize = static_cast<uint16_t>(fontSize)};
-        return ClayRaylib_MeasureText(slice, &config, fonts).width;
+        return ClayRaylibMeasureText(slice, &config, fonts).width;
     };
 }
 
@@ -58,35 +57,42 @@ Clay_ElementId RowId(std::size_t row) {
     return Clay_GetElementIdWithIndex(CLAY_STRING("MppRow"), static_cast<uint32_t>(row));
 }
 
-float DistanceToInterval(float value, float start, float length) {
+float DistanceToInterval(float value,
+                         float start,
+                         float length) {
     return std::max({start - value, value - start - length, 0.0f});
 }
 
 // Descend through rendered boxes so a click chooses the correct slot before
 // choosing a text offset. In particular, x alone cannot distinguish fraction
 // slots or matrix rows. All coordinates already include scrolling.
-CursorPath NodePositionAt(const EditorNode& node, float x, float y, const TextMeasure* measure) {
+CursorPath NodePositionAt(const EditorNode& node,
+                          float x,
+                          float y,
+                          const TextMeasure* measure) {
     if (dynamic_cast<const TextNode*>(&node)) {
-        return node.PositionNearX(x, VerticalEntry::FromAbove, measure);
+        return node.PositionNearX(x, VerticalEntry::FROM_ABOVE, measure);
     }
 
     const EditorNode* best = nullptr;
     CursorPath prefix;
     float distance = std::numeric_limits<float>::max();
-    auto consider = [&](const EditorNode* child, CursorPath path,
-                        std::optional<Clay_BoundingBox> bounds) {
-        if (!child || !bounds) return;
-        const float dx = DistanceToInterval(x, bounds->x, bounds->width);
-        const float dy = DistanceToInterval(y, bounds->y, bounds->height);
-        const float candidate = dx * dx + dy * dy;
-        // Text wins shared boundaries, including zero-width insertion points.
-        if (candidate < distance ||
-            (candidate == distance && dynamic_cast<const TextNode*>(child))) {
-            best = child;
-            prefix = std::move(path);
-            distance = candidate;
-        }
-    };
+    auto consider =
+        [&](const EditorNode* child, CursorPath path, std::optional<Clay_BoundingBox> bounds) {
+            if (!child || !bounds) {
+                return;
+            }
+            const float distanceX = DistanceToInterval(x, bounds->x, bounds->width);
+            const float distanceY = DistanceToInterval(y, bounds->y, bounds->height);
+            const float candidate = distanceX * distanceX + distanceY * distanceY;
+            // Text wins shared boundaries, including zero-width insertion points.
+            if (candidate < distance ||
+                (candidate == distance && dynamic_cast<const TextNode*>(child))) {
+                best = child;
+                prefix = std::move(path);
+                distance = candidate;
+            }
+        };
     if (const auto* line = dynamic_cast<const LineNode*>(&node)) {
         for (std::size_t i = 0; i < line->ChildCount(); ++i) {
             const auto* child = line->GetChild(i);
@@ -105,22 +111,35 @@ CursorPath NodePositionAt(const EditorNode& node, float x, float y, const TextMe
         }
     } else if (const auto* fraction = dynamic_cast<const FracNode*>(&node)) {
         const auto [numerator, denominator] = fraction->GetChildren();
-        if (numerator) consider(numerator, {0}, LastLayoutBounds(numerator->GetClayId()));
-        if (denominator) consider(denominator, {1}, LastLayoutBounds(denominator->GetClayId()));
+        if (numerator) {
+            consider(numerator, {0}, LastLayoutBounds(numerator->GetClayId()));
+        }
+        if (denominator) {
+            consider(denominator, {1}, LastLayoutBounds(denominator->GetClayId()));
+        }
     } else if (const auto* root = dynamic_cast<const SqrtNode*>(&node)) {
         const auto [index, argument] = root->GetChildren();
-        if (index) consider(index, {0}, LastLayoutBounds(index->GetClayId()));
-        if (argument) consider(argument, {1}, LastLayoutBounds(argument->GetClayId()));
+        if (index) {
+            consider(index, {0}, LastLayoutBounds(index->GetClayId()));
+        }
+        if (argument) {
+            consider(argument, {1}, LastLayoutBounds(argument->GetClayId()));
+        }
     } else if (const auto* matrix = dynamic_cast<const MatrixNode*>(&node)) {
         for (std::size_t row = 0; row < matrix->RowCount(); ++row) {
             for (std::size_t column = 0; column < matrix->ColumnCount(row); ++column) {
-                consider(matrix->GetCell(row, column), {row, column}, matrix->CellBounds(row, column));
+                consider(
+                    matrix->GetCell(row, column), {row, column}, matrix->CellBounds(row, column));
             }
         }
     }
-    if (!best) return node.FirstPosition();
+    if (!best) {
+        return node.FirstPosition();
+    }
     auto position = NodePositionAt(*best, x, y, measure);
-    if (position.empty()) return {};
+    if (position.empty()) {
+        return {};
+    }
     prefix.insert(prefix.end(), position.begin(), position.end());
     return prefix;
 }
@@ -128,9 +147,12 @@ CursorPath NodePositionAt(const EditorNode& node, float x, float y, const TextMe
 // Screen box covering a line from [startIndex, startOffset] to
 // [endIndex, endOffset]: selected text plus whole objects in between. Starts
 // as the (zero-width) caret box at the start, so it is never empty.
-std::optional<Rectangle> RangeBox(const LineNode& line, std::size_t startIndex,
-                                  std::size_t startOffset, std::size_t endIndex,
-                                  std::size_t endOffset, const TextMeasure& measure) {
+std::optional<Rectangle> RangeBox(const LineNode& line,
+                                  std::size_t startIndex,
+                                  std::size_t startOffset,
+                                  std::size_t endIndex,
+                                  std::size_t endOffset,
+                                  const TextMeasure& measure) {
     const auto* first = dynamic_cast<const TextNode*>(line.GetChild(startIndex));
     const auto caret = first ? first->CaretBox(startOffset, &measure) : std::nullopt;
     if (!caret) {
@@ -151,10 +173,10 @@ std::optional<Rectangle> RangeBox(const LineNode& line, std::size_t startIndex,
         if (const auto* text = dynamic_cast<const TextNode*>(child)) {
             const std::size_t from = i == startIndex ? startOffset : 0;
             const std::size_t to = i == endIndex ? endOffset : text->GetText().size();
-            const auto a = text->CaretBox(from, &measure);
-            const auto b = text->CaretBox(to, &measure);
-            if (from < to && a && b) {
-                add(a->x, a->y, b->x, b->y + b->height);
+            const auto startCaret = text->CaretBox(from, &measure);
+            const auto endCaret = text->CaretBox(to, &measure);
+            if (from < to && startCaret && endCaret) {
+                add(startCaret->x, startCaret->y, endCaret->x, endCaret->y + endCaret->height);
             }
         } else if (const auto bounds = LastLayoutBounds(child->GetClayId())) {
             add(bounds->x, bounds->y, bounds->x + bounds->width, bounds->y + bounds->height);
@@ -164,28 +186,39 @@ std::optional<Rectangle> RangeBox(const LineNode& line, std::size_t startIndex,
 }
 }  // namespace
 
-std::optional<CursorPath> FileMpp::PositionAt(float x, float y,
-                                             const TextMeasure* measure) const {
+std::optional<CursorPath> FileMpp::PositionAt(float x,
+                                              float y,
+                                              const TextMeasure* measure) const {
     std::optional<std::size_t> row;
     float distance = std::numeric_limits<float>::max();
     for (std::size_t i = 0; i < content.size(); ++i) {
         const auto bounds = LastLayoutBounds(RowId(i));
-        if (!bounds) continue;
+        if (!bounds) {
+            continue;
+        }
         const float candidate = DistanceToInterval(y, bounds->y, bounds->height);
         if (candidate < distance || (candidate == distance && y >= bounds->y)) {
             row = i;
             distance = candidate;
         }
     }
-    if (!row) return std::nullopt;
+    if (!row) {
+        return std::nullopt;
+    }
     auto position = JoinPath({*row}, NodePositionAt(*content[*row], x, y, measure));
-    if (!CursorText(position)) return std::nullopt;
+    if (!CursorText(position)) {
+        return std::nullopt;
+    }
     return position;
 }
 
-bool FileMpp::ClickAt(float x, float y, const TextMeasure* measure) {
+bool FileMpp::ClickAt(float x,
+                      float y,
+                      const TextMeasure* measure) {
     auto position = PositionAt(x, y, measure);
-    if (!position) return false;
+    if (!position) {
+        return false;
+    }
     cursorPos = std::move(*position);
     selectionStart = cursorPos;
     goalX_.reset();
@@ -197,23 +230,24 @@ bool FileMpp::ClickAt(float x, float y, const TextMeasure* measure) {
 
 void FileMpp::LayoutContent() const {
     RenderContext context;
-    context.fontSize = editor_style::fontSize;
+    context.fontSize = editor_style::FONT_SIZE;
     context.activeStructure = ActiveStructure();
     if (pendingDelete_) {
         context.deleteHighlight.node = NodeAt(pendingDelete_->node);
         context.deleteHighlight.part = pendingDelete_->part;
-        context.deleteHighlight.index = pendingDelete_->part == DeleteHighlight::Part::Column
+        context.deleteHighlight.index = pendingDelete_->part == DeleteHighlight::Part::COLUMN
                                             ? pendingDelete_->column
                                             : pendingDelete_->row;
     }
-    CLAY(CLAY_ID("MppDocument"), {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
-                                             .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
+    CLAY(CLAY_ID("MppDocument"),
+         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                     .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
         for (std::size_t i = 0; i < content.size(); ++i) {
             // Rows are at least one text line tall; rows holding fractions or
             // matrices grow to fit them.
             CLAY(RowId(i),
                  {.layout = {
-                      .sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(editor_style::lineHeight)},
+                      .sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(editor_style::LINE_HEIGHT)},
                       .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
                       .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
                 content[i]->RenderChildren(context);
@@ -255,24 +289,29 @@ bool FileMpp::HandleInput(const EditorView& view) {
     const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
     const bool modifier = IsShortcutModifierDown();
     bool changed = HandleMouse(view, measure);
+    // Shortcut letters can also be queued as typed characters; consume them before returning.
     if (modifier && IsKeyPressed(KEY_C)) {
         CopyToClipboard();
-        while (GetCharPressed() > 0) {}
+        while (GetCharPressed() > 0) {
+        }
         return changed;
     }
     if (modifier && IsKeyPressed(KEY_X)) {
         changed |= CutToClipboard();
-        while (GetCharPressed() > 0) {}
+        while (GetCharPressed() > 0) {
+        }
         return changed;
     }
     if (modifier && IsKeyPressed(KEY_V)) {
         changed |= PasteFromClipboard();
-        while (GetCharPressed() > 0) {}
+        while (GetCharPressed() > 0) {
+        }
         return changed;
     }
     if (modifier && IsKeyPressed(KEY_A)) {
         SelectAll();
-        while (GetCharPressed() > 0) {}
+        while (GetCharPressed() > 0) {
+        }
         return true;
     }
     // Modifier+Z undoes; Modifier+Y or Modifier+Shift+Z redoes. Held keys repeat.
@@ -303,7 +342,8 @@ bool FileMpp::HandleInput(const EditorView& view) {
 }
 
 // Click to place the cursor, drag or Shift+click to select.
-bool FileMpp::HandleMouse(const EditorView& view, const TextMeasure& measure) {
+bool FileMpp::HandleMouse(const EditorView& view,
+                          const TextMeasure& measure) {
     if (!view.acceptsMouse || !IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
         dragging_ = false;
         return false;
@@ -347,7 +387,7 @@ void FileMpp::DrawOverlay(const EditorView& view) const {
     if (view.cursorVisible) {
         if (const auto bounds = CursorBounds(view)) {
             BeginEditorClip(view);
-            DrawRectangleRec(*bounds, cursorColor);
+            DrawRectangleRec(*bounds, CURSOR_COLOR);
             EndScissorMode();
         }
     }
@@ -371,9 +411,13 @@ void FileMpp::DrawSelection(const EditorView& view) const {
     if (start[0] == end[0]) {
         const CursorPath linePath(start.begin(), start.end() - 2);
         if (const auto* line = dynamic_cast<const LineNode*>(NodeAt(linePath))) {
-            if (const auto box = RangeBox(*line, start[start.size() - 2], start.back(),
-                                          end[end.size() - 2], end.back(), measure)) {
-                DrawRectangleRec(*box, selectionColor);
+            if (const auto box = RangeBox(*line,
+                                          start[start.size() - 2],
+                                          start.back(),
+                                          end[end.size() - 2],
+                                          end.back(),
+                                          measure)) {
+                DrawRectangleRec(*box, SELECTION_COLOR);
             }
         }
     } else {
@@ -385,67 +429,72 @@ void FileMpp::DrawSelection(const EditorView& view) const {
                 continue;
             }
             const LineNode& line = *content[row];
-            const CursorPath from = row == start[0] ? CursorPath{start[1], start[2]}
-                                                    : line.FirstPosition();
+            const CursorPath from =
+                row == start[0] ? CursorPath{start[1], start[2]} : line.FirstPosition();
             const CursorPath to = row == end[0] ? CursorPath{end[1], end[2]} : line.LastPosition();
             auto box = RangeBox(line, from[0], from[1], to[0], to[1], measure);
             if (!box) {
                 continue;
             }
             if (row != end[0]) {
-                box->width += editor_style::fontSize / 2.0f;
+                box->width += editor_style::FONT_SIZE / 2.0f;
             }
             if (box->width > 0) {
-                DrawRectangleRec(*box, selectionColor);
+                DrawRectangleRec(*box, SELECTION_COLOR);
             }
         }
     }
     EndScissorMode();
 }
 
-// A ring around the matrix cell split into four wedges, one per direction.
+// A ring around the matrix cell split into four WEDGES, one per direction.
 // The chosen wedge is highlighted; Enter inserts a row/column that way.
 void FileMpp::DrawInsertWheel(const EditorView& view) const {
     const auto* matrix = dynamic_cast<const MatrixNode*>(NodeAt(insertWheel_->matrix));
-    const auto cell = matrix ? matrix->CellBounds(insertWheel_->row, insertWheel_->column)
-                             : std::nullopt;
+    const auto cell =
+        matrix ? matrix->CellBounds(insertWheel_->row, insertWheel_->column) : std::nullopt;
     if (!cell) {
         return;
     }
     const Vector2 centre = {cell->x + cell->width / 2, cell->y + cell->height / 2};
-    const float inner = std::max(cell->width, cell->height) / 2 + wheelGap;
-    const float outer = inner + wheelThickness;
+    const float inner = std::max(cell->width, cell->height) / 2 + WHEEL_GAP;
+    const float outer = inner + WHEEL_THICKNESS;
 
     struct Wedge {
         WheelDirection direction;
         float angle;  // centre of the wedge in raylib degrees (0 = right, 90 = down)
         const char* label;
     };
-    static constexpr Wedge wedges[] = {
-        {WheelDirection::Right, 0.0f, "Col right"},
-        {WheelDirection::Down, 90.0f, "Row below"},
-        {WheelDirection::Left, 180.0f, "Col left"},
-        {WheelDirection::Up, 270.0f, "Row above"},
+    static constexpr Wedge WEDGES[] = {
+        {WheelDirection::RIGHT, 0.0f, "Col right"},
+        {WheelDirection::DOWN, 90.0f, "Row below"},
+        {WheelDirection::LEFT, 180.0f, "Col left"},
+        {WheelDirection::UP, 270.0f, "Row above"},
     };
 
-    DrawCircleV(centre, outer + 1, wheelShadow);
-    for (const Wedge& wedge : wedges) {
+    DrawCircleV(centre, outer + 1, WHEEL_SHADOW);
+    for (const Wedge& wedge : WEDGES) {
         const bool chosen = insertWheel_->direction == wedge.direction;
-        DrawRing(centre, inner, outer, wedge.angle - 44, wedge.angle + 44, 24,
-                 chosen ? wheelChosen : wheelFill);
+        DrawRing(centre,
+                 inner,
+                 outer,
+                 wedge.angle - 44,
+                 wedge.angle + 44,
+                 24,
+                 chosen ? WHEEL_CHOSEN : WHEEL_FILL);
     }
-    DrawRing(centre, inner - 1, inner, 0, 360, 48, wheelEdge);
-    DrawRing(centre, outer, outer + 1, 0, 360, 48, wheelEdge);
+    DrawRing(centre, inner - 1, inner, 0, 360, 48, WHEEL_EDGE);
+    DrawRing(centre, outer, outer + 1, 0, 360, 48, WHEEL_EDGE);
 
     const Font font = view.fonts ? view.fonts[FONT_BODY] : GetFontDefault();
     const float radius = (inner + outer) / 2;
-    for (const Wedge& wedge : wedges) {
+    for (const Wedge& wedge : WEDGES) {
         const bool chosen = insertWheel_->direction == wedge.direction;
         const float radians = wedge.angle * DEG2RAD;
-        const Vector2 size = MeasureTextEx(font, wedge.label, wheelFontSize, 0);
+        const Vector2 size = MeasureTextEx(font, wedge.label, WHEEL_FONT_SIZE, 0);
         const Vector2 at = {centre.x + std::cos(radians) * radius - size.x / 2,
                             centre.y + std::sin(radians) * radius - size.y / 2};
-        DrawTextEx(font, wedge.label, at, wheelFontSize, 0, chosen ? WHITE : wheelText);
+        DrawTextEx(font, wedge.label, at, WHEEL_FONT_SIZE, 0, chosen ? WHITE : WHEEL_TEXT);
     }
 }
 
@@ -455,5 +504,6 @@ std::optional<Rectangle> FileMpp::CursorBounds(const EditorView& view) const {
     if (!caret) {
         return std::nullopt;
     }
-    return Rectangle{std::round(caret->x - cursorWidth / 2), caret->y, cursorWidth, caret->height};
+    return Rectangle{
+        std::round(caret->x - CURSOR_WIDTH / 2), caret->y, CURSOR_WIDTH, caret->height};
 }

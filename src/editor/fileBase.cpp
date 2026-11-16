@@ -1,63 +1,69 @@
 #include "fileBase.h"
 
-#include <algorithm>
-#include <cctype>
-
 #include "editor/FileMpp.h"
 #include "fileText.h"
 
+#include <algorithm>
+#include <cctype>
+
 bool FileBase::CopyToClipboard() const {
-  const std::string selected = SelectedText();
-  if (selected.empty()) return false;
-  SetClipboardText(selected.c_str());
-  return true;
+    const std::string selected = SelectedText();
+    if (selected.empty()) {
+        return false;
+    }
+    SetClipboardText(selected.c_str());
+    return true;
 }
 
 bool FileBase::CutToClipboard() {
-  return CopyToClipboard() && DeleteSelection();
+    return CopyToClipboard() && DeleteSelection();
 }
 
 bool FileBase::PasteFromClipboard() {
-  const char *pasted = GetClipboardText();
-  return pasted && PasteText(pasted);
+    const char* pasted = GetClipboardText();
+    return pasted && PasteText(pasted);
 }
 
-const std::string &FileBase::TabName() const {
-  tabName_ = path.filename().string();
-  if (tabName_.empty()) {
-    tabName_ = "untitled.mpp";
-  }
+const std::string& FileBase::TabName() const {
+    tabName_ = path.filename().string();
+    if (tabName_.empty()) {
+        tabName_ = "untitled.mpp";
+    }
 
-  // Count UTF-8 characters so truncation never splits a multibyte character.
-  std::size_t characters = 0;
-  std::size_t ellipsisOffset = 0;
-  for (std::size_t i = 0; i < tabName_.size(); ++i) {
-    if ((static_cast<unsigned char>(tabName_[i]) & 0xC0) == 0x80) {
-      continue;
+    constexpr std::size_t MAX_TAB_CHARACTERS = 20;
+    constexpr std::size_t ELLIPSIS_CHARACTERS = 3;
+
+    // Count UTF-8 characters so truncation never splits a multibyte character.
+    std::size_t characters = 0;
+    std::size_t ellipsisOffset = 0;
+    for (std::size_t i = 0; i < tabName_.size(); ++i) {
+        if ((static_cast<unsigned char>(tabName_[i]) & 0xC0) == 0x80) {
+            continue;
+        }
+        if (characters == MAX_TAB_CHARACTERS - ELLIPSIS_CHARACTERS) {
+            ellipsisOffset = i;
+        }
+        if (++characters > MAX_TAB_CHARACTERS) {
+            tabName_.resize(ellipsisOffset);
+            tabName_ += "...";
+            break;
+        }
     }
-    if (characters == 17) {
-      ellipsisOffset = i;
-    }
-    if (++characters > 20) {
-      tabName_.resize(ellipsisOffset);
-      tabName_ += "...";
-      break;
-    }
-  }
-  return tabName_;
+    return tabName_;
 }
 
-bool IsMppPath(const std::filesystem::path &path) {
-  std::string extension = path.extension().string();
-  std::transform(
-      extension.begin(), extension.end(), extension.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  return extension == ".mpp";
+bool IsMppPath(const std::filesystem::path& path) {
+    std::string extension = path.extension().string();
+    std::transform(
+        extension.begin(), extension.end(), extension.begin(), [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+    return extension == ".mpp";
 }
 
-std::unique_ptr<FileBase> CreateFileForPath(const std::filesystem::path &path) {
-  if (IsMppPath(path)) {
-    return std::make_unique<FileMpp>();
-  }
-  return std::make_unique<FileText>();
+std::unique_ptr<FileBase> CreateFileForPath(const std::filesystem::path& path) {
+    if (IsMppPath(path)) {
+        return std::make_unique<FileMpp>();
+    }
+    return std::make_unique<FileText>();
 }

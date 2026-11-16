@@ -5,14 +5,14 @@
 #include "math/LineNode.h"
 #include "raylib.h"
 
-#include <gtest/gtest.h>
-
 #include <filesystem>
+#include <gtest/gtest.h>
 #include <memory>
 #include <string>
 
 namespace {
-FileMpp Doc(const std::string& source, CursorPath cursor = {}) {
+FileMpp MakeDocument(const std::string& source,
+                     CursorPath cursor = {}) {
     FileMpp file;
     file.SetSource(source);
     if (!cursor.empty()) {
@@ -21,27 +21,33 @@ FileMpp Doc(const std::string& source, CursorPath cursor = {}) {
     return file;
 }
 
-bool Press(FileMpp& file, int key, bool shift = false) {
+bool PressKey(FileMpp& file,
+              int key,
+              bool shift = false) {
     return file.PressKey(key, shift, nullptr);
 }
 
-void Type(FileMpp& file, const std::string& text) {
-    for (const char c : text) {
-        file.TypeCharacter(static_cast<char32_t>(c));
+// These fixtures type ASCII bytes; UTF-8 cases exercise cursor movement or paste separately.
+void TypeAscii(FileMpp& file,
+               const std::string& text) {
+    for (const char character : text) {
+        file.TypeCharacter(static_cast<char32_t>(character));
     }
 }
 }  // namespace
 
-TEST(History, NothingToUndoAtFirst) {
-    auto file = Doc("abc");
+TEST(History,
+     NothingToUndoAtFirst) {
+    auto file = MakeDocument("abc");
     EXPECT_FALSE(file.CanUndo());
     EXPECT_FALSE(file.Undo());
     EXPECT_FALSE(file.Redo());
 }
 
-TEST(History, TypingUndoesAWordAtATime) {
-    auto file = Doc("");
-    Type(file, "hello world");
+TEST(History,
+     TypingUndoesAWordAtATime) {
+    auto file = MakeDocument("");
+    TypeAscii(file, "hello world");
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "hello ");
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 6}));
@@ -56,21 +62,23 @@ TEST(History, TypingUndoesAWordAtATime) {
     EXPECT_EQ(file.source, "hello world");
 }
 
-TEST(History, MovingTheCursorStartsANewStep) {
-    auto file = Doc("ac", {0, 0, 1});
-    Type(file, "b");
-    Press(file, KEY_RIGHT);
-    Type(file, "d");
+TEST(History,
+     MovingTheCursorStartsANewStep) {
+    auto file = MakeDocument("ac", {0, 0, 1});
+    TypeAscii(file, "b");
+    PressKey(file, KEY_RIGHT);
+    TypeAscii(file, "d");
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "abc");
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "ac");
 }
 
-TEST(History, BackspacesGroupLikeTyping) {
-    auto file = Doc("abcd", {0, 0, 4});
-    Press(file, KEY_BACKSPACE);
-    Press(file, KEY_BACKSPACE);
+TEST(History,
+     BackspacesGroupLikeTyping) {
+    auto file = MakeDocument("abcd", {0, 0, 4});
+    PressKey(file, KEY_BACKSPACE);
+    PressKey(file, KEY_BACKSPACE);
     EXPECT_EQ(file.ContentText(), "ab");
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "abcd");
@@ -78,12 +86,13 @@ TEST(History, BackspacesGroupLikeTyping) {
     EXPECT_FALSE(file.CanUndo());
 }
 
-TEST(History, SplittingAndJoiningRows) {
-    auto file = Doc("abcd\nxy", {0, 0, 2});
-    Press(file, KEY_ENTER);
+TEST(History,
+     SplittingAndJoiningRows) {
+    auto file = MakeDocument("abcd\nxy", {0, 0, 2});
+    PressKey(file, KEY_ENTER);
     ASSERT_EQ(file.content.size(), 3u);
-    Press(file, KEY_BACKSPACE);  // joins them back
-    Press(file, KEY_ENTER);
+    PressKey(file, KEY_BACKSPACE);  // joins them back
+    PressKey(file, KEY_ENTER);
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "abcd\nxy");
     ASSERT_TRUE(file.Undo());
@@ -94,11 +103,12 @@ TEST(History, SplittingAndJoiningRows) {
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 2}));
 }
 
-TEST(History, DeletedObjectComesBackAsItWas) {
-    auto file = Doc("a\\frac{1}{2}b", {0, 2, 0});
+TEST(History,
+     DeletedObjectComesBackAsItWas) {
+    auto file = MakeDocument("a\\frac{1}{2}b", {0, 2, 0});
     const auto fracId = file.content[0]->GetChild(1)->GetId();
-    Press(file, KEY_BACKSPACE);  // mark
-    Press(file, KEY_BACKSPACE);  // delete
+    PressKey(file, KEY_BACKSPACE);  // mark
+    PressKey(file, KEY_BACKSPACE);  // delete
     ASSERT_EQ(file.ContentText(), "ab");
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "a\\frac{1}{2}b");
@@ -108,12 +118,13 @@ TEST(History, DeletedObjectComesBackAsItWas) {
     EXPECT_FALSE(file.GetPendingDelete());
 }
 
-TEST(History, SelectionDeletedAcrossRowsComesBackSelected) {
-    auto file = Doc("ab\ncd\nef", {0, 0, 1});
+TEST(History,
+     SelectionDeletedAcrossRowsComesBackSelected) {
+    auto file = MakeDocument("ab\ncd\nef", {0, 0, 1});
     file.PressKey(KEY_DOWN, true, nullptr);
     file.PressKey(KEY_DOWN, true, nullptr);
     file.PressKey(KEY_RIGHT, true, nullptr);
-    Type(file, "X");
+    TypeAscii(file, "X");
     ASSERT_EQ(file.ContentText(), "aXf");
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "ab\ncd\nef");
@@ -121,45 +132,48 @@ TEST(History, SelectionDeletedAcrossRowsComesBackSelected) {
     EXPECT_EQ(file.cursorPos, (CursorPath{2, 0, 1}));
 }
 
-TEST(History, MatrixRowInsertAndInsertedObjects) {
-    auto file = Doc("x", {0, 0, 1});
+TEST(History,
+     MatrixRowInsertAndInsertedObjects) {
+    auto file = MakeDocument("x", {0, 0, 1});
     ASSERT_TRUE(file.InsertNode(
         std::make_unique<FracNode>(std::make_unique<LineNode>(), std::make_unique<LineNode>())));
-    Type(file, "1");
+    TypeAscii(file, "1");
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "x\\frac{}{}");
     ASSERT_TRUE(file.Undo());
     EXPECT_EQ(file.ContentText(), "x");
 
-    auto matrix = Doc("\\begin{matrix}a&b\\\\c&d\\end{matrix}", {0, 1, 0, 0, 0, 1});
-    Press(matrix, KEY_ENTER);
-    Press(matrix, KEY_DOWN);
-    Press(matrix, KEY_ENTER);  // row below
+    auto matrix = MakeDocument("\\begin{matrix}a&b\\\\c&d\\end{matrix}", {0, 1, 0, 0, 0, 1});
+    PressKey(matrix, KEY_ENTER);
+    PressKey(matrix, KEY_DOWN);
+    PressKey(matrix, KEY_ENTER);  // row below
     ASSERT_EQ(matrix.ContentText(), "\\begin{matrix}a&b\\\\&\\\\c&d\\end{matrix}");
     ASSERT_TRUE(matrix.Undo());
     EXPECT_EQ(matrix.ContentText(), "\\begin{matrix}a&b\\\\c&d\\end{matrix}");
     EXPECT_EQ(matrix.cursorPos, (CursorPath{0, 1, 0, 0, 0, 1}));
 }
 
-TEST(History, NewEditClearsRedo) {
-    auto file = Doc("");
-    Type(file, "ab");
+TEST(History,
+     NewEditClearsRedo) {
+    auto file = MakeDocument("");
+    TypeAscii(file, "ab");
     file.Undo();
     ASSERT_TRUE(file.CanRedo());
-    Type(file, "c");
+    TypeAscii(file, "c");
     EXPECT_FALSE(file.CanRedo());
     EXPECT_EQ(file.ContentText(), "c");
 }
 
-TEST(History, UntouchedRowsAreNotReplaced) {
+TEST(History,
+     UntouchedRowsAreNotReplaced) {
     std::string source;
     for (int i = 0; i < 100; ++i) {
         source += "row \\frac{" + std::to_string(i) + "}{2}\n";
     }
-    auto file = Doc(source, {50, 0, 4});
+    auto file = MakeDocument(source, {50, 0, 4});
     const LineNode* far = file.content[10].get();
     const LineNode* next = file.content[51].get();
-    Type(file, "x");
+    TypeAscii(file, "x");
     ASSERT_TRUE(file.Undo());
     ASSERT_TRUE(file.Redo());
     ASSERT_TRUE(file.Undo());
@@ -168,7 +182,8 @@ TEST(History, UntouchedRowsAreNotReplaced) {
     EXPECT_EQ(file.ContentText(), source);
 }
 
-TEST(History, UndoingBackToTheSavedTextClearsModified) {
+TEST(History,
+     UndoingBackToTheSavedTextClearsModified) {
     const auto path = std::filesystem::temp_directory_path() / "mplusplus_history_test.mpp";
     std::string error;
     {
@@ -179,7 +194,7 @@ TEST(History, UndoingBackToTheSavedTextClearsModified) {
     FileMpp file;
     ASSERT_TRUE(file.Load(path, error)) << error;
     file.MoveCursorTo({0, 0, 3});
-    Type(file, "d");
+    TypeAscii(file, "d");
     EXPECT_TRUE(file.modified);
     file.Undo();
     EXPECT_FALSE(file.modified);
@@ -188,9 +203,10 @@ TEST(History, UndoingBackToTheSavedTextClearsModified) {
     std::filesystem::remove(path);
 }
 
-TEST(History, LoadingClearsHistory) {
-    auto file = Doc("");
-    Type(file, "a");
+TEST(History,
+     LoadingClearsHistory) {
+    auto file = MakeDocument("");
+    TypeAscii(file, "a");
     file.SetSource("b");
     EXPECT_FALSE(file.CanUndo());
 }

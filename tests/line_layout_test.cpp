@@ -2,14 +2,17 @@
 #include "editor/fileText.h"
 #include "math/TextNode.h"
 #include "parser/parser.h"
-#include "ui/layout_panels.h"
 #include "ui/layout_menu.h"
+#include "ui/layout_panels.h"
 
 #include <cmath>
 #include <gtest/gtest.h>
 #include <vector>
 
 namespace {
+// A synthetic font and a private Clay arena make layout tests independent of a graphics window.
+// Restore the previous context before releasing the arena so later tests cannot access freed
+// memory.
 class LineLayoutTest : public ::testing::Test {
 protected:
     std::vector<char> memory_;
@@ -60,7 +63,9 @@ protected:
         return data.boundingBox;
     }
 
-    void ExpectHistoryMenu(const FileBase* file, bool undoEnabled, bool redoEnabled) {
+    void ExpectHistoryMenu(const FileBase* file,
+                           bool undoEnabled,
+                           bool redoEnabled) {
         Clay_BeginLayout();
         CLAY(CLAY_ID("MenuTestRoot"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}}}) {
@@ -72,17 +77,25 @@ protected:
         bool foundRedo = false;
         for (int32_t i = 0; i < commands.length; ++i) {
             const auto* command = Clay_RenderCommandArray_Get(&commands, i);
-            if (command->commandType != CLAY_RENDER_COMMAND_TYPE_TEXT) continue;
+            if (command->commandType != CLAY_RENDER_COMMAND_TYPE_TEXT) {
+                continue;
+            }
             const auto& text = command->renderData.text;
             const std::string_view label(text.stringContents.chars, text.stringContents.length);
-            if (label != "Undo" && label != "Redo") continue;
+            if (label != "Undo" && label != "Redo") {
+                continue;
+            }
             const bool enabled = label == "Undo" ? undoEnabled : redoEnabled;
-            const auto expected = enabled ? layout_internal::menuText : Clay_Color{150, 150, 150, 255};
+            const auto expected =
+                enabled ? layout_internal::MENU_TEXT : Clay_Color{150, 150, 150, 255};
             EXPECT_FLOAT_EQ(text.textColor.r, expected.r);
             EXPECT_FLOAT_EQ(text.textColor.g, expected.g);
             EXPECT_FLOAT_EQ(text.textColor.b, expected.b);
-            if (label == "Undo") foundUndo = true;
-            else foundRedo = true;
+            if (label == "Undo") {
+                foundUndo = true;
+            } else {
+                foundRedo = true;
+            }
         }
         EXPECT_TRUE(foundUndo);
         EXPECT_TRUE(foundRedo);
@@ -91,14 +104,18 @@ protected:
 };
 }  // namespace
 
-TEST_F(LineLayoutTest, EditMenuReflectsBothFileTypesHistoryStacks) {
+TEST_F(LineLayoutTest,
+       EditMenuReflectsBothFileTypesHistoryStacks) {
     ExpectHistoryMenu(nullptr, false, false);
     FileText text;
     FileMpp mpp;
     for (FileBase* file : {static_cast<FileBase*>(&text), static_cast<FileBase*>(&mpp)}) {
         ExpectHistoryMenu(file, false, false);
-        if (file == &text) ASSERT_TRUE(text.PasteText("hello"));
-        else ASSERT_TRUE(mpp.PasteText("\\frac{a}{b}"));
+        if (file == &text) {
+            ASSERT_TRUE(text.PasteText("hello"));
+        } else {
+            ASSERT_TRUE(mpp.PasteText("\\frac{a}{b}"));
+        }
         ExpectHistoryMenu(file, true, false);
         ASSERT_TRUE(file->Undo());
         ExpectHistoryMenu(file, false, true);
@@ -111,7 +128,7 @@ TEST_F(LineLayoutTest,
        NumbersFollowTallRowsOnFirstFrameAndAfterResize) {
     FileMpp file;
     file.SetSource("plain\n\\frac{a}{b}\n\\sqrt[3]{x}\n"
-                                      "\\begin{matrix}a&b\\\\c&d\\end{matrix}\n\\alpha");
+                   "\\begin{matrix}a&b\\\\c&d\\end{matrix}\n\\alpha");
     ASSERT_EQ(file.LineCount(), 5u);
     LayoutFile(file);
     for (std::size_t line = 0; line < file.LineCount(); ++line) {
@@ -122,8 +139,8 @@ TEST_F(LineLayoutTest,
             EXPECT_FLOAT_EQ(Label(line).y, previous.y + previous.height);
         }
     }
-    EXPECT_GT(Row(file, 1).height, editor_style::lineHeight);
-    EXPECT_GT(Row(file, 3).height, editor_style::lineHeight);
+    EXPECT_GT(Row(file, 1).height, editor_style::LINE_HEIGHT);
+    EXPECT_GT(Row(file, 3).height, editor_style::LINE_HEIGHT);
     EXPECT_FLOAT_EQ(Label(5).y, Row(file, 4).y + Row(file, 4).height);
 
     file.SetSource("\\frac{\\frac{a}{b}}{c}\nnext");
@@ -131,8 +148,8 @@ TEST_F(LineLayoutTest,
     EXPECT_FLOAT_EQ(Label(1).y, Row(file, 0).y + Row(file, 0).height);
     file.SetSource("short\nnext");
     LayoutFile(file);
-    EXPECT_FLOAT_EQ(Row(file, 0).height, editor_style::lineHeight);
-    EXPECT_FLOAT_EQ(Label(1).y - Label(0).y, editor_style::lineHeight);
+    EXPECT_FLOAT_EQ(Row(file, 0).height, editor_style::LINE_HEIGHT);
+    EXPECT_FLOAT_EQ(Label(1).y - Label(0).y, editor_style::LINE_HEIGHT);
 }
 
 TEST_F(LineLayoutTest,
@@ -147,7 +164,7 @@ TEST_F(LineLayoutTest,
     FileMpp empty;
     EXPECT_EQ(empty.LineCount(), 1u);
     LayoutFile(empty);
-    EXPECT_FLOAT_EQ(Label(1).y - Label(0).y, editor_style::lineHeight);
+    EXPECT_FLOAT_EQ(Label(1).y - Label(0).y, editor_style::LINE_HEIGHT);
 }
 
 TEST_F(LineLayoutTest,
@@ -177,7 +194,8 @@ TEST_F(LineLayoutTest,
     EXPECT_FLOAT_EQ(Label(10).y, Row(file, 10).y);
 }
 
-TEST_F(LineLayoutTest, ClickChoosesRenderedRowAndClampsToTextEnds) {
+TEST_F(LineLayoutTest,
+       ClickChoosesRenderedRowAndClampsToTextEnds) {
     FileMpp file;
     file.SetSource("wide text\n\\frac{a}{b}\n\nlast");
     LayoutFile(file);
@@ -199,7 +217,8 @@ TEST_F(LineLayoutTest, ClickChoosesRenderedRowAndClampsToTextEnds) {
     EXPECT_FALSE(file.modified);
 }
 
-TEST_F(LineLayoutTest, ClickEntersNestedSlotsAndUsesTheirFontSizes) {
+TEST_F(LineLayoutTest,
+       ClickEntersNestedSlotsAndUsesTheirFontSizes) {
     FileMpp file;
     file.SetSource("\\frac{abcd}{\\sqrt[xyz]{wxyz}}\n"
                    "\\begin{matrix}abcd&\\frac{efgh}{ijkl}\\\\mnop&\\sqrt{qrst}\\end{matrix}\n"
@@ -209,18 +228,18 @@ TEST_F(LineLayoutTest, ClickEntersNestedSlotsAndUsesTheirFontSizes) {
         return text.size() * size * 0.5f;
     };
     const std::vector<CursorPath> positions = {
-        {0, 1, 0, 0, 2},       // numerator
-        {0, 1, 1, 1, 0, 0, 2}, // denominator's root index
-        {0, 1, 1, 1, 1, 0, 2}, // denominator's root argument
-        {1, 1, 0, 0, 0, 2},    // matrix upper left
-        {1, 1, 0, 1, 1, 0, 0, 2}, // matrix upper right numerator
-        {1, 1, 0, 1, 1, 1, 0, 2}, // matrix upper right denominator
-        {1, 1, 1, 0, 0, 2},    // matrix lower left
-        {1, 1, 1, 1, 1, 1, 0, 2}, // matrix lower right root
-        {2, 1, 0, 2},          // bare group
-        {2, 4, 2},             // text after symbol
-        {3, 1, 0, 0, 0},       // empty numerator
-        {3, 1, 1, 0, 0},       // empty denominator
+        {0, 1, 0, 0, 2},           // numerator
+        {0, 1, 1, 1, 0, 0, 2},     // denominator's root index
+        {0, 1, 1, 1, 1, 0, 2},     // denominator's root argument
+        {1, 1, 0, 0, 0, 2},        // matrix upper left
+        {1, 1, 0, 1, 1, 0, 0, 2},  // matrix upper right numerator
+        {1, 1, 0, 1, 1, 1, 0, 2},  // matrix upper right denominator
+        {1, 1, 1, 0, 0, 2},        // matrix lower left
+        {1, 1, 1, 1, 1, 1, 0, 2},  // matrix lower right root
+        {2, 1, 0, 2},              // bare group
+        {2, 4, 2},                 // text after symbol
+        {3, 1, 0, 0, 0},           // empty numerator
+        {3, 1, 1, 0, 0},           // empty denominator
     };
     for (const auto& path : positions) {
         SCOPED_TRACE(::testing::PrintToString(path));
@@ -235,7 +254,8 @@ TEST_F(LineLayoutTest, ClickEntersNestedSlotsAndUsesTheirFontSizes) {
     }
 }
 
-TEST_F(LineLayoutTest, ClickUsesScrolledBoundsAndUtf8CharacterBoundaries) {
+TEST_F(LineLayoutTest,
+       ClickUsesScrolledBoundsAndUtf8CharacterBoundaries) {
     FileMpp file;
     file.SetSource("aé日z\n" + std::string(30, '\n') + "\\frac{a}{b}\nlast");
     LayoutFile(file);
@@ -256,7 +276,8 @@ TEST_F(LineLayoutTest, ClickUsesScrolledBoundsAndUtf8CharacterBoundaries) {
     EXPECT_EQ(file.cursorPos, (CursorPath{file.LineCount() - 1, 0, 2}));
 }
 
-TEST_F(LineLayoutTest, ClickCancelsPendingDeleteAndMatrixInsertWheel) {
+TEST_F(LineLayoutTest,
+       ClickCancelsPendingDeleteAndMatrixInsertWheel) {
     FileMpp file;
     file.SetSource("\\frac{a}{b}\n\\begin{matrix}x\\end{matrix}");
     LayoutFile(file);
@@ -274,21 +295,23 @@ TEST_F(LineLayoutTest, ClickCancelsPendingDeleteAndMatrixInsertWheel) {
     EXPECT_FALSE(file.modified);
 }
 
-TEST_F(LineLayoutTest, ClickOnSymbolChoosesTextOnEitherSide) {
+TEST_F(LineLayoutTest,
+       ClickOnSymbolChoosesTextOnEitherSide) {
     FileMpp file;
     file.SetSource("before\\alpha after");
     LayoutFile(file);
     const auto symbol = LastLayoutBounds(file.content[0]->GetChild(1)->GetClayId());
     ASSERT_TRUE(symbol);
-    ASSERT_TRUE(file.ClickAt(symbol->x + symbol->width * 0.25f,
-                             symbol->y + symbol->height / 2, nullptr));
+    ASSERT_TRUE(
+        file.ClickAt(symbol->x + symbol->width * 0.25f, symbol->y + symbol->height / 2, nullptr));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 6}));
-    ASSERT_TRUE(file.ClickAt(symbol->x + symbol->width * 0.75f,
-                             symbol->y + symbol->height / 2, nullptr));
+    ASSERT_TRUE(
+        file.ClickAt(symbol->x + symbol->width * 0.75f, symbol->y + symbol->height / 2, nullptr));
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 2, 0}));
 }
 
-TEST_F(LineLayoutTest, ClickBeforeFirstLayoutLeavesCursorAlone) {
+TEST_F(LineLayoutTest,
+       ClickBeforeFirstLayoutLeavesCursorAlone) {
     FileMpp file;
     const auto cursor = file.cursorPos;
     EXPECT_FALSE(file.ClickAt(100, 100, nullptr));

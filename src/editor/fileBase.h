@@ -24,29 +24,49 @@ struct FileBase {
 
     virtual ~FileBase() = default;
 
-    // Read the file at `path` into this object. On success, `this->path` is set.
-    virtual bool Load(const std::filesystem::path& path, std::string& error) = 0;
+    // Read the file at `path`. On failure, preserve the open document and report `error`.
+    // On success, update `this->path` and clear the modified flag.
+    virtual bool Load(const std::filesystem::path& path,
+                      std::string& error) = 0;
 
-    // Write this object to `path`. On success, `this->path` is set.
-    virtual bool Save(const std::filesystem::path& path, std::string& error) = 0;
+    // Write this object to `path`. Update the path and modified flag only on success;
+    // retain unsaved in-memory content and report `error` on failure.
+    virtual bool Save(const std::filesystem::path& path,
+                      std::string& error) = 0;
 
     virtual const std::string& TabName() const;
 
-    virtual bool Undo() { return false; }
-    virtual bool Redo() { return false; }
-    virtual bool CanUndo() const { return false; }
-    virtual bool CanRedo() const { return false; }
+    virtual bool Undo() {
+        return false;
+    }
+    virtual bool Redo() {
+        return false;
+    }
+    virtual bool CanUndo() const {
+        return false;
+    }
+    virtual bool CanRedo() const {
+        return false;
+    }
 
     // --- Selection and clipboard ------------------------------------------------
 
     // The selected text (empty if nothing is selected), in the file's source form.
-    virtual std::string SelectedText() const { return {}; }
+    virtual std::string SelectedText() const {
+        return {};
+    }
     // Insert `text` at the cursor, replacing the selection, as one undo step.
-    virtual bool PasteText(std::string /*text*/) { return false; }
+    virtual bool PasteText(std::string /*text*/) {
+        return false;
+    }
     // Delete the selected range as one undo step. Returns false if nothing was selected.
-    virtual bool DeleteSelection() { return false; }
+    virtual bool DeleteSelection() {
+        return false;
+    }
 
-    bool HasSelection() const { return !SelectedText().empty(); }
+    bool HasSelection() const {
+        return !SelectedText().empty();
+    }
 
     // Shared by the keyboard shortcuts and the Edit menu. Each returns true if
     // the content changed (Copy never changes it, so it returns whether it copied).

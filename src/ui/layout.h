@@ -13,16 +13,22 @@ bool IsLayoutModalOpen();
 
 // Call before layout. Passes this frame's keyboard/mouse input to the active file.
 // Returns true if its content changed or its cursor/selection moved.
-bool HandleActiveFileInput(Editor& editor, Font* fonts);
+bool HandleActiveFileInput(Editor& editor,
+                           Font* fonts);
 
 // Call after input, before layout, so typing can interrupt an ongoing wheel gesture.
-void UpdateLayoutScroll(float wheelX, float wheelY, float deltaTime, bool textChanged);
+void UpdateLayoutScroll(float wheelX,
+                        float wheelY,
+                        float deltaTime,
+                        bool cursorActivity);
 
 // Call after layout. Returns true if another layout pass is needed before drawing.
-bool ScrollEditorCursorIntoView(Editor& editor, Font* fonts);
+bool ScrollEditorCursorIntoView(Editor& editor,
+                                Font* fonts);
 
 // Call after Clay has rendered. Lets the active file draw its cursor, selection, etc.
-void DrawActiveFileOverlay(Editor& editor, Font* fonts);
+void DrawActiveFileOverlay(Editor& editor,
+                           Font* fonts);
 
 // Call after EndDrawing(), while layout text references are no longer in use.
 void ProcessLayoutActions(Editor& editor);

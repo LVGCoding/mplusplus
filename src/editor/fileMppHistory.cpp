@@ -12,6 +12,7 @@
 #include "FileMpp.h"
 
 #include <algorithm>
+#include <iterator>
 #include <utility>
 
 namespace {
@@ -45,7 +46,8 @@ void FileMpp::ClearHistory() {
     openGroup_.reset();
 }
 
-void FileMpp::BeginEdit(EditKind kind, bool endsGroup) {
+void FileMpp::BeginEdit(EditKind kind,
+                        bool endsGroup) {
     if (editDepth_++ > 0) {
         return;  // part of the action already in progress
     }
@@ -80,6 +82,7 @@ void FileMpp::EndEdit() {
 
     // The copied window, before and after; the edit changed nothing outside it.
     const std::size_t windowRows = edit.rows.size();
+    // Row insertions/deletions change the window size; rows outside it retain their identity.
     const std::size_t newWindowRows = windowRows + content.size() - edit.rowCount;
     std::size_t first = 0;
     std::size_t oldEnd = windowRows;
@@ -100,8 +103,9 @@ void FileMpp::EndEdit() {
 
     UndoStep step;
     step.firstRow = edit.firstRow + first;
-    step.rows.assign(std::make_move_iterator(edit.rows.begin() + static_cast<std::ptrdiff_t>(first)),
-                     std::make_move_iterator(edit.rows.begin() + static_cast<std::ptrdiff_t>(oldEnd)));
+    step.rows.assign(
+        std::make_move_iterator(edit.rows.begin() + static_cast<std::ptrdiff_t>(first)),
+        std::make_move_iterator(edit.rows.begin() + static_cast<std::ptrdiff_t>(oldEnd)));
     step.replaces = newEnd - first;
     step.cursorBefore = std::move(edit.cursor);
     step.anchorBefore = std::move(edit.anchor);
@@ -111,7 +115,7 @@ void FileMpp::EndEdit() {
 
     // Typing or deleting characters straight after the last step, in the same
     // single row, joins it.
-    if (!undo_.empty() && openGroup_ == edit.kind && edit.kind != EditKind::Other) {
+    if (!undo_.empty() && openGroup_ == edit.kind && edit.kind != EditKind::OTHER) {
         UndoStep& last = undo_.back();
         if (last.firstRow == step.firstRow && last.replaces == 1 && step.rows.size() == 1 &&
             step.replaces == 1 && last.cursorAfter == step.cursorBefore &&
@@ -123,7 +127,7 @@ void FileMpp::EndEdit() {
         }
     }
     undo_.push_back(std::move(step));
-    if (undo_.size() > maxUndoSteps) {
+    if (undo_.size() > MAX_UNDO_STEPS) {
         undo_.pop_front();
     }
     openGroup_ = edit.endsGroup ? std::nullopt : std::optional(edit.kind);
@@ -132,11 +136,13 @@ void FileMpp::EndEdit() {
 void FileMpp::SwapRows(UndoStep& step) {
     const auto at = content.begin() + static_cast<std::ptrdiff_t>(step.firstRow);
     std::vector<std::unique_ptr<LineNode>> current(
-        std::make_move_iterator(at), std::make_move_iterator(at + static_cast<std::ptrdiff_t>(step.replaces)));
+        std::make_move_iterator(at),
+        std::make_move_iterator(at + static_cast<std::ptrdiff_t>(step.replaces)));
     content.erase(at, at + static_cast<std::ptrdiff_t>(step.replaces));
     content.insert(content.begin() + static_cast<std::ptrdiff_t>(step.firstRow),
                    std::make_move_iterator(step.rows.begin()),
                    std::make_move_iterator(step.rows.end()));
+    // The same swap reverses either direction: retain the displaced rows for the next move.
     step.replaces = step.rows.size();
     step.rows = std::move(current);
 }

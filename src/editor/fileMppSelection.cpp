@@ -9,37 +9,43 @@
 // Selections that span rows are a range of rows at the top level.
 
 #include "FileMpp.h"
-
 #include "math/LineNode.h"
 #include "math/TextNode.h"
 
 #include <algorithm>
+#include <initializer_list>
+#include <utility>
 
 namespace {
-enum class Side { Before, After };
+enum class Side { BEFORE, AFTER };
 
-CursorPath Concat(CursorPath prefix, std::initializer_list<std::size_t> rest) {
+CursorPath Concat(CursorPath prefix,
+                  std::initializer_list<std::size_t> rest) {
     prefix.insert(prefix.end(), rest);
     return prefix;
 }
 
-CursorPath Concat(CursorPath prefix, const CursorPath& rest) {
+CursorPath Concat(CursorPath prefix,
+                  const CursorPath& rest) {
     prefix.insert(prefix.end(), rest.begin(), rest.end());
     return prefix;
 }
 
-CursorPath Prefix(const CursorPath& path, std::size_t length) {
+CursorPath Prefix(const CursorPath& path,
+                  std::size_t length) {
     return CursorPath(path.begin(), path.begin() + static_cast<std::ptrdiff_t>(length));
 }
 
-std::size_t TextLength(const LineNode& line, std::size_t index) {
+std::size_t TextLength(const LineNode& line,
+                       std::size_t index) {
     const auto* text = dynamic_cast<const TextNode*>(line.GetChild(index));
     return text ? text->GetText().size() : 0;
 }
 
 // Prefix lengths of `path` that lead to a LineNode: 1 for the row itself, then
 // one for each fraction slot, root argument or matrix cell it goes into.
-std::vector<std::size_t> LineDepths(const FileMpp& file, const CursorPath& path) {
+std::vector<std::size_t> LineDepths(const FileMpp& file,
+                                    const CursorPath& path) {
     std::vector<std::size_t> depths;
     if (path.empty() || path[0] >= file.content.size()) {
         return depths;
@@ -64,11 +70,15 @@ std::vector<std::size_t> LineDepths(const FileMpp& file, const CursorPath& path)
 
 // Prefix length of the deepest LineNode holding both paths, or 0 if they are
 // in different rows.
-std::size_t CommonLineDepth(const FileMpp& file, const CursorPath& a, const CursorPath& b) {
+std::size_t CommonLineDepth(const FileMpp& file,
+                            const CursorPath& firstPath,
+                            const CursorPath& secondPath) {
     std::size_t common = 0;
-    for (const std::size_t depth : LineDepths(file, a)) {
-        if (depth > b.size() || !std::equal(a.begin(), a.begin() + static_cast<std::ptrdiff_t>(depth),
-                                            b.begin())) {
+    for (const std::size_t depth : LineDepths(file, firstPath)) {
+        if (depth > secondPath.size() ||
+            !std::equal(firstPath.begin(),
+                        firstPath.begin() + static_cast<std::ptrdiff_t>(depth),
+                        secondPath.begin())) {
             break;
         }
         common = depth;
@@ -79,7 +89,10 @@ std::size_t CommonLineDepth(const FileMpp& file, const CursorPath& a, const Curs
 // `path` lifted to a position directly in the LineNode at prefix length
 // `depth`: unchanged if it already is, otherwise just before or after the
 // child of that line it is inside.
-CursorPath ClampToLine(const FileMpp& file, const CursorPath& path, std::size_t depth, Side side) {
+CursorPath ClampToLine(const FileMpp& file,
+                       const CursorPath& path,
+                       std::size_t depth,
+                       Side side) {
     if (path.size() <= depth + 2) {
         return path;
     }
@@ -89,7 +102,7 @@ CursorPath ClampToLine(const FileMpp& file, const CursorPath& path, std::size_t 
     if (!line || child == 0 || child + 1 >= line->ChildCount()) {
         return path;  // breaks the Normalize() invariant; leave it alone
     }
-    return side == Side::Before ? Concat(linePath, {child - 1, TextLength(*line, child - 1)})
+    return side == Side::BEFORE ? Concat(linePath, {child - 1, TextLength(*line, child - 1)})
                                 : Concat(linePath, {child + 1, 0});
 }
 }  // namespace
@@ -104,8 +117,8 @@ std::optional<FileMpp::Selection> FileMpp::GetSelection() const {
     const CursorPath& last = forward ? cursorPos : selectionStart;
     // Ends in different rows are each lifted to their own row.
     const std::size_t depth = std::max<std::size_t>(CommonLineDepth(*this, first, last), 1);
-    Selection selection{ClampToLine(*this, first, depth, Side::Before),
-                        ClampToLine(*this, last, depth, Side::After)};
+    Selection selection{ClampToLine(*this, first, depth, Side::BEFORE),
+                        ClampToLine(*this, last, depth, Side::AFTER)};
     if (selection.start == selection.end) {
         return std::nullopt;
     }
@@ -128,12 +141,17 @@ void FileMpp::SelectAll() {
 
 std::string FileMpp::SelectedText() const {
     const auto selection = GetSelection();
-    if (!selection) return {};
+    if (!selection) {
+        return {};
+    }
     const auto& start = selection->start;
     const auto& end = selection->end;
     std::string result;
-    auto appendRange = [&](const LineNode& line, std::size_t first, std::size_t from,
-                           std::size_t last, std::size_t to) {
+    auto appendRange = [&](const LineNode& line,
+                           std::size_t first,
+                           std::size_t from,
+                           std::size_t last,
+                           std::size_t to) {
         for (std::size_t i = first; i <= last; ++i) {
             const auto* node = line.GetChild(i);
             if (const auto* text = dynamic_cast<const TextNode*>(node)) {
@@ -147,14 +165,19 @@ std::string FileMpp::SelectedText() const {
     };
     if (start[0] == end[0]) {
         const auto* line = dynamic_cast<const LineNode*>(NodeAt(Prefix(start, start.size() - 2)));
-        if (line) appendRange(*line, start[start.size() - 2], start.back(),
-                               end[end.size() - 2], end.back());
+        if (line) {
+            appendRange(
+                *line, start[start.size() - 2], start.back(), end[end.size() - 2], end.back());
+        }
     } else {
         for (std::size_t row = start[0]; row <= end[0]; ++row) {
-            if (row > start[0]) result += lineEnding_;
+            if (row > start[0]) {
+                result += lineEnding_;
+            }
             const auto& line = *content[row];
             const auto last = line.ChildCount() - 1;
-            appendRange(line, row == start[0] ? start[1] : 0,
+            appendRange(line,
+                        row == start[0] ? start[1] : 0,
                         row == start[0] ? start.back() : 0,
                         row == end[0] ? end[1] : last,
                         row == end[0] ? end.back() : TextLength(line, last));
@@ -168,7 +191,7 @@ bool FileMpp::DeleteSelection() {
     if (!selection) {
         return false;
     }
-    EditScope scope(*this, EditKind::Other);
+    EditScope scope(*this, EditKind::OTHER);
     const CursorPath& start = selection->start;
     const CursorPath& end = selection->end;
     if (start[0] == end[0]) {
@@ -177,8 +200,10 @@ bool FileMpp::DeleteSelection() {
         if (!line) {
             return false;
         }
-        cursorPos = Concat(linePath, line->EraseRange(start[start.size() - 2], start.back(),
-                                                      end[end.size() - 2], end.back()));
+        cursorPos =
+            Concat(linePath,
+                   line->EraseRange(
+                       start[start.size() - 2], start.back(), end[end.size() - 2], end.back()));
     } else {
         // Keep the start of the first row and the end of the last, and join them.
         LineNode& top = *content[start[0]];
@@ -206,7 +231,8 @@ bool FileMpp::ExtendSelection(bool right) {
     const CursorPath anchor = selectionStart;
     const bool forward = anchor < cursorPos;
     const std::size_t depth = std::max<std::size_t>(CommonLineDepth(*this, anchor, cursorPos), 1);
-    const CursorPath focus = ClampToLine(*this, cursorPos, depth, forward ? Side::After : Side::Before);
+    const CursorPath focus =
+        ClampToLine(*this, cursorPos, depth, forward ? Side::AFTER : Side::BEFORE);
 
     const CursorPath linePath = Prefix(focus, focus.size() - 2);
     const auto* line = dynamic_cast<const LineNode*>(NodeAt(linePath));
@@ -267,8 +293,8 @@ bool FileMpp::ExtendSelection(bool right) {
             const auto* outerLine = dynamic_cast<const LineNode*>(NodeAt(Prefix(focus, outer)));
             const std::size_t object = focus[outer];
             if (outerLine && object > 0) {
-                next = Concat(Prefix(focus, outer),
-                              {object - 1, TextLength(*outerLine, object - 1)});
+                next =
+                    Concat(Prefix(focus, outer), {object - 1, TextLength(*outerLine, object - 1)});
             }
         }
     }
