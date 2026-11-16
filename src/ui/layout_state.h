@@ -9,8 +9,6 @@
 
 #include <vector>
 
-#include <vector>
-
 namespace layout_internal {
 inline bool newRequested = false;
 inline bool openRequested = false;
@@ -28,17 +26,16 @@ inline bool closeRequested = false;
 // Tab index the user clicked to activate or close this frame (if any).
 inline std::size_t selectTabRequested = SIZE_MAX;
 inline std::size_t closeTabRequested = SIZE_MAX;
+// Track the file rather than its index, which changes as tabs move during a drag.
+struct TabDragState {
+    const FileBase* file = nullptr;
+    Vector2 start = {};
+    bool dragging = false;
+};
+inline TabDragState tabDrag;
 // Remember each open file's editor scroll position so switching tabs restores it.
 inline std::unordered_map<const FileBase*, Clay_Vector2> tabScroll;
 
-// Order of the tabs as shown in the tab bar. The Editor keeps its own
-// order; this one only changes when the user drags a tab.
-inline std::vector<const FileBase*> tabOrder;
-// Tab being dragged (pressed and still held), and whether it has moved far
-// enough to count as a drag rather than a click.
-inline const FileBase* draggedTab = nullptr;
-inline float tabDragStartX = 0;
-inline bool tabDragMoved = false;
 // Where along the tab the mouse grabbed it, so the drag preview keeps that spot under the mouse.
 inline float tabDragGrabOffset = 0;
 

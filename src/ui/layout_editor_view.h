@@ -31,7 +31,7 @@ inline EditorView MakeEditorView(Font* fonts) {
                         editor.boundingBox.height};
     }
     view.viewport = EditorViewport();
-    view.acceptsMouse = !IsAnyMenuOpen();
+    view.acceptsMouse = !IsAnyMenuOpen() && !tabDrag.file;
     constexpr double CURSOR_SOLID_SECONDS = 0.7;
     constexpr double CURSOR_BLINK_SECONDS = 0.5;
     const double elapsed = GetTime() - lastCursorActivity;

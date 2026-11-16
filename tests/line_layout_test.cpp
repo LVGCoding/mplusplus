@@ -18,6 +18,7 @@ protected:
     std::vector<char> memory_;
     std::vector<std::string> errors_;
     Clay_Context* previousContext_ = nullptr;
+    Clay_RenderCommandArray commands_ = {};
 
     void SetUp() override {
         previousContext_ = Clay_GetCurrentContext();
@@ -43,8 +44,23 @@ protected:
     void LayoutFile(const FileBase& file) {
         Clay_BeginLayout();
         layout_internal::LayoutWorkspace(&file);
-        Clay_EndLayout(0);
+        commands_ = Clay_EndLayout(0);
         EXPECT_TRUE(errors_.empty());
+    }
+
+    std::vector<std::string> GutterLabels() {
+        const auto gutter = Clay_GetElementData(CLAY_ID("Gutter"));
+        EXPECT_TRUE(gutter.found);
+        std::vector<std::string> labels;
+        for (int32_t index = 0; index < commands_.length; ++index) {
+            const auto* command = Clay_RenderCommandArray_Get(&commands_, index);
+            if (command->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT &&
+                command->boundingBox.x < gutter.boundingBox.x + gutter.boundingBox.width) {
+                const auto& text = command->renderData.text.stringContents;
+                labels.emplace_back(text.chars, text.length);
+            }
+        }
+        return labels;
     }
 
     Clay_BoundingBox Row(const FileMpp& file,
@@ -141,7 +157,7 @@ TEST_F(LineLayoutTest,
     }
     EXPECT_GT(Row(file, 1).height, editor_style::LINE_HEIGHT);
     EXPECT_GT(Row(file, 3).height, editor_style::LINE_HEIGHT);
-    EXPECT_FLOAT_EQ(Label(5).y, Row(file, 4).y + Row(file, 4).height);
+    EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1", "2", "3", "4", "5"}));
 
     file.SetSource("\\frac{\\frac{a}{b}}{c}\nnext");
     LayoutFile(file);
@@ -150,6 +166,7 @@ TEST_F(LineLayoutTest,
     LayoutFile(file);
     EXPECT_FLOAT_EQ(Row(file, 0).height, editor_style::LINE_HEIGHT);
     EXPECT_FLOAT_EQ(Label(1).y - Label(0).y, editor_style::LINE_HEIGHT);
+    EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1", "2"}));
 }
 
 TEST_F(LineLayoutTest,
@@ -161,10 +178,11 @@ TEST_F(LineLayoutTest,
     for (std::size_t line = 0; line < file.LineCount(); ++line) {
         EXPECT_FLOAT_EQ(Label(line).y, Row(file, line).y);
     }
+    EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1", "2", "3", "4"}));
     FileMpp empty;
     EXPECT_EQ(empty.LineCount(), 1u);
     LayoutFile(empty);
-    EXPECT_FLOAT_EQ(Label(1).y - Label(0).y, editor_style::LINE_HEIGHT);
+    EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1"}));
 }
 
 TEST_F(LineLayoutTest,
@@ -174,6 +192,36 @@ TEST_F(LineLayoutTest,
     EXPECT_EQ(file.LineElementId(0), 0u);
     LayoutFile(file);
     EXPECT_TRUE(Clay_GetElementData(CLAY_ID("Gutter")).found);
+    EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1", "2", "3"}));
+}
+
+TEST_F(LineLayoutTest,
+       LineNumbersFollowEditsAndHistoryForBothFileTypes) {
+    auto checkLineNumbers = [&](auto& file) {
+        LayoutFile(file);
+        EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1"}));
+
+        // Blank lines and the empty line after a trailing newline still exist in the document.
+        ASSERT_TRUE(file.PasteText("\n\n"));
+        LayoutFile(file);
+        EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1", "2", "3"}));
+
+        ASSERT_TRUE(file.Undo());
+        LayoutFile(file);
+        EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1"}));
+        ASSERT_TRUE(file.Redo());
+        LayoutFile(file);
+        EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1", "2", "3"}));
+
+        file.SelectAll();
+        ASSERT_TRUE(file.DeleteSelection());
+        LayoutFile(file);
+        EXPECT_EQ(GutterLabels(), (std::vector<std::string>{"1"}));
+    };
+    FileText text;
+    checkLineNumbers(text);
+    FileMpp math;
+    checkLineNumbers(math);
 }
 
 TEST_F(LineLayoutTest,

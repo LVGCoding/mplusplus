@@ -65,6 +65,7 @@ inline bool SaveActiveFile(Editor& editor,
 
 // Apply the button the user picked in the unsaved-changes popup (if any).
 inline void ProcessUnsavedChangesAction(Editor& editor) {
+    tabDrag = {};
     const CloseAction action = closeAction;
     closeAction = CloseAction::NONE;
     if (action == CloseAction::CANCEL) {
@@ -83,6 +84,7 @@ inline void ProcessUnsavedChangesAction(Editor& editor) {
 
 inline void ProcessTabRequests(Editor& editor) {
     if (closeTabRequested != SIZE_MAX) {
+        tabDrag = {};
         // Closing a background tab brings it to the front first, so the
         // unsaved-changes popup and the close logic act on the right file.
         SwitchTab(editor, closeTabRequested);
@@ -94,6 +96,11 @@ inline void ProcessTabRequests(Editor& editor) {
         SwitchTab(editor, selectTabRequested);
         selectTabRequested = SIZE_MAX;
     }
+    UpdateTabDrag(editor,
+                  GetMousePosition(),
+                  IsMouseButtonDown(MOUSE_LEFT_BUTTON),
+                  IsKeyPressed(KEY_ESCAPE),
+                  GetFrameTime());
 }
 
 // Close the active tab, or ask first if it has unsaved changes.

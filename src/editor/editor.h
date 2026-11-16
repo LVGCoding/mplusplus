@@ -35,6 +35,11 @@ public:
     // Make the file at `index` the active tab. Out-of-range indices are ignored.
     void SetActiveTab(std::size_t index);
 
+    // Move a tab to `to`, preserving the active file and every document's state.
+    // Invalid indices and moves to the same position return false.
+    bool MoveTab(std::size_t from,
+                 std::size_t to);
+
     // Call only after unsaved changes have been handled and rendering is done.
     void CloseActiveFile();
 

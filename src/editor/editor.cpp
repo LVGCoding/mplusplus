@@ -94,6 +94,30 @@ void Editor::SetActiveTab(std::size_t index) {
     }
 }
 
+bool Editor::MoveTab(std::size_t from,
+                     std::size_t to) {
+    if (from >= files_.size() || to >= files_.size() || from == to) {
+        return false;
+    }
+    const auto source = files_.begin() + static_cast<std::ptrdiff_t>(from);
+    const auto destination = files_.begin() + static_cast<std::ptrdiff_t>(to);
+    if (from < to) {
+        std::rotate(source, source + 1, destination + 1);
+    } else {
+        std::rotate(destination, source, source + 1);
+    }
+
+    // Indices move, but the same document must remain active.
+    if (activeTab_ == from) {
+        activeTab_ = to;
+    } else if (from < activeTab_ && activeTab_ <= to) {
+        --activeTab_;
+    } else if (to <= activeTab_ && activeTab_ < from) {
+        ++activeTab_;
+    }
+    return true;
+}
+
 void Editor::CloseActiveFile() {
     if (files_.empty()) {
         return;
