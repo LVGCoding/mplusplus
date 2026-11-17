@@ -19,6 +19,14 @@ inline constexpr uint16_t EDITOR_FONT_SIZE = editor_style::FONT_SIZE;
 inline constexpr uint16_t EDITOR_LINE_HEIGHT = editor_style::LINE_HEIGHT;
 inline constexpr float GUTTER_WIDTH = 46;
 inline constexpr Clay_Color TERMINAL_BORDER_COLOR = {174, 174, 174, 255};
+inline constexpr Clay_Color TERMINAL_HANDLE_HOVER_COLOR = {120, 120, 120, 255};
+
+// Dragging a tab: its empty slot in the bar, and the see-through copy following the mouse.
+inline constexpr Clay_Color TAB_DRAG_SLOT_COLOR = {235, 235, 235, 255};
+inline constexpr Clay_Color TAB_DRAG_PREVIEW_COLOR = {250, 250, 250, 220};
+inline constexpr Clay_Color TAB_DRAG_PREVIEW_BORDER = {120, 120, 120, 220};
+// Height of the draggable bar at the top of the terminal.
+inline constexpr float TERMINAL_RESIZE_HANDLE = 5;
 inline constexpr int GUTTER_MIN_LINES = 20;
 inline constexpr float EDITOR_PADDING = editor_style::PADDING;
 

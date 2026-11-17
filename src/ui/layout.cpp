@@ -31,10 +31,29 @@ bool IsLayoutModalOpen() {
     return unsavedChangesOpen;
 }
 
+// With FLAG_WINDOW_HIGHDPI on Windows, raylib reports the screen size in
+// physical pixels once the window is maximized or fullscreen, but still draws
+// scaled by the DPI factor. Laying out at that size makes the UI too big (by
+// 25% at 125% scaling), pushing the bottom of it (the terminal) off-screen.
+// The render size divided by the DPI scale is the real size, so use that
+// instead of what main.cpp set. Runs every frame before Clay_BeginLayout.
+static void UseDpiCorrectLayoutSize() {
+    if (!IsWindowState(FLAG_WINDOW_HIGHDPI)) {
+        return;
+    }
+    const Vector2 dpi = GetWindowScaleDPI();
+    if (dpi.x <= 0 || dpi.y <= 0) {
+        return;
+    }
+    Clay_SetLayoutDimensions({static_cast<float>(GetRenderWidth()) / dpi.x,
+                              static_cast<float>(GetRenderHeight()) / dpi.y});
+}
+
 void UpdateLayoutScroll(float wheelX,
                         float wheelY,
                         float deltaTime,
                         bool cursorActivity) {
+    UseDpiCorrectLayoutSize();
     constexpr float SCROLL_IDLE_DELAY = 0.15f;
     static float idleTime = SCROLL_IDLE_DELAY;
     static bool interrupted = false;
@@ -170,6 +189,7 @@ void Layout(Editor& editor) {
         insertMenuOpen = false;
     }
     HandleMathMenuDismiss();
+    UpdateTerminalHeight();
 
     CLAY(CLAY_ID("Root"),
          {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
