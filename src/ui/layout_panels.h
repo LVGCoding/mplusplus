@@ -4,7 +4,10 @@
 
 #include "layout_common.h"
 #include "layout_linenum.h"
+#include "layout_state.h"
 #include "layout_style.h"
+
+#include <algorithm>
 
 namespace layout_internal {
 // Green title bar from the mockup
@@ -60,13 +63,59 @@ inline void LayoutWorkspace(const FileBase* activeFile) {
     }
 }
 
+// Follow the mouse while the terminal's top bar is being dragged, and keep the
+// height within bounds (also when the window shrinks). Call before the Root
+// element is opened: once it is open, its size this frame reads as zero.
+inline void UpdateTerminalHeight() {
+    if (terminalResizing) {
+        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) && !unsavedChangesOpen) {
+            terminalHeight =
+                terminalResizeStartHeight + (terminalResizeStartY - GetMousePosition().y);
+        } else {
+            terminalResizing = false;
+        }
+    }
+    // At least the header plus one line; at most what leaves the title bar,
+    // menu bar, tab bar and a few lines of editor visible.
+    constexpr float minHeight = TERMINAL_RESIZE_HANDLE + 30 + EDITOR_LINE_HEIGHT + 12;
+    const auto root = Clay_GetElementData(CLAY_ID("Root"));
+    const float windowHeight =
+        root.found ? root.boundingBox.height : static_cast<float>(GetScreenHeight());
+    const float maxHeight = std::max(minHeight, windowHeight - 3 * 36 - 120);
+    terminalHeight = std::clamp(terminalHeight, minHeight, maxHeight);
+
+    // Show the up/down resize cursor over the bar and while dragging it.
+    static bool resizeCursor = false;
+    const bool wantResizeCursor =
+        terminalResizing || Clay_PointerOver(CLAY_ID("TerminalResizeHandle"));
+    if (wantResizeCursor != resizeCursor) {
+        SetMouseCursor(wantResizeCursor ? MOUSE_CURSOR_RESIZE_NS : MOUSE_CURSOR_DEFAULT);
+        resizeCursor = wantResizeCursor;
+    }
+}
+
 // Terminal panel from the mockup (placeholder: no input/output wired up yet)
+// Call UpdateTerminalHeight() first, before the Root element is opened.
 inline void LayoutTerminal() {
     CLAY(CLAY_ID("Terminal"),
-         {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(140)},
+         {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(terminalHeight)},
                      .layoutDirection = CLAY_TOP_TO_BOTTOM},
-          .backgroundColor = EDITOR_COLOR,
-          .border = {.color = TERMINAL_BORDER_COLOR, .width = {.top = 2}}}) {
+          .backgroundColor = EDITOR_COLOR}) {
+        // Drag this bar up or down to resize the terminal.
+        const Clay_ElementId handleId = CLAY_ID("TerminalResizeHandle");
+        CLAY(handleId,
+             {.layout = {.sizing = {CLAY_SIZING_GROW(0),
+                                    CLAY_SIZING_FIXED(TERMINAL_RESIZE_HANDLE)}},
+              .backgroundColor = terminalResizing || Clay_PointerOver(handleId)
+                                     ? TERMINAL_HANDLE_HOVER_COLOR
+                                     : TERMINAL_BORDER_COLOR}) {
+            if (!unsavedChangesOpen && !IsAnyMenuOpen() && Clay_Hovered() &&
+                IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                terminalResizing = true;
+                terminalResizeStartY = GetMousePosition().y;
+                terminalResizeStartHeight = terminalHeight;
+            }
+        }
         CLAY(CLAY_ID("TerminalHeader"),
              {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(30)},
                          .padding = {static_cast<uint16_t>(GUTTER_WIDTH + 6), 8, 0, 0},
