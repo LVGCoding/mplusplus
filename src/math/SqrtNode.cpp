@@ -140,6 +140,17 @@ EditorNode* SqrtNode::PathChild(PathView path,
     return path[0] == 0 ? root_.get() : argument_.get();
 }
 
+std::vector<EditorNode::ChildPath> SqrtNode::ChildPaths() const {
+    std::vector<ChildPath> children;
+    if (root_) {
+        children.push_back({{0}, root_.get()});
+    }
+    if (argument_) {
+        children.push_back({{1}, argument_.get()});
+    }
+    return children;
+}
+
 void SqrtNode::Normalize() {
     if (root_) {
         root_ = LineNode::EnsureLine(std::move(root_));

@@ -331,6 +331,14 @@ EditorNode* LineNode::PathChild(PathView path,
     return children_[path[0]].get();
 }
 
+std::vector<EditorNode::ChildPath> LineNode::ChildPaths() const {
+    std::vector<ChildPath> children;
+    for (std::size_t i = 0; i < children_.size(); ++i) {
+        children.push_back({{i}, children_[i].get()});
+    }
+    return children;
+}
+
 void LineNode::Normalize() {
     // Preserve text order while adding empty insertion points around non-text nodes.
     // Rebuilding the child list can change indices; callers must update cursor paths.

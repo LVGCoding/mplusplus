@@ -127,6 +127,17 @@ EditorNode* FracNode::PathChild(PathView path,
     return path[0] == 0 ? numerator_.get() : denominator_.get();
 }
 
+std::vector<EditorNode::ChildPath> FracNode::ChildPaths() const {
+    std::vector<ChildPath> children;
+    if (numerator_) {
+        children.push_back({{0}, numerator_.get()});
+    }
+    if (denominator_) {
+        children.push_back({{1}, denominator_.get()});
+    }
+    return children;
+}
+
 void FracNode::Normalize() {
     numerator_ = LineNode::EnsureLine(std::move(numerator_));
     denominator_ = LineNode::EnsureLine(std::move(denominator_));

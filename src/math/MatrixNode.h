@@ -14,13 +14,15 @@ class MatrixNode : public EditorNode {
 public:
     using Row = std::vector<std::unique_ptr<EditorNode>>;
 
-private:
+protected:
+    // Shared with TableNode, which is a matrix drawn as a table.
     std::vector<Row> cells_;
 
     // Clay id of the element around a cell, stable across frames.
     Clay_ElementId CellId(std::size_t row,
                           std::size_t column) const;
 
+private:
     // LaTeX environment name, e.g. "matrix" or "pmatrix".
     std::string environment_ = "matrix";
 
@@ -61,6 +63,7 @@ public:
                              const TextMeasure* measure) const override;
     EditorNode* PathChild(PathView path,
                           std::size_t& used) const override;
+    std::vector<ChildPath> ChildPaths() const override;
     bool OutlinesSlots() const override {
         return true;
     }
@@ -80,15 +83,16 @@ public:
     std::optional<Clay_BoundingBox> CellBounds(std::size_t row,
                                                std::size_t column) const;
 
-    // Insert an empty row before `row` (0..RowCount()), as wide as the widest row.
-    void InsertRow(std::size_t row);
+    // Insert an empty row before `row` (0..RowCount()), as wide as the widest
+    // row. Returns where it went (a table may move it below its header row).
+    virtual std::size_t InsertRow(std::size_t row);
 
     // Insert an empty cell before `column` in every row.
     void InsertColumn(std::size_t column);
 
     // Remove a row or column. Refused (returns false) when it is the last one,
     // or when removing the column would leave a ragged row empty.
-    bool RemoveRow(std::size_t row);
+    virtual bool RemoveRow(std::size_t row);
     bool RemoveColumn(std::size_t column);
 
     const std::string& GetEnvironment() const;

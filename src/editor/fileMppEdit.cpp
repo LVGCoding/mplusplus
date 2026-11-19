@@ -47,6 +47,66 @@ EditorNode* FileMpp::NodeAt(PathView path) const {
     return node;
 }
 
+std::optional<CursorPath> FileMpp::FindNode(std::uint32_t id) const {
+    // Depth-first search; documents are small enough that this is instant.
+    std::function<std::optional<CursorPath>(const EditorNode&, CursorPath&)> search =
+        [&](const EditorNode& node, CursorPath& trail) -> std::optional<CursorPath> {
+        if (node.GetId() == id) {
+            return trail;
+        }
+        for (const auto& child : node.ChildPaths()) {
+            trail.insert(trail.end(), child.path.begin(), child.path.end());
+            if (auto found = search(*child.node, trail)) {
+                return found;
+            }
+            trail.resize(trail.size() - child.path.size());
+        }
+        return std::nullopt;
+    };
+    for (std::size_t row = 0; row < content.size(); ++row) {
+        CursorPath trail = {row};
+        if (auto found = search(*content[row], trail)) {
+            return found;
+        }
+    }
+    return std::nullopt;
+}
+
+bool FileMpp::EditNode(std::uint32_t id,
+                       const std::function<bool(EditorNode&)>& edit) {
+    const auto nodePath = FindNode(id);
+    if (!nodePath) {
+        return false;
+    }
+    const std::size_t row = (*nodePath)[0];
+    EditorNode* node = NodeAt(*nodePath);
+    if (!node) {
+        return false;
+    }
+    // The start of the node, or of its row if the node can't hold the cursor.
+    auto startOfNode = [&] {
+        const CursorPath inside = node->FirstPosition();
+        return inside.empty() ? JoinPath({row}, content[row]->FirstPosition())
+                              : Concat(*nodePath, inside);
+    };
+    if (cursorPos.empty() || cursorPos[0] != row || selectionStart[0] != row) {
+        MoveCursorTo(startOfNode());
+    }
+    EditScope scope(*this, EditKind::OTHER, true);
+    if (!edit(*node)) {
+        return false;
+    }
+    // The edit may have removed the part holding the cursor (e.g. a row);
+    // put it back at the start of the node.
+    if (!CursorText(cursorPos) || !CursorText(selectionStart)) {
+        cursorPos = startOfNode();
+        selectionStart = cursorPos;
+    }
+    pendingDelete_.reset();
+    MarkEdited();
+    return true;
+}
+
 TextNode* FileMpp::CursorText(const CursorPath& path,
                               std::size_t* offset) const {
     if (path.size() < 2) {
@@ -454,10 +514,10 @@ bool FileMpp::HandleWheelKey(int key) {
     std::size_t column = chosen.column;
     switch (*chosen.direction) {
     case WheelDirection::UP:
-        matrix->InsertRow(row);
+        row = matrix->InsertRow(row);
         break;
     case WheelDirection::DOWN:
-        matrix->InsertRow(++row);
+        row = matrix->InsertRow(row + 1);
         break;
     case WheelDirection::LEFT:
         matrix->InsertColumn(column);

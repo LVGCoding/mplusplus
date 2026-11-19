@@ -132,6 +132,17 @@ CursorPath NodePositionAt(const EditorNode& node,
                     matrix->GetCell(row, column), {row, column}, matrix->CellBounds(row, column));
             }
         }
+        // Parts that aren't cells, like a table's title.
+        for (const auto& child : node.ChildPaths()) {
+            if (child.path.size() == 2 && child.path[0] >= matrix->RowCount()) {
+                consider(child.node, child.path, LastLayoutBounds(child.node->GetClayId()));
+            }
+        }
+    } else {
+        // Any other structure (e.g. a graph's functions): its children's own boxes.
+        for (const auto& child : node.ChildPaths()) {
+            consider(child.node, child.path, LastLayoutBounds(child.node->GetClayId()));
+        }
     }
     if (!best) {
         return node.FirstPosition();

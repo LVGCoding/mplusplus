@@ -297,6 +297,18 @@ EditorNode* MatrixNode::PathChild(PathView path,
     return GetCell(path[0], path[1]);
 }
 
+std::vector<EditorNode::ChildPath> MatrixNode::ChildPaths() const {
+    std::vector<ChildPath> children;
+    for (std::size_t row = 0; row < cells_.size(); ++row) {
+        for (std::size_t column = 0; column < cells_[row].size(); ++column) {
+            if (cells_[row][column]) {
+                children.push_back({{row, column}, cells_[row][column].get()});
+            }
+        }
+    }
+    return children;
+}
+
 std::size_t MatrixNode::MaxColumnCount() const {
     std::size_t columns = 0;
     for (const auto& row : cells_) {
@@ -318,13 +330,14 @@ std::unique_ptr<EditorNode> EmptyCell() {
 }
 }  // namespace
 
-void MatrixNode::InsertRow(std::size_t row) {
+std::size_t MatrixNode::InsertRow(std::size_t row) {
     row = std::min(row, cells_.size());
     Row cells;
     for (std::size_t i = 0; i < std::max<std::size_t>(1, MaxColumnCount()); ++i) {
         cells.push_back(EmptyCell());
     }
     cells_.insert(cells_.begin() + static_cast<std::ptrdiff_t>(row), std::move(cells));
+    return row;
 }
 
 void MatrixNode::InsertColumn(std::size_t column) {

@@ -3,10 +3,12 @@
 #include "layout_common.h"
 #include "layout_state.h"
 #include "math/FracNode.h"
+#include "math/GraphNode.h"
 #include "math/GreekNode.h"
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
+#include "math/TableNode.h"
 
 #include <functional>
 #include <memory>
@@ -21,6 +23,9 @@ namespace layout_internal {
 struct MathMenuItem {
     std::string_view label;
     std::function<std::unique_ptr<EditorNode>()> createNode;
+    // Optional: a different node to show as the preview, for objects too big
+    // to show as they are (e.g. a small icon for a graph).
+    std::function<std::unique_ptr<EditorNode>()> createPreview = {};
 };
 
 // Insert `node` at the cursor of the active M++ file (no-op for other files).
@@ -58,6 +63,28 @@ inline std::function<std::unique_ptr<EditorNode>()> MakeMathMatrix(const char* e
     };
 }
 
+// A graph with axis labels "x" and "y" and one empty function.
+inline std::unique_ptr<EditorNode> MakeMathGraph() {
+    return std::make_unique<GraphNode>();
+}
+
+inline std::unique_ptr<EditorNode> MakeMathGraphPreview() {
+    auto graph = std::make_unique<GraphNode>();
+    graph->SetCompact(true);
+    return graph;
+}
+
+// An empty 3x3 table; its "+" buttons add rows, columns and a header row.
+inline std::unique_ptr<EditorNode> MakeMathTable() {
+    return std::make_unique<TableNode>();
+}
+
+inline std::unique_ptr<EditorNode> MakeMathTablePreview() {
+    auto table = std::make_unique<TableNode>();
+    table->SetCompact(true);
+    return table;
+}
+
 inline std::function<std::unique_ptr<EditorNode>()>
 MakeMathGreek(GreekNode::GreekSymbolType symbol) {
     return
@@ -74,6 +101,8 @@ inline const std::vector<MathMenuItem>& MathMenuItems() {
             {"\\pmatrix", MakeMathMatrix("pmatrix")},
             {"\\bmatrix", MakeMathMatrix("bmatrix")},
             {"\\vmatrix", MakeMathMatrix("vmatrix")},
+            {"\\graph", MakeMathGraph, MakeMathGraphPreview},
+            {"\\table", MakeMathTable, MakeMathTablePreview},
         };
         // Greek letters, named as in LaTeX (\alpha ... \omega).
         // Labels outlive both the menu entries' string_views and Clay's rendering pass.
@@ -98,7 +127,8 @@ inline EditorNode* MathMenuPreview(std::size_t index) {
     static std::vector<std::unique_ptr<EditorNode>> previews = [] {
         std::vector<std::unique_ptr<EditorNode>> nodes;
         for (const MathMenuItem& item : MathMenuItems()) {
-            nodes.push_back(item.createNode ? item.createNode() : nullptr);
+            const auto& create = item.createPreview ? item.createPreview : item.createNode;
+            nodes.push_back(create ? create() : nullptr);
         }
         return nodes;
     }();
