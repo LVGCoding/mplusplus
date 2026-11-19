@@ -94,8 +94,9 @@ inline void UpdateTerminalHeight() {
     }
 }
 
-// Terminal panel from the mockup (placeholder: no input/output wired up yet)
-// Call UpdateTerminalHeight() first, before the Root element is opened.
+// Terminal panel: shows terminalOutput (e.g. from Run -> Run), then a ">" prompt.
+// No input is wired up yet. Call UpdateTerminalHeight() first, before the Root
+// element is opened.
 inline void LayoutTerminal() {
     CLAY(CLAY_ID("Terminal"),
          {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(terminalHeight)},
@@ -134,8 +135,19 @@ inline void LayoutTerminal() {
                   .backgroundColor = GUTTER_COLOR}) {}
             CLAY(CLAY_ID("TerminalOutput"),
                  {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)},
-                             .padding = {6, 6, 6, 6}},
-                  .clip = {.vertical = true}}) {
+                             .padding = {6, 6, 6, 6},
+                             .layoutDirection = CLAY_TOP_TO_BOTTOM},
+                  .clip = {.vertical = true, .childOffset = Clay_GetScrollOffset()}}) {
+                for (const std::string& line : terminalOutput) {
+                    const Clay_String text = {.isStaticallyAllocated = false,
+                                              .length = static_cast<int32_t>(line.size()),
+                                              .chars = line.data()};
+                    CLAY_TEXT(text,
+                              {.textColor = MENU_TEXT,
+                               .fontId = FONT_BODY,
+                               .fontSize = EDITOR_FONT_SIZE,
+                               .lineHeight = EDITOR_LINE_HEIGHT});
+                }
                 CLAY_TEXT(CLAY_STRING(">"),
                           {.textColor = MENU_TEXT,
                            .fontId = FONT_BODY,

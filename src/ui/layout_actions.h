@@ -7,6 +7,7 @@
 #include "layout_common.h"
 #include "layout_state.h"
 #include "layout_tabs.h"
+#include "run/Run.h"
 
 namespace layout_internal {
 inline void ProcessHistoryRequests(Editor& editor) {
@@ -45,6 +46,18 @@ inline void ProcessClipboardRequests(Editor& editor) {
         if (file) {
             historyActivity |= file->PasteFromClipboard();
         }
+    }
+}
+
+// Run -> Run: run the active file and show its output in the terminal.
+// What running does is implemented in RunFile (src/run/Run.cpp), not here.
+inline void ProcessRunRequest(Editor& editor) {
+    if (!runRequested) {
+        return;
+    }
+    runRequested = false;
+    if (const FileBase* file = editor.ActiveFile()) {
+        terminalOutput = RunFile(*file).output;
     }
 }
 

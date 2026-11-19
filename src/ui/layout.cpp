@@ -6,7 +6,7 @@
 //   layout_state.h         UI state and request flags
 //   layout_editor_view.h   EditorView for the active file
 //   layout_icons.h         custom-drawn icons
-//   layout_menu.h          menu bar, File, Edit and Insert dropdowns
+//   layout_menu.h          menu bar, File, Edit, Insert and Run dropdowns
 //   layout_math_menu.h     math popup (open/close, triggers, drawing)
 //   layout_math_menu_items.h  math popup items and what each one does
 //   layout_node_menus.h    graph/table popups and in-node buttons, in one place
@@ -198,6 +198,11 @@ void Layout(Editor& editor) {
          !Clay_PointerOver(CLAY_ID("InsertDropdown")))) {
         insertMenuOpen = false;
     }
+    if (IsKeyPressed(KEY_ESCAPE) ||
+        (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !Clay_PointerOver(CLAY_ID("RunMenu")) &&
+         !Clay_PointerOver(CLAY_ID("RunDropdown")))) {
+        runMenuOpen = false;
+    }
     HandleMathMenuDismiss();
     UpdateNodeMenus();
     UpdateTerminalHeight();
@@ -219,6 +224,9 @@ void Layout(Editor& editor) {
         }
         if (insertMenuOpen) {
             LayoutInsertDropdown();
+        }
+        if (runMenuOpen) {
+            LayoutRunDropdown(activeFile);
         }
         if (mathMenuOpen) {
             LayoutMathMenu();
@@ -246,6 +254,7 @@ void ProcessLayoutActions(Editor& editor) {
     // Apply document mutations after rendering, when Clay no longer borrows their strings.
     ProcessHistoryRequests(editor);
     ProcessClipboardRequests(editor);
+    ProcessRunRequest(editor);
     ProcessNodeMenus(editor);
     ProcessMathMenuSelection(editor);
     ProcessMathMenuTriggers();
