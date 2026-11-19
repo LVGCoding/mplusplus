@@ -6,19 +6,20 @@
 #include <string>
 #include <utility>
 
-// \exp or ctrl+^
+// \exp or shift+^
 class ExpoNode : public EditorNode {
 private:
-    std::unique_ptr<EditorNode> argument;
+    std::unique_ptr<EditorNode> exponent;
+    std::unique_ptr<EditorNode> base;
 
 public:
-
     ExpoNode() = default;
 
-    ExpoNode(std::unique_ptr<EditorNode> argument);
+    ExpoNode(std::unique_ptr<EditorNode> base,
+             std::unique_ptr<EditorNode> exponent);
 
     ~ExpoNode() override = default;
-    
+
     void Render(const RenderContext& context) override;
     std::unique_ptr<EditorNode> Clone() const override;
 
@@ -26,9 +27,9 @@ public:
 
     std::string ToText() const override;
 
-    std::pair<float,float>GetNWCorner() override;
+    std::pair<float, float> GetNWCorner() override;
 
-    std::pair<float,float>GetSize() override;
+    std::pair<float, float> GetSize() override;
 
     bool HasChild() override;
 
@@ -49,16 +50,17 @@ public:
     }
     void Normalize() override;
 
+    // {base, exponent}
+    std::pair<EditorNode*, EditorNode*> GetChildren() const;
 
-    std::pair<EditorNode*,
-              EditorNode*>
-    GetChildren() const;
-
-    EditorNode* GetArgument() const {
-        return argument.get();
+    EditorNode* GetBase() const {
+        return base.get();
     }
 
-    void SetChildren(std::unique_ptr<EditorNode> root,
-                     std::unique_ptr<EditorNode> argument);
-    
+    EditorNode* GetExponent() const {
+        return exponent.get();
+    }
+
+    void SetChildren(std::unique_ptr<EditorNode> base,
+                     std::unique_ptr<EditorNode> exponent);
 };

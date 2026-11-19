@@ -119,8 +119,11 @@ CursorPath NodePositionAt(const EditorNode& node,
             consider(denominator, {1}, LastLayoutBounds(denominator->GetClayId()));
         }
     } else if (const auto* exponent = dynamic_cast<const ExpoNode*>(&node)) {
-        if (const auto* argument = exponent->GetArgument()) {
-            consider(argument, {0}, LastLayoutBounds(argument->GetClayId()));
+        if (const auto* base = exponent->GetBase()) {
+            consider(base, {0}, LastLayoutBounds(base->GetClayId()));
+        }
+        if (const auto* exponentSlot = exponent->GetExponent()) {
+            consider(exponentSlot, {1}, LastLayoutBounds(exponentSlot->GetClayId()));
         }
     } else if (const auto* root = dynamic_cast<const SqrtNode*>(&node)) {
         const auto [index, argument] = root->GetChildren();

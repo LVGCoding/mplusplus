@@ -11,7 +11,7 @@
 // Supported constructs:
 //   \frac{a}{b}                        -> FracNode (children are LineNodes)
 //   \sqrt{x}, \sqrt[n]{x}              -> SqrtNode (children are LineNodes; root may be null)
-//   \exp{x}                            -> ExpoNode (exponent is a LineNode)
+//   \exp{base}{exponent}               -> ExpoNode (children are LineNodes)
 //   \alpha ... \omega                  -> GreekNode
 //   \begin{matrix} a & b \\ c & d \end{matrix}
 //                                      -> MatrixNode (cells are LineNodes); also

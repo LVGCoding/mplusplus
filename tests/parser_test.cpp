@@ -82,12 +82,13 @@ TEST(Parser,
 
 TEST(Parser,
      Exponent) {
-    EXPECT_EQ(ParseAndDescribe("\\exp{2}"), R"(exp(line(text("2"))))");
+    EXPECT_EQ(ParseAndDescribe("\\exp{x}{2}"), R"(exp(line(text("x")), line(text("2"))))");
 }
 
 TEST(Parser,
      ExponentAllowsSpaceBeforeArgument) {
-    EXPECT_EQ(ParseAndDescribe("\\exp {x}"), R"(exp(line(text("x"))))");
+    EXPECT_EQ(ParseAndDescribe("\\exp {x} {2}"),
+              R"(exp(line(text("x")), line(text("2"))))");
 }
 
 TEST(Parser,

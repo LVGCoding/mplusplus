@@ -62,7 +62,8 @@ inline std::string Describe(const EditorNode* node) {
         return "frac(" + Describe(numerator) + ", " + Describe(denominator) + ")";
     }
     if (auto* exponent = dynamic_cast<const ExpoNode*>(node)) {
-        return "exp(" + Describe(exponent->GetArgument()) + ")";
+        return "exp(" + Describe(exponent->GetBase()) + ", " +
+               Describe(exponent->GetExponent()) + ")";
     }
     if (auto* squareRoot = dynamic_cast<const SqrtNode*>(node)) {
         auto [root, argument] = squareRoot->GetChildren();

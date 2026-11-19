@@ -376,7 +376,8 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
         return true;
     }
     if (codepoint == U'^') {
-        return InsertNode(std::make_unique<ExpoNode>(std::make_unique<LineNode>()));
+        return InsertNode(std::make_unique<ExpoNode>(
+            std::make_unique<LineNode>(), std::make_unique<LineNode>()));
     }
     // Braces would unbalance the LaTeX when saved; objects are inserted from
     // the math popup instead.

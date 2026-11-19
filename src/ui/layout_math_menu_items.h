@@ -43,7 +43,8 @@ inline std::unique_ptr<EditorNode> MakeMathFrac() {
 }
 
 inline std::unique_ptr<EditorNode> MakeMathExpo() {
-    return std::make_unique<ExpoNode>(std::make_unique<LineNode>());
+    return std::make_unique<ExpoNode>(
+        std::make_unique<LineNode>(), std::make_unique<LineNode>());
 }
 
 inline std::unique_ptr<EditorNode> MakeMathSqrt() {

@@ -191,12 +191,13 @@ private:
     std::unique_ptr<EditorNode> ParseExpo() {
         const std::size_t start = position_;
         ++position_;  // \exp
-        auto argument = ParseArgument();
-        if (!argument) {
+        auto base = ParseArgument();
+        auto exponent = base ? ParseArgument() : nullptr;
+        if (!base || !exponent) {
             position_ = start;
             return nullptr;
         }
-        return std::make_unique<ExpoNode>(std::move(argument));
+        return std::make_unique<ExpoNode>(std::move(base), std::move(exponent));
     }
 
     std::unique_ptr<EditorNode> ParseSqrt() {
