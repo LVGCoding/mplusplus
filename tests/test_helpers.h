@@ -3,6 +3,7 @@
 // Shared helpers for M++ unit tests.
 
 #include "math/EditorNode.h"
+#include "math/ExpoNode.h"
 #include "math/FracNode.h"
 #include "math/GreekNode.h"
 #include "math/LineNode.h"
@@ -59,6 +60,9 @@ inline std::string Describe(const EditorNode* node) {
     if (auto* fraction = dynamic_cast<const FracNode*>(node)) {
         auto [numerator, denominator] = fraction->GetChildren();
         return "frac(" + Describe(numerator) + ", " + Describe(denominator) + ")";
+    }
+    if (auto* exponent = dynamic_cast<const ExpoNode*>(node)) {
+        return "exp(" + Describe(exponent->GetArgument()) + ")";
     }
     if (auto* squareRoot = dynamic_cast<const SqrtNode*>(node)) {
         auto [root, argument] = squareRoot->GetChildren();

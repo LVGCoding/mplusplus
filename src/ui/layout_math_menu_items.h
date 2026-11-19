@@ -2,6 +2,7 @@
 
 #include "layout_common.h"
 #include "layout_state.h"
+#include "math/ExpoNode.h"
 #include "math/FracNode.h"
 #include "math/GraphNode.h"
 #include "math/GreekNode.h"
@@ -39,6 +40,10 @@ inline void InsertIntoActiveFile(Editor& editor,
 
 inline std::unique_ptr<EditorNode> MakeMathFrac() {
     return std::make_unique<FracNode>(std::make_unique<LineNode>(), std::make_unique<LineNode>());
+}
+
+inline std::unique_ptr<EditorNode> MakeMathExpo() {
+    return std::make_unique<ExpoNode>(std::make_unique<LineNode>());
 }
 
 inline std::unique_ptr<EditorNode> MakeMathSqrt() {
@@ -94,6 +99,7 @@ MakeMathGreek(GreekNode::GreekSymbolType symbol) {
 inline const std::vector<MathMenuItem>& MathMenuItems() {
     static const std::vector<MathMenuItem> items = [] {
         std::vector<MathMenuItem> list = {
+            {"\\exp", MakeMathExpo},
             {"\\frac", MakeMathFrac},
             {"\\sqrt", MakeMathSqrt},
             {"\\sqrt[n]", MakeMathRoot},

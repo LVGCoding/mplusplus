@@ -73,6 +73,7 @@ add_library(mplusplus_core STATIC
   src/editor/fileMppEdit.cpp
   src/editor/fileMppSelection.cpp
   src/editor/fileMppHistory.cpp
+  src/math/ExpoNode.cpp
   src/math/FracNode.cpp
   src/math/GraphNode.cpp
   src/math/GraphSettings.cpp

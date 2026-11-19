@@ -78,6 +78,24 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("\\frac"), R"(text("\frac"))");
 }
 
+// --- Exponents -------------------------------------------------------------
+
+TEST(Parser,
+     Exponent) {
+    EXPECT_EQ(ParseAndDescribe("\\exp{2}"), R"(exp(line(text("2"))))");
+}
+
+TEST(Parser,
+     ExponentAllowsSpaceBeforeArgument) {
+    EXPECT_EQ(ParseAndDescribe("\\exp {x}"), R"(exp(line(text("x"))))");
+}
+
+TEST(Parser,
+     ExponentMissingArgumentIsText) {
+    EXPECT_EQ(ParseAndDescribe("\\exp"), R"(text("\exp"))");
+    EXPECT_EQ(ParseAndDescribe("\\exp x"), R"(text("\exp x"))");
+}
+
 // --- Square roots -----------------------------------------------------------
 
 TEST(Parser,

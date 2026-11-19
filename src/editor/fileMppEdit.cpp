@@ -7,6 +7,7 @@
 // insert wheel live in one place.
 
 #include "FileMpp.h"
+#include "math/ExpoNode.h"
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/TextNode.h"
@@ -373,6 +374,9 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
     if (codepoint == U'\\') {
         mathMenuRequested_ = true;
         return true;
+    }
+    if (codepoint == U'^') {
+        return InsertNode(std::make_unique<ExpoNode>(std::make_unique<LineNode>()));
     }
     // Braces would unbalance the LaTeX when saved; objects are inserted from
     // the math popup instead.

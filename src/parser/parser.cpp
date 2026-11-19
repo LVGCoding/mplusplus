@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include "math/ExpoNode.h"
 #include "math/FracNode.h"
 #include "math/GraphNode.h"
 #include "math/GreekNode.h"
@@ -113,6 +114,8 @@ private:
                     push(std::make_unique<LineNode>(std::move(*group), true));
                     continue;
                 }
+            } else if (token == "\\exp") {
+                node = ParseExpo();
             } else if (token == "\\frac") {
                 node = ParseFrac();
             } else if (token == "\\sqrt") {
@@ -183,6 +186,17 @@ private:
             return nullptr;
         }
         return std::make_unique<FracNode>(std::move(numerator), std::move(denominator));
+    }
+
+    std::unique_ptr<EditorNode> ParseExpo() {
+        const std::size_t start = position_;
+        ++position_;  // \exp
+        auto argument = ParseArgument();
+        if (!argument) {
+            position_ = start;
+            return nullptr;
+        }
+        return std::make_unique<ExpoNode>(std::move(argument));
     }
 
     std::unique_ptr<EditorNode> ParseSqrt() {

@@ -11,6 +11,7 @@
 
 #include "clay.h"
 #include "FileMpp.h"
+#include "math/ExpoNode.h"
 #include "math/FracNode.h"
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
@@ -116,6 +117,10 @@ CursorPath NodePositionAt(const EditorNode& node,
         }
         if (denominator) {
             consider(denominator, {1}, LastLayoutBounds(denominator->GetClayId()));
+        }
+    } else if (const auto* exponent = dynamic_cast<const ExpoNode*>(&node)) {
+        if (const auto* argument = exponent->GetArgument()) {
+            consider(argument, {0}, LastLayoutBounds(argument->GetClayId()));
         }
     } else if (const auto* root = dynamic_cast<const SqrtNode*>(&node)) {
         const auto [index, argument] = root->GetChildren();

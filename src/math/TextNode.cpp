@@ -75,9 +75,7 @@ KeyResult TextNode::KeyPress(const KeyEvent& event) {
 
 void TextNode::MouseClick() {}
 
-std::pair<float,
-          float>
-TextNode::GetNWCorner() {
+std::pair<float,float> TextNode::GetNWCorner(){ 
     return {0.0f, 0.0f};
 }
 

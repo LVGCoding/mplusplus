@@ -28,13 +28,9 @@ public:
 
     std::string ToText() const override;
 
-    std::pair<float,
-              float>
-    GetNWCorner() override;
+    std::pair<float,float>GetNWCorner() override;
 
-    std::pair<float,
-              float>
-    GetSize() override;
+    std::pair<float,float>GetSize() override;
 
     bool HasChild() override;
 

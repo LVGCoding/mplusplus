@@ -82,15 +82,11 @@ KeyResult SqrtNode::KeyPress(const KeyEvent& event) {
 
 void SqrtNode::MouseClick() {}
 
-std::pair<float,
-          float>
-SqrtNode::GetNWCorner() {
+std::pair<float,float>SqrtNode::GetNWCorner() {
     return {0.0f, 0.0f};
 }
 
-std::pair<float,
-          float>
-SqrtNode::GetSize() {
+std::pair<float,float>SqrtNode::GetSize() {
     return {0.0f, 0.0f};
 }
 
@@ -160,9 +156,7 @@ void SqrtNode::Normalize() {
     argument_->Normalize();
 }
 
-std::pair<EditorNode*,
-          EditorNode*>
-SqrtNode::GetChildren() const {
+std::pair<EditorNode*,EditorNode*>SqrtNode::GetChildren() const {
     return {root_.get(), argument_.get()};
 }
 
