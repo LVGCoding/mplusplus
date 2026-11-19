@@ -1,10 +1,13 @@
 #include "parser.h"
 
 #include "math/FracNode.h"
+#include "math/GraphNode.h"
 #include "math/GreekNode.h"
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
+#include "math/Options.h"
 #include "math/SqrtNode.h"
+#include "math/TableNode.h"
 #include "math/TextNode.h"
 
 #include <cctype>
@@ -115,7 +118,13 @@ private:
             } else if (token == "\\sqrt") {
                 node = ParseSqrt();
             } else if (token == "\\begin") {
-                node = ParseMatrix();
+                node = ParseGraph();
+                if (!node) {
+                    node = ParseTable();
+                }
+                if (!node) {
+                    node = ParseMatrix();
+                }
             } else if (token.size() > 1 && token[0] == '\\') {
                 if (auto symbol = GreekNode::SymbolFromName(std::string_view(token).substr(1))) {
                     node = std::make_unique<GreekNode>(*symbol);
@@ -214,6 +223,136 @@ private:
         }
         position_ = start;
         return {};
+    }
+
+    // Math stored as an option value (a title or axis label), as an editable line.
+    static std::unique_ptr<EditorNode> LineFrom(const std::string& text) {
+        return std::make_unique<LineNode>(Parser().ParseText(text));
+    }
+
+    // An object's optional "[options]", read as raw text (braces included) for
+    // its settings to interpret (see Options.h). Absent options read as "".
+    // Returns false for an unclosed "[" or unbalanced braces; the caller then
+    // restores position_.
+    bool ParseRawOptions(std::string& options) {
+        options.clear();
+        if (!PeekIs("[")) {
+            return true;
+        }
+        ++position_;
+        int depth = 0;
+        while (!AtEnd()) {
+            const std::string& token = tokens_[position_++];
+            if (token == "]" && depth == 0) {
+                return true;
+            }
+            if (token == "{") {
+                ++depth;
+            } else if (token == "}" && --depth < 0) {
+                return false;
+            }
+            options += token;
+        }
+        return false;  // unclosed "["
+    }
+
+    // \begin{graph}[options] f1 \\ f2 \end{graph}
+    std::unique_ptr<EditorNode> ParseGraph() {
+        const std::size_t start = position_;
+        ++position_;  // \begin
+        std::string options;
+        if (ParseEnvironmentName() != GraphNode::ENVIRONMENT || !ParseRawOptions(options)) {
+            position_ = start;
+            return nullptr;
+        }
+
+        std::vector<std::unique_ptr<EditorNode>> functions;
+        while (true) {
+            functions.push_back(std::make_unique<LineNode>(ParseSequence(Context::MATRIX_CELL)));
+            if (AtEnd()) {
+                break;  // missing \end
+            }
+            const std::string token = Peek();
+            ++position_;
+            if (token == "\\\\") {
+                continue;
+            }
+            if (token == "\\end" && ParseEnvironmentName() == GraphNode::ENVIRONMENT) {
+                // The title and axis labels are editable math; the rest are settings.
+                std::unique_ptr<EditorNode> title;
+                std::unique_ptr<EditorNode> xLabel = LineFrom("x");
+                std::unique_ptr<EditorNode> yLabel = LineFrom("y");
+                std::vector<options::Option> rest;
+                for (auto& [key, value] : options::Parse(options)) {
+                    if (key == "title") {
+                        title = LineFrom(value);
+                    } else if (key == "xlabel") {
+                        xLabel = LineFrom(value);
+                    } else if (key == "ylabel") {
+                        yLabel = LineFrom(value);
+                    } else {
+                        rest.emplace_back(std::move(key), std::move(value));
+                    }
+                }
+                return std::make_unique<GraphNode>(GraphSettings::FromOptions(rest),
+                                                   std::move(title),
+                                                   std::move(xLabel),
+                                                   std::move(yLabel),
+                                                   std::move(functions));
+            }
+            break;  // "&", or \end of a different environment
+        }
+
+        position_ = start;
+        return nullptr;
+    }
+
+    // \begin{table}[options] a & b \\ c & d \end{table}
+    std::unique_ptr<EditorNode> ParseTable() {
+        const std::size_t start = position_;
+        ++position_;  // \begin
+        std::string options;
+        if (ParseEnvironmentName() != TableNode::ENVIRONMENT || !ParseRawOptions(options)) {
+            position_ = start;
+            return nullptr;
+        }
+
+        std::vector<MatrixNode::Row> rows(1);
+        while (true) {
+            rows.back().push_back(std::make_unique<LineNode>(ParseSequence(Context::MATRIX_CELL)));
+            if (AtEnd()) {
+                break;  // missing \end
+            }
+            const std::string token = Peek();
+            ++position_;
+            if (token == "&") {
+                continue;
+            }
+            if (token == "\\\\") {
+                rows.emplace_back();
+                continue;
+            }
+            if (token == "\\end" && ParseEnvironmentName() == TableNode::ENVIRONMENT) {
+                std::unique_ptr<EditorNode> title;
+                bool header = false;
+                std::vector<options::Option> unknown;
+                for (auto& [key, value] : options::Parse(options)) {
+                    if (key == "title") {
+                        title = LineFrom(value);
+                    } else if (key == "header") {
+                        options::ParseBool(value, header);
+                    } else {
+                        unknown.emplace_back(std::move(key), std::move(value));
+                    }
+                }
+                return std::make_unique<TableNode>(
+                    std::move(title), header, std::move(unknown), std::move(rows));
+            }
+            break;  // \end of a different environment
+        }
+
+        position_ = start;
+        return nullptr;
     }
 
     std::unique_ptr<EditorNode> ParseMatrix() {

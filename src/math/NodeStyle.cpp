@@ -5,6 +5,7 @@
 #include "ui/font.h"
 
 #include <cstdint>
+#include <utility>
 
 namespace node_style {
 
@@ -138,6 +139,71 @@ void DelimiterSymbol(Delimiter kind,
         break;
     }
     StretchedSymbol(draw, std::round(fontSize * DELIMITER_WIDTH_SCALE));
+}
+
+// --- Object cards (graphs, tables) --------------------------------------------------
+
+namespace {
+std::optional<std::uint32_t> settingsRequest;
+std::optional<ActionRequest> actionRequest;
+
+constexpr Clay_Color BUTTON_COLOR = {236, 236, 236, 255};
+constexpr Clay_Color BUTTON_HOVER_COLOR = {215, 215, 215, 255};
+constexpr Clay_Color ACTION_HOVER_COLOR = {228, 228, 228, 255};
+
+bool Clicked() {
+    return Clay_Hovered() && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+}
+}  // namespace
+
+void SettingsButton(std::uint32_t nodeId,
+                    float fontSize) {
+    const Clay_ElementId buttonId = CLAY_IDI("NodeSettingsButton", nodeId);
+    CLAY(buttonId,
+         {.layout = {.padding = {8, 8, 2, 2}},
+          .backgroundColor = Clay_PointerOver(buttonId) ? BUTTON_HOVER_COLOR : BUTTON_COLOR,
+          .cornerRadius = CLAY_CORNER_RADIUS(4)}) {
+        Text("Settings", fontSize * 0.75f);
+        if (Clicked()) {
+            settingsRequest = nodeId;
+        }
+    }
+}
+
+std::optional<std::uint32_t> TakeSettingsRequest() {
+    return std::exchange(settingsRequest, std::nullopt);
+}
+
+void ActionButton(std::uint32_t nodeId,
+                  int action,
+                  std::string_view label,
+                  float fontSize,
+                  Clay_SizingAxis width,
+                  Clay_SizingAxis height) {
+    const Clay_ElementId id = Clay__HashStringWithOffset(
+        CLAY_STRING("NodeAction"), static_cast<uint32_t>(action), nodeId);
+    CLAY(id,
+         {.layout = {.sizing = {width, height},
+                     .padding = {4, 4, 0, 0},
+                     .childAlignment = {.x = CLAY_ALIGN_X_CENTER, .y = CLAY_ALIGN_Y_CENTER}},
+          .backgroundColor = Clay_PointerOver(id) ? ACTION_HOVER_COLOR : Clay_Color{0, 0, 0, 0},
+          .cornerRadius = CLAY_CORNER_RADIUS(3)}) {
+        const Clay_String text = {.isStaticallyAllocated = false,
+                                  .length = static_cast<int32_t>(label.size()),
+                                  .chars = label.data()};
+        CLAY_TEXT(text,
+                  {.textColor = MUTED_TEXT_COLOR,
+                   .fontId = FONT_BODY,
+                   .fontSize = static_cast<uint16_t>(std::max(MIN_FONT_SIZE, std::round(fontSize))),
+                   .wrapMode = CLAY_TEXT_WRAP_NONE});
+        if (Clicked()) {
+            actionRequest = ActionRequest{nodeId, action};
+        }
+    }
+}
+
+std::optional<ActionRequest> TakeActionRequest() {
+    return std::exchange(actionRequest, std::nullopt);
 }
 
 }  // namespace node_style

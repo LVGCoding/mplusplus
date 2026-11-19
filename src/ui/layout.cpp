@@ -9,6 +9,10 @@
 //   layout_menu.h          menu bar, File, Edit and Insert dropdowns
 //   layout_math_menu.h     math popup (open/close, triggers, drawing)
 //   layout_math_menu_items.h  math popup items and what each one does
+//   layout_node_menus.h    graph/table popups and in-node buttons, in one place
+//   layout_graph_menu.h    graph settings popup
+//   layout_table_menu.h    table settings popup
+//   layout_form.h          popup frame, placement and form fields for those
 //   layout_tabs.h          file tab bar, switching/closing tabs
 //   layout_panels.h        title bar, workspace, terminal
 //   layout_unsaved_popup.h unsaved-changes modal
@@ -19,6 +23,7 @@
 #include "layout_editor_view.h"
 #include "layout_math_menu.h"
 #include "layout_menu.h"
+#include "layout_node_menus.h"
 #include "layout_panels.h"
 #include "layout_state.h"
 #include "layout_style.h"
@@ -102,6 +107,11 @@ bool HandleActiveFileInput(Editor& editor,
         return false;
     }
     const EditorView view = MakeEditorView(fonts);
+    if (IsNodeMenuOpen()) {
+        // A graph/table settings popup takes the keyboard while it is open.
+        HandleNodeMenuKeys(fonts);
+        return false;
+    }
     if (mathMenuOpen) {
         // The math popup takes the keyboard while it is open.
         HandleMathMenuKeys(fonts);
@@ -189,6 +199,7 @@ void Layout(Editor& editor) {
         insertMenuOpen = false;
     }
     HandleMathMenuDismiss();
+    UpdateNodeMenus();
     UpdateTerminalHeight();
 
     CLAY(CLAY_ID("Root"),
@@ -212,6 +223,7 @@ void Layout(Editor& editor) {
         if (mathMenuOpen) {
             LayoutMathMenu();
         }
+        LayoutNodeMenus();
         LayoutWorkspace(activeFile);
         LayoutTerminal();
         if (unsavedChangesOpen && activeFile) {
@@ -234,6 +246,7 @@ void ProcessLayoutActions(Editor& editor) {
     // Apply document mutations after rendering, when Clay no longer borrows their strings.
     ProcessHistoryRequests(editor);
     ProcessClipboardRequests(editor);
+    ProcessNodeMenus(editor);
     ProcessMathMenuSelection(editor);
     ProcessMathMenuTriggers();
 

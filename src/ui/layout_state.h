@@ -70,9 +70,15 @@ inline TextInput mathMenuSearch{"MathMenuSearchInput"};
 // Highlighted entry in the filtered list, moved with Up/Down.
 inline std::size_t mathMenuSelected = 0;
 
+// Settings popups for graphs and tables; the rest of their state is in
+// layout_graph_menu.h and layout_table_menu.h.
+inline bool graphMenuOpen = false;
+inline bool tableMenuOpen = false;
+
 // True while any dropdown/popup menu is open (editor mouse input is paused).
 inline bool IsAnyMenuOpen() {
-    return fileMenuOpen || editMenuOpen || insertMenuOpen || mathMenuOpen;
+    return fileMenuOpen || editMenuOpen || insertMenuOpen || mathMenuOpen || graphMenuOpen ||
+           tableMenuOpen;
 }
 
 inline void CloseAllMenus() {
@@ -80,6 +86,8 @@ inline void CloseAllMenus() {
     editMenuOpen = false;
     insertMenuOpen = false;
     mathMenuOpen = false;
+    graphMenuOpen = false;
+    tableMenuOpen = false;
 }
 
 inline double lastCursorActivity = 0;

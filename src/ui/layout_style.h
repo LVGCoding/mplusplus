@@ -21,6 +21,23 @@ inline constexpr float GUTTER_WIDTH = 46;
 inline constexpr Clay_Color TERMINAL_BORDER_COLOR = {174, 174, 174, 255};
 inline constexpr Clay_Color TERMINAL_HANDLE_HOVER_COLOR = {120, 120, 120, 255};
 
+// Settings popups and their forms (layout_form.h).
+inline constexpr float FORM_LABEL_WIDTH = 52;
+inline constexpr float FORM_INPUT_HEIGHT = 24;
+inline constexpr uint16_t FORM_FONT_SIZE = 14;
+inline constexpr uint16_t FORM_HINT_FONT_SIZE = 13;
+inline constexpr uint16_t FORM_TITLE_FONT_SIZE = 16;
+inline constexpr Clay_Color FORM_POPUP_COLOR = {250, 250, 250, 255};
+inline constexpr Clay_Color FORM_POPUP_BORDER_COLOR = {160, 160, 160, 255};
+inline constexpr Clay_Color FORM_ACCENT_COLOR = {65, 105, 168, 255};
+inline constexpr Clay_Color FORM_ACCENT_HOVER_COLOR = {50, 85, 140, 255};
+inline constexpr Clay_Color FORM_BORDER_COLOR = {190, 190, 190, 255};
+inline constexpr Clay_Color FORM_ERROR_COLOR = {200, 40, 40, 255};
+inline constexpr Clay_Color FORM_MUTED_COLOR = {130, 130, 130, 255};
+inline constexpr Clay_Color FORM_BUTTON_COLOR = {228, 228, 228, 255};
+inline constexpr float GRAPH_MENU_WIDTH = 270;  // layout_graph_menu.h
+inline constexpr float TABLE_MENU_WIDTH = 220;  // layout_table_menu.h
+
 // Dragging a tab: its empty slot in the bar, and the see-through copy following the mouse.
 inline constexpr Clay_Color TAB_DRAG_SLOT_COLOR = {235, 235, 235, 255};
 inline constexpr Clay_Color TAB_DRAG_PREVIEW_COLOR = {250, 250, 250, 220};

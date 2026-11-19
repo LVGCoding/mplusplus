@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <optional>
 #include <string_view>
 
 namespace node_style {
@@ -70,5 +72,37 @@ void Radical(float fontSize);
 void DelimiterSymbol(Delimiter kind,
                      bool right,
                      float fontSize);
+
+// --- Object cards (graphs, tables) --------------------------------------------------
+
+inline constexpr Clay_Color CARD_COLOR = {252, 252, 252, 255};
+inline constexpr Clay_Color CARD_BORDER_COLOR = {200, 200, 200, 255};
+inline constexpr Clay_Color MUTED_TEXT_COLOR = {140, 140, 140, 255};
+
+// A small "Settings" button. Clicking it records `nodeId` for
+// TakeSettingsRequest(), so the UI can open that node's settings menu.
+void SettingsButton(std::uint32_t nodeId,
+                    float fontSize);
+
+// The id of the node whose Settings button was clicked since the last call.
+std::optional<std::uint32_t> TakeSettingsRequest();
+
+// A subtle button inside a node, like a table's "+" for a new row. Clicking it
+// records (nodeId, action) for TakeActionRequest(); the UI then calls the
+// node's RunAction(action) as one undo step. `label` must stay alive until
+// the frame has been rendered.
+void ActionButton(std::uint32_t nodeId,
+                  int action,
+                  std::string_view label,
+                  float fontSize,
+                  Clay_SizingAxis width,
+                  Clay_SizingAxis height);
+
+struct ActionRequest {
+    std::uint32_t nodeId = 0;
+    int action = 0;
+};
+// The action button clicked since the last call, if any.
+std::optional<ActionRequest> TakeActionRequest();
 
 }  // namespace node_style

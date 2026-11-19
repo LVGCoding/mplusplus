@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -155,6 +156,17 @@ struct FileMpp : FileBase {
 
     // The node a path (without a trailing text offset) leads to, or null.
     EditorNode* NodeAt(PathView path) const;
+
+    // Path to the node with this id (see EditorNode::GetId), or nothing if it
+    // is not in the document. Ids survive undo and redo, unlike pointers.
+    std::optional<CursorPath> FindNode(std::uint32_t id) const;
+
+    // Change the node with this id as one undo step, e.g. a graph's settings
+    // from its menu. `edit` returns false if it changed nothing. The cursor
+    // moves into the node's row first (undo steps cover the cursor's rows).
+    // Returns false if the node is gone or nothing changed.
+    bool EditNode(std::uint32_t id,
+                  const std::function<bool(EditorNode&)>& edit);
 
     // The node that `path` ends in and the offset into it, or null if the path
     // doesn't lead to a TextNode.

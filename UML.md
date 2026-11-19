@@ -100,6 +100,23 @@ classDiagram
         -vector~vector~EditorNode*~~ dims
     }
 
+    class GraphNode {
+        -GraphSettings settings_
+        -EditorNode* title_, xLabel_, yLabel_
+        -vector~EditorNode*~ functions_
+        +Settings() GraphSettings
+        +SetSettings(settings)
+        +InsertFunction(index)
+        +RemoveFunction(index) bool
+    }
+
+    class TableNode {
+        -EditorNode* title_
+        -bool header_
+        +HasHeader() bool
+        +RunAction(action) bool
+    }
+
     class Parser {
         +ParseText(inputText) vector~EditorNode~
         +Tokenizer(inputText) vector~EditorNode~
@@ -119,10 +136,14 @@ classDiagram
     EditorNode <|-- FracNode
     EditorNode <|-- SqrtNode
     EditorNode <|-- MatrixNode
+    EditorNode <|-- GraphNode
+    MatrixNode <|-- TableNode
     LineNode "1" o-- "0..*" EditorNode : children
     FracNode --> EditorNode : numerator and denominator
     SqrtNode --> EditorNode : root and argument
     MatrixNode --> EditorNode : cells
+    GraphNode --> EditorNode : title, axis labels and functions
+    TableNode --> EditorNode : title
 
     Parser ..> EditorNode : parses to nodes
     FileMpp "1" o-- "0..*" EditorNode : content

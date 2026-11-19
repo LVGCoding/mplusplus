@@ -49,6 +49,7 @@ public:
                              const TextMeasure* measure) const override;
     EditorNode* PathChild(PathView path,
                           std::size_t& used) const override;
+    std::vector<ChildPath> ChildPaths() const override;
     bool OutlinesSlots() const override {
         return true;
     }

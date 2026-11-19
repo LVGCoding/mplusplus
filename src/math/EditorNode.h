@@ -222,6 +222,25 @@ public:
         return nullptr;
     }
 
+    // Every child with the path indices that lead to it from this node (e.g.
+    // {row, column} for a matrix cell). Used to search the tree, such as
+    // finding a node by id or the slot nearest a mouse click.
+    struct ChildPath {
+        CursorPath path;
+        EditorNode* node = nullptr;
+    };
+    virtual std::vector<ChildPath> ChildPaths() const {
+        return {};
+    }
+
+    // Run a button drawn inside this node (e.g. a table's "+" for a new row).
+    // node_style::ActionButton records the click while rendering; the UI then
+    // runs it here through FileMpp::EditNode, as one undo step. Returns true
+    // if the node changed.
+    virtual bool RunAction(int /*action*/) {
+        return false;
+    }
+
     // True for structures whose slots are outlined while the cursor is in them.
     virtual bool OutlinesSlots() const {
         return false;
