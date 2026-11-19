@@ -72,7 +72,8 @@ inline void LayoutMenuBar() {
                              .childGap = 6,
                              .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
                   .backgroundColor = Clay_PointerOver(ids[i]) || (i == 0 && fileMenuOpen) ||
-                                             (i == 1 && editMenuOpen) || (i == 2 && insertMenuOpen)
+                                             (i == 1 && editMenuOpen) ||
+                                             (i == 2 && insertMenuOpen) || (i == 3 && runMenuOpen)
                                          ? MENU_HOVER
                                          : Clay_Color{0, 0, 0, 0}}) {
                 CLAY_TEXT(labels[i],
@@ -96,6 +97,10 @@ inline void LayoutMenuBar() {
                 if (i == 2 && !unsavedChangesOpen && Clay_Hovered() &&
                     IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                     insertMenuOpen = !insertMenuOpen;
+                }
+                if (i == 3 && !unsavedChangesOpen && Clay_Hovered() &&
+                    IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    runMenuOpen = !runMenuOpen;
                 }
                 if (i == 4 && !unsavedChangesOpen && Clay_Hovered() &&
                     IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -174,6 +179,25 @@ inline void LayoutInsertDropdown() {
         // Each needs its own request flag in layout_state.h, handled in
         // ProcessLayoutActions (Math is handled in ProcessMathMenuTriggers).
         InsertMenuItem(CLAY_ID("InsertMathButton"), CLAY_STRING("Math"), true, insertMathRequested);
+    }
+}
+
+// Run dropdown. Run -> Run sets runRequested; ProcessRunRequest
+// (layout_actions.h) calls RunFile in src/run/Run.h.
+inline void LayoutRunDropdown(const FileBase* file) {
+    CLAY(CLAY_ID("RunDropdown"),
+         {.layout = {.sizing = {CLAY_SIZING_FIXED(200), CLAY_SIZING_FIT(0)},
+                     .padding = {0, 0, 4, 4},
+                     .layoutDirection = CLAY_TOP_TO_BOTTOM},
+          .backgroundColor = DROPDOWN_COLOR,
+          .floating = {.offset = {0, 0},
+                       .parentId = CLAY_ID("RunMenu").id,
+                       .zIndex = 1,
+                       .attachPoints = {.element = CLAY_ATTACH_POINT_LEFT_TOP,
+                                        .parent = CLAY_ATTACH_POINT_LEFT_BOTTOM},
+                       .attachTo = CLAY_ATTACH_TO_ELEMENT_WITH_ID}}) {
+        DropdownMenuItem(
+            CLAY_ID("RunButton"), CLAY_STRING("Run"), file != nullptr, runRequested, runMenuOpen);
     }
 }
 }  // namespace layout_internal

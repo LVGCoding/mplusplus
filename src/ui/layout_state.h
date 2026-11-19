@@ -7,8 +7,7 @@
 
 #include "layout_common.h"
 
-#include <vector>
-
+#include <string>
 #include <vector>
 
 namespace layout_internal {
@@ -59,6 +58,13 @@ inline bool insertMenuOpen = false;
 // Insert -> Math was clicked this frame; opened in ProcessLayoutActions.
 inline bool insertMathRequested = false;
 
+// Run dropdown in the menu bar.
+inline bool runMenuOpen = false;
+// Run -> Run was clicked this frame; handled in ProcessRunRequest.
+inline bool runRequested = false;
+// Lines shown in the terminal panel, e.g. the output of the last run.
+inline std::vector<std::string> terminalOutput;
+
 // Math popup (see layout_math_menu.h / layout_math_menu_items.h).
 inline bool mathMenuOpen = false;
 // Window position of the popup's top-left corner, set by OpenMathMenu.
@@ -77,14 +83,15 @@ inline bool tableMenuOpen = false;
 
 // True while any dropdown/popup menu is open (editor mouse input is paused).
 inline bool IsAnyMenuOpen() {
-    return fileMenuOpen || editMenuOpen || insertMenuOpen || mathMenuOpen || graphMenuOpen ||
-           tableMenuOpen;
+    return fileMenuOpen || editMenuOpen || insertMenuOpen || runMenuOpen || mathMenuOpen ||
+           graphMenuOpen || tableMenuOpen;
 }
 
 inline void CloseAllMenus() {
     fileMenuOpen = false;
     editMenuOpen = false;
     insertMenuOpen = false;
+    runMenuOpen = false;
     mathMenuOpen = false;
     graphMenuOpen = false;
     tableMenuOpen = false;

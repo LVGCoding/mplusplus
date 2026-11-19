@@ -85,6 +85,7 @@ add_library(mplusplus_core STATIC
   src/math/TableNode.cpp
   src/math/TextNode.cpp
   src/parser/parser.cpp
+  src/run/Run.cpp
   src/ui/clay_impl.cpp
   src/ui/clay_renderer_raylib.cpp
   src/ui/TextInput.cpp
