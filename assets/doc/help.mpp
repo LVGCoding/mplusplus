@@ -1,1 +1,45 @@
+Welcome to M Plus Plus! 
+The visual math coding language
+
+To get started you can click file and then new to make a new mpp file
+Or open an existing mpp file
+You can save this file using save (ctrl+s)
+
+To get started with math use := to assign variables
+
+ex: a:=5+5
+a is stored with a value of 10
+
+you can then print using the print function
+print(a)
+
+printing also can function on its own
+print(5+5)
+
+Click run to display in the terminal!
+
+You can try this out with real and complex numbers with standard mathmatical operations (+,-,*,/)
+In all sorts of sets (\mathbb{R},\mathbb{Q},\mathbb{C},\mathbb{N})
+
 Use \ to Start a new math query.
+Press enter to confirm your selection
+
+You can use this to visualize all sorts of math symbols such as \frac{}{},\exp{}{},\sqrt[]{}
+These are all usable just how you would in Desmos or Symbolab
+The symbols are standard latex and can be pasted from latex documents
+And yes you can assign them to variables
+
+We also provide matrix support
+Start a matrix math query and you can do all sort of operations
+
+ex: a:=\begin{bmatrix}1&1\\2&2\end{bmatrix}\times\begin{bmatrix}4&2\\2&3\end{bmatrix}
+print(a)
+(note the times symbol can just be the standard * from your keyboard 
+but we also support the "times" symbol from query)
+
+And just like that the result is printed!
+
+Like any normal text editor we have standard editing commands 
+they are tied to standard keybinds ctrl+c (copy),ctrl+v (paste), ctrl+z (undo)...
+
+
