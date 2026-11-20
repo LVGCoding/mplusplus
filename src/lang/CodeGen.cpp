@@ -16,6 +16,10 @@ const char* CppType(Type type) {
         case Type::String: return "std::string";
         case Type::Vector: return "mpp::Vector";
         case Type::Matrix: return "mpp::Matrix";
+        case Type::SetInt:
+        case Type::EmptySet: return "mpp::Set<std::int64_t>";
+        case Type::SetReal: return "mpp::Set<double>";
+        case Type::SetString: return "mpp::Set<std::string>";
         default: return "auto";
     }
 }
@@ -170,14 +174,8 @@ private:
                 Line("}");
                 break;
             case Stmt::Kind::For: {
-                const Expr& range = *statement.value;
-                const bool real = range.type == Type::Real;
-                std::string code = "mpp::range(" + Loc(range.ref);
-                for (const auto& bound : range.args) {
-                    code += ", " + (real ? Real(*bound) : Expression(*bound));
-                }
                 Braced("for (const " + std::string(CppType(statement.type)) + " " + name + " : " +
-                           code + "))",
+                           Domain(*statement.value) + ")",
                        statement.body);
                 Line("}");
                 break;
@@ -357,9 +355,158 @@ private:
             case Expr::Kind::Compare: return Compare(expr);
             case Expr::Kind::Call: return Call(expr);
             case Expr::Kind::Cases: return Cases(expr);
-            case Expr::Kind::Range: return "";
+            case Expr::Kind::Range: return "mpp::to_set(" + Domain(expr) + ")";
+            case Expr::Kind::EmptySet: return "mpp::EmptySet{}";
+            case Expr::Kind::Set: return SetLiteral(expr);
+            case Expr::Kind::Builder: return Builder(expr);
+            case Expr::Kind::BigOp: return BigOp(expr);
+            case Expr::Kind::Quantifier: return Quantifier(expr);
         }
         return "";
+    }
+
+    // `expr` as a value of `type`: ℤ as ℝ, a set of ℤ as a set of ℝ, ∅ as a
+    // set of anything.
+    std::string As(const Expr& expr, Type type) {
+        if (type == Type::Real) {
+            return Real(expr);
+        }
+        if (expr.type == Type::EmptySet && type != Type::EmptySet) {
+            return std::string(CppType(type)) + "{}";
+        }
+        const std::string code = Expression(expr);
+        if (expr.type != type &&
+            (type == Type::SetInt || type == Type::SetReal || type == Type::SetString)) {
+            return std::string(CppType(type)) + "(" + code + ")";
+        }
+        return code;
+    }
+
+    // What a bound variable goes through: a range, without making a set,
+    // or a set or vector.
+    std::string Domain(const Expr& domain) {
+        if (domain.kind == Expr::Kind::EmptySet) {
+            return "mpp::Set<std::int64_t>{}";
+        }
+        if (domain.kind != Expr::Kind::Range) {
+            return Expression(domain);
+        }
+        const bool real = domain.type == Type::SetReal;
+        std::string code = "mpp::range(" + Loc(domain.ref);
+        for (const auto& bound : domain.args) {
+            code += ", " + (real ? Real(*bound) : Expression(*bound));
+        }
+        return code + ")";
+    }
+
+    // The element type of a set type.
+    static Type Element(Type set) {
+        return set == Type::SetReal ? Type::Real : set == Type::SetString ? Type::String
+                                                                          : Type::Int;
+    }
+
+    // for (const auto x : domain) — the start of a loop over a bound variable.
+    std::string ForBound(const Expr& expr) {
+        return "for (const auto " + Variable(expr.varIdent, expr.varGreek) + " : " +
+               Domain(*expr.args[0]) + ")";
+    }
+
+    std::string SetLiteral(const Expr& expr) {
+        const std::string type = CppType(expr.type);
+        const Type element = Element(expr.type);
+        std::string code = "[&] { " + type + " s;";
+        for (const auto& item : expr.args) {
+            if (item->kind == Expr::Kind::Range) {
+                code += " s.insert_all(" + Domain(*item) + ");";
+            } else {
+                code += " s.insert(" + As(*item, element) + ");";
+            }
+        }
+        return code + " return s; }()";
+    }
+
+    std::string Builder(const Expr& expr) {
+        const std::string type = CppType(expr.type);
+        std::string code = "[&] { " + type + " s; " + ForBound(expr) + " {";
+        const std::string insert =
+            " s.insert(" + As(*expr.args[1], Element(expr.type)) + ");";
+        if (expr.conditions[0]) {
+            code += " if (" + Expression(*expr.conditions[0]) + ")" + insert;
+        } else {
+            code += insert;
+        }
+        return code + " } return s; }()";
+    }
+
+    std::string BigOp(const Expr& expr) {
+        const std::string type = CppType(expr.type);
+        const std::string at = Loc(expr.opRef);
+        const Expr& body = *expr.args[1];
+        if (expr.text == "sum" || expr.text == "prod") {
+            const bool sum = expr.text == "sum";
+            const std::string term = As(body, expr.type);
+            std::string step;
+            if (expr.type == Type::Int) {
+                step = std::string("mpp::") + (sum ? "add" : "mul") + "(" + at + ", t, " + term +
+                       ")";
+            } else {
+                step = std::string("t ") + (sum ? "+ " : "* ") + term;
+            }
+            return "[&] { " + type + " t = " + (sum ? "0" : "1") + "; " + ForBound(expr) +
+                   " { t = " + step + "; } return t; }()";
+        }
+        const std::string term = As(body, expr.type);
+        if (expr.text == "bigcup") {
+            return "[&] { " + type + " t; " + ForBound(expr) + " { t = mpp::set_union(t, " +
+                   term + "); } return t; }()";
+        }
+        // ⋂ of no sets at all has no answer.
+        return "[&] { std::optional<" + type + "> t; " + ForBound(expr) +
+               " { t = t ? mpp::set_intersection(*t, " + term + ") : " + term +
+               "; } if (!t) mpp::fail_at(" + at +
+               ", \"⋂ of no sets: there is nothing to intersect\"); return *t; }()";
+    }
+
+    std::string Quantifier(const Expr& expr) {
+        const bool all = expr.text == "∀";
+        const std::string test = Expression(*expr.args[1]);
+        return "[&] { " + ForBound(expr) + " { if (" + (all ? "!" : "") + "(" + test +
+               ")) return " + (all ? "false" : "true") + "; } return " +
+               (all ? "true" : "false") + "; }()";
+    }
+
+    // x ∈ S, x ∉ S, A ⊂ B, A ⊆ B, and = ≠ between sets.
+    std::string SetComparison(const Expr& expr) {
+        const std::string& op = expr.ops[0];
+        const Expr& left = *expr.args[0];
+        const Expr& right = *expr.args[1];
+        std::string test;
+        if (op == "∈" || op == "∉") {
+            if (right.kind == Expr::Kind::Range) {
+                const bool real = right.type == Type::SetReal || left.type == Type::Real;
+                test = "mpp::in_range(" + (real ? Real(left) : Expression(left));
+                for (const auto& bound : right.args) {
+                    test += ", " + (real ? Real(*bound) : Expression(*bound));
+                }
+                test += ")";
+            } else if (right.type == Type::Vector) {
+                test = "mpp::contains(" + Expression(right) + ", " + Real(left) + ")";
+            } else {
+                test = "mpp::contains(" + Expression(right) + ", " + Expression(left) + ")";
+            }
+            return op == "∉" ? "(!" + test + ")" : test;
+        }
+        // Compare as sets of one type.
+        const Type common = left.type == right.type ? left.type
+                          : left.type == Type::EmptySet ? right.type
+                          : right.type == Type::EmptySet ? left.type
+                                                         : Type::SetReal;
+        const Type type = common == Type::EmptySet ? Type::SetInt : common;
+        const std::string a = As(left, type);
+        const std::string b = As(right, type);
+        if (op == "⊂") return "mpp::proper_subset(" + a + ", " + b + ")";
+        if (op == "⊆") return "mpp::subset(" + a + ", " + b + ")";
+        return std::string(op == "≠" ? "(!" : "(") + "(" + a + " == " + b + "))";
     }
 
     std::string MatrixLiteral(const Expr& expr) {
@@ -426,6 +573,10 @@ private:
     }
 
     std::string Binary(const Expr& expr) {
+        if (expr.access.starts_with("set_")) {
+            return "mpp::" + expr.access + "(" + As(*expr.args[0], expr.type) + ", " +
+                   As(*expr.args[1], expr.type) + ")";
+        }
         if (!expr.access.empty()) {
             return ArrayBinary(expr);
         }
@@ -468,8 +619,20 @@ private:
         return "(" + a + " " + CppComparison(op) + " " + b + ")";
     }
 
+    static bool IsSetType(Type type) {
+        return type == Type::SetInt || type == Type::SetReal || type == Type::SetString ||
+               type == Type::EmptySet;
+    }
+
     std::string Compare(const Expr& expr) {
         const Type first = expr.args[0]->type;
+        if (expr.ops.size() == 1) {
+            const std::string& op = expr.ops[0];
+            if (op == "∈" || op == "∉" || op == "⊂" || op == "⊆" || IsSetType(first) ||
+                IsSetType(expr.args[1]->type)) {
+                return SetComparison(expr);
+            }
+        }
         if (expr.ops.size() == 1 && (first == Type::Vector || first == Type::Matrix)) {
             const std::string a = Expression(*expr.args[0]);
             const std::string b = Expression(*expr.args[1]);
@@ -533,6 +696,9 @@ private:
                 code += std::string(i > 0 ? ", " : "") + Expression(*expr.args[i]);
             }
             return code + ")";
+        }
+        if (expr.access == "size") {
+            return "mpp::size(" + Expression(*expr.args[0]) + ")";
         }
         if (expr.text == "print") {
             std::string code = "mpp::print(";

@@ -297,6 +297,25 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 - Editor: BigOp node.
 - Done when: `primes.mpp` passes.
 
+**Status: done.** Notes:
+- Editor: `BigOpNode` (∑ ∏ ⋃ ⋂), saved as standard LaTeX `\sum_{k=1}^{n}`; an
+  empty upper limit is hidden unless the cursor is in the operator.
+- Types: sets of ℤ, ℝ or strings (`mpp::Set<T>`, kept sorted, printed as
+  `{1, 2}` or `∅`). `∅`/`{}` fits any set; a set of ℤ widens to a set of ℝ.
+- `{1, 2, 5..9}`; `a..b` used as a value is the set of its numbers (loops,
+  sums, ∀ and `x ∈ a..b` go through ranges without making a set).
+- Set-builder: `{x ∈ S : P}`, `{f(x) : x ∈ S}`, `{f(x) : x ∈ S, P}`; `|` may
+  replace `:`.
+- Operators: `∪ ∖ Δ` (level 6), `∩` (level 7), `∈ ∉ ⊂ ⊆ = ≠` (comparisons;
+  ∈ doesn't chain). `A∖b` is still solve for a matrix A (now at level 6).
+  `|S|` is the size.
+- `Σ/∏_{k=1}^{n} body` or `_{k ∈ S}`: the body is the next term
+  (`Σ k² + 1` is `(Σ k²) + 1`); empty Σ is 0, empty ∏ is 1. `⋃`, `⋂` of sets
+  (⋂ of nothing is a runtime error). `∀/∃ x ∈ S : P` (`,` also separates);
+  P reaches as far right as it can.
+- Bound variables (Σ, ∀, set-builder) may reuse an outside name and exist
+  only inside. `for x ∈ S` also goes through sets and vectors.
+
 ### Phase 5: data
 - Lang: Σ/Σ*, template strings, `in`, string `+`/`*`; structs `⟨…⟩`; lists
   with `push`; maps; enums; `@tags`; tables printed in the terminal.

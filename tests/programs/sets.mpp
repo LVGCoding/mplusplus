@@ -1,0 +1,14 @@
+A := \{1, 2, 3, 4\}
+B := \{3..6\}
+print(A \cup B, A \cap B, A \setminus B, A \Delta B)
+print(3 \in A, 7 \notin A, \{1, 2\} \subseteq A, A \subset A, A = \{4, 3, 2, 1\})
+evens := \{2k : k \in 1..5\}
+print(evens, |evens|, \{x \in evens : x > 4\})
+print(\sum_{k=1}^{100} k, \prod_{k=1}^{5} k, \sum_{k \in A}^{} \frac{1}{k})
+print(\bigcup_{k=1}^{3} \{k, 10k\}, \bigcap_{k \in A}^{} \{0..k\})
+E := \emptyset
+E \leftarrow E \cup \{5\}
+print(E, \emptyset, \{"b", "a"\} \cup \{"c"\})
+for x \in B \cap A \{ print(x) \}
+print(\sum_{k=1}^{0} k, 2 \in 1..2..9, 3 \in 1..2..9)
+print(\bigcap_{k \in \emptyset}^{} \{k\})

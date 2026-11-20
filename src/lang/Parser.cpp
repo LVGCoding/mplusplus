@@ -42,6 +42,7 @@ std::string Describe(const Token& token) {
                 case Shape::Power: return "a power";
                 case Shape::Matrix: return "a matrix";
                 case Shape::Subscript: return "a subscript";
+                case Shape::BigOp: return "a " + token.text;
                 case Shape::Graph: return "a graph";
                 case Shape::Table: return "a table";
                 default: return "a group";
@@ -297,7 +298,7 @@ private:
             IsFunctionDefinition()) {
             return ParseFunction();
         }
-        if (first.IsOp("{")) {
+        if (first.IsOp("{") && PeekAt(1).kind == Kind::Newline) {
             Fail("A block ({ … }) goes after if, while, for or a function.", first.ref);
         }
 
@@ -359,10 +360,9 @@ private:
             Unexpected(Peek(), "Expected ∈ after the loop variable, as in for i ∈ 1..n");
         }
         Advance();
-        statement->value = ParseExpression();
-        if (statement->value->kind != Expr::Kind::Range) {
-            Fail("for needs a range, such as 1..n.", statement->value->ref);
-        }
+        // A range (1..n), a set or a vector; not a comparison, so the block
+        // that follows isn't taken for part of it.
+        statement->value = ParseRange();
         statement->ref = Span(keyword.ref, statement->value->ref);
         statement->body = ParseBlock("the range");
         return statement;
@@ -486,7 +486,7 @@ private:
         }
         if (Peek().IsOp(":=")) {
             const Token& define = Advance();
-            if (Peek().IsOp("{")) {
+            if (Peek().IsOp("{") && PeekAt(1).kind == Kind::Newline) {
                 Fail("For a function written over several rows, leave out :=, as in " +
                          name.text + "(…) { … }",
                      define.ref);
@@ -613,7 +613,7 @@ private:
 
     static bool IsComparison(const Token& token) {
         if (token.kind != Kind::Op) return false;
-        for (std::string_view op : {"=", "≠", "<", "≤", ">", "≥", "≈"}) {
+        for (std::string_view op : {"=", "≠", "<", "≤", ">", "≥", "≈", "∈", "∉", "⊂", "⊆"}) {
             if (token.text == op) return true;
         }
         return false;
@@ -621,29 +621,46 @@ private:
 
     // a..b, or a..s..b with a step.
     std::unique_ptr<Expr> ParseRange() {
-        auto first = ParseAdditive();
+        auto first = ParseSetUnion();
         if (!Peek().IsOp("..")) {
             return first;
         }
         auto range = MakeExpr(Expr::Kind::Range, first->ref);
         range->opRef = Advance().ref;
         range->args.push_back(std::move(first));
-        range->args.push_back(ParseAdditive());
+        range->args.push_back(ParseSetUnion());
         if (Peek().IsOp("..")) {
             Advance();
-            range->args.push_back(ParseAdditive());
+            range->args.push_back(ParseSetUnion());
         }
         range->ref = Span(range->args.front()->ref, range->args.back()->ref);
         return range;
     }
 
+    // A ∪ B, A ∖ B, A Δ B (A∖b also solves A⋅x = b for a matrix A).
+    std::unique_ptr<Expr> ParseSetUnion() {
+        auto left = ParseSetIntersection();
+        while (Peek().IsOp("∪") || Peek().IsOp("∖") || Peek().IsOp("Δ")) {
+            const Token& op = Advance();
+            SkipNewlines();
+            left = Binary(op.text, op.ref, std::move(left), ParseSetIntersection());
+        }
+        return left;
+    }
+
+    std::unique_ptr<Expr> ParseSetIntersection() {
+        auto left = ParseAdditive();
+        while (Peek().IsOp("∩")) {
+            const Token& op = Advance();
+            SkipNewlines();
+            left = Binary(op.text, op.ref, std::move(left), ParseAdditive());
+        }
+        return left;
+    }
+
     std::unique_ptr<Expr> ParseComparison() {
         auto first = ParseRange();
         if (!IsComparison(Peek())) {
-            if (Peek().IsOp("∈") || Peek().IsOp("∉")) {
-                Fail("Sets can't be used yet: they're coming in a later version of M++.",
-                     Peek().ref);
-            }
             return first;
         }
         auto expr = MakeExpr(Expr::Kind::Compare, first->ref);
@@ -679,7 +696,7 @@ private:
             case Kind::Word:
                 return token.text != "mod";
             case Kind::Op:
-                return token.text == "(" || token.text == "∞";
+                return token.text == "(" || token.text == "∞" || token.text == "∅";
             case Kind::Structure:
                 return !(token.shape == Shape::Power && token.slots[0].empty()) &&
                        token.shape != Shape::Subscript;
@@ -722,7 +739,7 @@ private:
         for (;;) {
             const Token& next = Peek();
             if (next.IsOp("⋅") || next.IsOp("×") || next.IsOp("/") || next.IsWord("mod") ||
-                next.IsOp("⊙") || next.IsOp("∖")) {
+                next.IsOp("⊙")) {
                 const Token& op = Advance();
                 SkipNewlines();
                 left = Binary(op.text, op.ref, std::move(left), ParseUnary());
@@ -859,7 +876,14 @@ private:
                     return call;
                 }
                 if (token.IsOp("{")) {
-                    Fail("A block ({ … }) goes after if, while, for or a function.", token.ref);
+                    return ParseSet();
+                }
+                if (token.IsOp("∅")) {
+                    Advance();
+                    return MakeExpr(Expr::Kind::EmptySet, token.ref);
+                }
+                if (token.IsOp("∀") || token.IsOp("∃")) {
+                    return ParseQuantifier();
                 }
                 if (token.IsOp("∞")) {
                     Advance();
@@ -914,6 +938,135 @@ private:
         --depth_;
         call->ref = Span(name.ref, close.ref);
         return call;
+    }
+
+    // `binding` is "x ∈ S": sets expr's variable and domain (args[0]).
+    void Bind(Expr& expr, std::unique_ptr<Expr> binding, const char* example) {
+        if (binding->kind != Expr::Kind::Compare || binding->ops.size() != 1 ||
+            binding->ops[0] != "∈" || binding->args[0]->kind != Expr::Kind::Name) {
+            Fail(std::string("Expected a variable and where it comes from, as in ") + example +
+                     ".",
+                 binding->ref);
+        }
+        const Expr& name = *binding->args[0];
+        expr.var = name.text;
+        expr.varIdent = name.ident;
+        expr.varGreek = name.greek;
+        expr.varRef = name.ref;
+        expr.args.insert(expr.args.begin(), std::move(binding->args[1]));
+    }
+
+    // {a, b, c}, {1..n}, {}, or set-builder: {x ∈ S : P(x)}, {f(x) : x ∈ S},
+    // {f(x) : x ∈ S, P(x)}. | may be used instead of :.
+    std::unique_ptr<Expr> ParseSet() {
+        const Token& open = Advance();
+        ++depth_;
+        if (Peek().IsOp("}")) {
+            const Token& close = Advance();
+            --depth_;
+            return MakeExpr(Expr::Kind::EmptySet, Span(open.ref, close.ref));
+        }
+        auto first = ParseExpression();
+        std::unique_ptr<Expr> set;
+        if (Peek().IsOp(":") || Peek().IsOp("|")) {
+            Advance();
+            set = MakeExpr(Expr::Kind::Builder, open.ref);
+            const bool filter = first->kind == Expr::Kind::Compare && first->ops.size() == 1 &&
+                                first->ops[0] == "∈" &&
+                                first->args[0]->kind == Expr::Kind::Name;
+            if (filter) {
+                // {x ∈ S : P}: the elements are x itself.
+                auto element = Clone(*first->args[0]);
+                Bind(*set, std::move(first), "{x ∈ S : x > 0}");
+                set->args.push_back(std::move(element));
+                set->conditions.push_back(ParseExpression());
+            } else {
+                set->args.push_back(std::move(first));
+                Bind(*set, ParseExpression(), "{x² : x ∈ S}");
+                if (Peek().IsOp(",")) {
+                    Advance();
+                    set->conditions.push_back(ParseExpression());
+                } else {
+                    set->conditions.push_back(nullptr);
+                }
+            }
+        } else {
+            set = MakeExpr(Expr::Kind::Set, open.ref);
+            set->args.push_back(std::move(first));
+            while (Peek().IsOp(",")) {
+                Advance();
+                set->args.push_back(ParseExpression());
+            }
+        }
+        const Token& close = Expect("}", "Expected ',' or '}' in the set");
+        --depth_;
+        set->ref = Span(open.ref, close.ref);
+        return set;
+    }
+
+    // ∀ x ∈ S : P(x), ∃ x ∈ S : P(x). The condition reaches as far right as
+    // it can.
+    std::unique_ptr<Expr> ParseQuantifier() {
+        const Token& symbol = Advance();
+        auto expr = MakeExpr(Expr::Kind::Quantifier, symbol.ref);
+        expr->text = symbol.text;
+        expr->opRef = symbol.ref;
+        const Token& name = Peek();
+        if (name.kind != Kind::Word || IsKeyword(name.text)) {
+            Unexpected(name, "Expected a variable after " + symbol.text + ", as in " +
+                                 symbol.text + " x ∈ S : x > 0");
+        }
+        Advance();
+        expr->var = name.text;
+        expr->varIdent = name.ident;
+        expr->varGreek = name.greek;
+        expr->varRef = name.ref;
+        if (!Peek().IsOp("∈") && !Peek().IsWord("in")) {
+            Unexpected(Peek(), "Expected ∈ after " + symbol.text + " " + name.text);
+        }
+        Advance();
+        expr->args.push_back(ParseRange());
+        if (!Peek().IsOp(":") && !Peek().IsOp(",")) {
+            Unexpected(Peek(), "Expected ':' before the condition");
+        }
+        Advance();
+        expr->args.push_back(ParseExpression());
+        expr->ref = Span(symbol.ref, expr->args.back()->ref);
+        return expr;
+    }
+
+    // Σ_{k=1}^{n} body or Σ_{k ∈ S} body: the body is the term after it
+    // (Σ k² + 1 is (Σ k²) + 1).
+    std::unique_ptr<Expr> ParseBigOp(const Token& token) {
+        auto expr = MakeExpr(Expr::Kind::BigOp, token.ref);
+        expr->text = token.text;
+        expr->opRef = token.ref;
+        auto lower = ParseSlot(token.slots[0], token, "lower limit");
+        const bool from = lower->kind == Expr::Kind::Compare && lower->ops.size() == 1 &&
+                          lower->ops[0] == "=" && lower->args[0]->kind == Expr::Kind::Name;
+        if (from) {
+            // k=a with an upper limit b: k runs through a..b.
+            if (token.slots[1].empty()) {
+                Fail("This needs an upper limit, as in k=1 up to n.", token.ref);
+            }
+            auto range = MakeExpr(Expr::Kind::Range, Span(lower->args[1]->ref, token.ref));
+            range->args.push_back(std::move(lower->args[1]));
+            range->args.push_back(ParseSlot(token.slots[1], token, "upper limit"));
+            lower->args[1] = std::move(range);
+            lower->ops[0] = "∈";
+        } else if (!token.slots[1].empty()) {
+            Fail("With ∈ below, leave the upper limit empty.", token.ref);
+        }
+        Bind(*expr, std::move(lower), "k=1 or k ∈ S");
+        // (A set may follow too: ⋃_{k=1}^{n} {k, 2k}.)
+        if (!StartsOperand(Peek()) && !Peek().IsOp("−") && !Peek().IsOp("{")) {
+            Unexpected(Peek(), "Expected what to " +
+                                   std::string(token.text == "sum" ? "add up" :
+                                               token.text == "prod" ? "multiply" : "combine"));
+        }
+        expr->args.push_back(ParseMultiplicative());
+        expr->ref = Span(token.ref, expr->args.back()->ref);
+        return expr;
     }
 
     // A matrix of numbers; a single column is a vector. A vmatrix (bars) is
@@ -999,6 +1152,7 @@ private:
                 return call;
             }
             case Shape::Cases: return ParseCases(token);
+            case Shape::BigOp: return ParseBigOp(token);
             case Shape::Matrix: return ParseMatrix(token);
             case Shape::Subscript:
                 Fail("This subscript has nothing before it: put a name in front, as in x_i.",

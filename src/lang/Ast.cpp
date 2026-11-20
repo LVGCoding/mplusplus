@@ -12,6 +12,10 @@ std::unique_ptr<Expr> Clone(const Expr& expr) {
     copy->op = expr.op;
     copy->ops = expr.ops;
     copy->opRef = expr.opRef;
+    copy->var = expr.var;
+    copy->varIdent = expr.varIdent;
+    copy->varGreek = expr.varGreek;
+    copy->varRef = expr.varRef;
     copy->rows = expr.rows;
     copy->columns = expr.columns;
     for (const auto& arg : expr.args) {

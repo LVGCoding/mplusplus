@@ -13,8 +13,12 @@ namespace lang {
 // Types of values. Error marks an expression that already has a reported
 // problem, so one mistake doesn't cause a cascade of messages.
 // Vector is a column of reals (ℝⁿ), Matrix a grid of reals (ℝ^{n×m}); their
-// sizes are checked when the program runs.
-enum class Type { Error, Void, Int, Real, Bool, String, Vector, Matrix };
+// sizes are checked when the program runs. Sets hold whole numbers, reals or
+// strings; EmptySet is ∅ (or {}) before it is known what it will hold.
+enum class Type {
+    Error, Void, Int, Real, Bool, String, Vector, Matrix,
+    SetInt, SetReal, SetString, EmptySet,
+};
 
 // How a type is written in messages: ℤ, ℝ, 𝔹, Σ*.
 const char* TypeName(Type type);
@@ -40,6 +44,14 @@ struct Expr {
         Index,    // args {base, index...}: x_i, A_{i,j}, v_{2..4}; see `op` below
         All,      // * in a subscript: A_{i,*} is row i
         Transpose,// args {base}: A^⊤
+        Set,      // args: the elements, which may be ranges: {1, 3, 5..9}
+        EmptySet, // ∅ or {}
+        // The next three bind a variable (var…) to each element of a domain
+        // (args[0], a set, range or vector) in turn, and use args[1]:
+        Builder,  // {args[1] : var ∈ args[0], conditions[0]}; a filter
+                  // {x ∈ S : P} has args[1] = x
+        BigOp,    // text "sum", "prod", "bigcup", "bigcap": Σ_{var ∈ args[0]} args[1]
+        Quantifier, // text "∀" or "∃": ∀ var ∈ args[0] : args[1]
     };
 
     Kind kind;
@@ -53,6 +65,11 @@ struct Expr {
     std::vector<std::unique_ptr<Expr>> conditions;
     // Where an operator itself is, e.g. the "/" in a / b.
     SourceRef opRef;
+    // Builder, BigOp, Quantifier: the bound variable.
+    std::string var;
+    std::string varIdent;
+    bool varGreek = false;
+    SourceRef varRef;
     // Matrix: its size. A single column is a vector.
     std::size_t rows = 0;
     std::size_t columns = 0;

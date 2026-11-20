@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include "math/BigOpNode.h"
 #include "math/DelimNode.h"
 #include "math/ExpoNode.h"
 #include "math/FracNode.h"
@@ -142,6 +143,9 @@ private:
             } else if (token.size() > 1 && token[0] == '\\' &&
                        DelimNode::KindFromCommand(std::string_view(token).substr(1))) {
                 node = ParseDelimited();
+            } else if (token.size() > 1 && token[0] == '\\' &&
+                       BigOpNode::KindFromCommand(std::string_view(token).substr(1))) {
+                node = ParseBigOp();
             } else if (token == "\\mathbb") {
                 node = ParseBlackboard();
             } else if (token.size() > 1 && token[0] == '\\') {
@@ -245,6 +249,29 @@ private:
             return nullptr;
         }
         return std::make_unique<FracNode>(std::move(numerator), std::move(denominator));
+    }
+
+    // \sum_{lower}^{upper} and the other big operators.
+    std::unique_ptr<EditorNode> ParseBigOp() {
+        const std::size_t start = position_;
+        const auto kind = BigOpNode::KindFromCommand(std::string_view(Peek()).substr(1));
+        ++position_;
+        std::unique_ptr<NodeList> lower;
+        std::unique_ptr<NodeList> upper;
+        if (PeekIs("_")) {
+            ++position_;
+            lower = ParseBracedGroup();
+        }
+        if (lower && PeekIs("^")) {
+            ++position_;
+            upper = ParseBracedGroup();
+        }
+        if (!lower || !upper) {
+            position_ = start;
+            return nullptr;
+        }
+        return std::make_unique<BigOpNode>(*kind, std::make_unique<LineNode>(std::move(*lower)),
+                                           std::make_unique<LineNode>(std::move(*upper)));
     }
 
     // \abs{x}, \floor{x}, \ceil{x}

@@ -17,6 +17,10 @@ const char* TypeName(Type type) {
         case Type::String: return "Σ*";
         case Type::Vector: return "ℝ^n";
         case Type::Matrix: return "ℝ^(n×m)";
+        case Type::SetInt: return "sets of ℤ";
+        case Type::SetReal: return "sets of ℝ";
+        case Type::SetString: return "sets of Σ*";
+        case Type::EmptySet: return "∅";
         case Type::Void: return "nothing";
         case Type::Error: return "?";
     }
@@ -27,6 +31,28 @@ namespace {
 
 bool IsNumeric(Type type) { return type == Type::Int || type == Type::Real; }
 bool IsArray(Type type) { return type == Type::Vector || type == Type::Matrix; }
+bool IsSet(Type type) {
+    return type == Type::SetInt || type == Type::SetReal || type == Type::SetString ||
+           type == Type::EmptySet;
+}
+
+// What a set holds (Error for ∅), and the set holding a type (Error if none).
+Type ElementOf(Type set) {
+    switch (set) {
+        case Type::SetInt: return Type::Int;
+        case Type::SetReal: return Type::Real;
+        case Type::SetString: return Type::String;
+        default: return Type::Error;
+    }
+}
+Type SetOf(Type element) {
+    switch (element) {
+        case Type::Int: return Type::SetInt;
+        case Type::Real: return Type::SetReal;
+        case Type::String: return Type::SetString;
+        default: return Type::Error;
+    }
+}
 
 // The type of a declaration with sizes: ℝ^n is a vector, ℝ^{n×m} a matrix.
 Type WithDims(Type element, std::size_t dims) {
@@ -56,6 +82,12 @@ Type Unify(Type a, Type b, bool& ok) {
     if (a == Type::Error || b == Type::Error) return Type::Error;
     if (IsNumeric(a) && IsNumeric(b)) return Join(a, b);
     if (a == b) return a;
+    // ∅ fits any set; a set of ℤ fits with a set of ℝ.
+    if (a == Type::EmptySet && IsSet(b)) return b;
+    if (b == Type::EmptySet && IsSet(a)) return a;
+    if ((a == Type::SetInt && b == Type::SetReal) || (a == Type::SetReal && b == Type::SetInt)) {
+        return Type::SetReal;
+    }
     ok = false;
     return Type::Error;
 }
@@ -229,7 +261,9 @@ private:
     bool CheckStore(Type target, Type value, const std::string& name, const char* targetName,
                     const SourceRef& ref) {
         if (target == Type::Error || value == Type::Error || target == value ||
-            (target == Type::Real && value == Type::Int)) {
+            (target == Type::Real && value == Type::Int) ||
+            (IsSet(target) && value == Type::EmptySet) ||
+            (target == Type::SetReal && value == Type::SetInt)) {
             return true;
         }
         if (value == Type::Void) {
@@ -441,7 +475,7 @@ private:
         if (statement.value) {
             const Type value = CheckExpr(*statement.value);
             if (statement.declaredType.empty()) {
-                type = value;
+                type = value == Type::EmptySet ? Type::SetInt : value;
                 if (value == Type::Void) {
                     Error("This doesn't give a value to store in " + statement.name + ".",
                           statement.value->ref);
@@ -561,24 +595,7 @@ private:
     }
 
     void CheckFor(Stmt& statement) {
-        Expr& range = *statement.value;
-        Type type = Type::Int;
-        bool ok = true;
-        for (auto& bound : range.args) {
-            const Type bound_type = CheckExpr(*bound);
-            if (bound_type == Type::Error) {
-                ok = false;
-            } else if (!IsNumeric(bound_type)) {
-                Error("A range needs numbers, but this is in " +
-                          std::string(TypeName(bound_type)) + ".",
-                      bound->ref);
-                ok = false;
-            } else {
-                type = Join(type, bound_type);
-            }
-        }
-        range.type = ok ? type : Type::Error;
-        statement.type = range.type;
+        statement.type = CheckDomain(*statement.value, "for");
         scopes_.emplace_back();
         if (CheckNewName(statement.name, statement.nameRef)) {
             scopes_.back()[statement.name] = {statement.type, false, true, statement.nameRef};
@@ -589,6 +606,66 @@ private:
         }
         --loopDepth_;
         EndScope();
+    }
+
+    // What a variable goes through: a range (a..b), a set or a vector.
+    // Returns the type of its elements.
+    Type CheckDomain(Expr& domain, const char* what) {
+        if (domain.kind == Expr::Kind::Range) {
+            Type type = Type::Int;
+            bool ok = true;
+            for (auto& bound : domain.args) {
+                const Type bound_type = CheckExpr(*bound);
+                if (bound_type == Type::Error) {
+                    ok = false;
+                } else if (!IsNumeric(bound_type)) {
+                    Error("A range needs numbers, but this is in " +
+                              std::string(TypeName(bound_type)) + ".",
+                          bound->ref);
+                    ok = false;
+                } else {
+                    type = Join(type, bound_type);
+                }
+            }
+            domain.type = ok ? SetOf(type) : Type::Error;
+            return ok ? type : Type::Error;
+        }
+        const Type type = CheckExpr(domain);
+        if (type == Type::Error) {
+            return Type::Error;
+        }
+        if (type == Type::EmptySet) {
+            domain.type = Type::SetInt;
+            return Type::Int;
+        }
+        if (IsSet(type)) {
+            return ElementOf(type);
+        }
+        if (type == Type::Vector) {
+            return Type::Real;
+        }
+        Error(std::string(what) + " needs a range (1..n), a set or a vector to go through, but "
+                                  "this is in " + TypeName(type) + ".",
+              domain.ref);
+        return Type::Error;
+    }
+
+    // Checks `body` with the expression's variable bound to each element of
+    // its domain (args[0]); returns the body's type.
+    Type CheckBound(Expr& expr, Expr& body, const char* what, Expr* condition = nullptr) {
+        const Type element = CheckDomain(*expr.args[0], what);
+        scopes_.emplace_back();
+        // A bound variable may reuse a name from outside, like k in Σ_k.
+        if (FindBuiltinFunction(expr.var) || functions_.contains(expr.var)) {
+            Error(expr.var + " is a function; choose another name.", expr.varRef);
+        }
+        scopes_.back()[expr.var] = {element, false, true, expr.varRef};
+        if (condition) {
+            RequireCondition(*condition, "the :");
+        }
+        const Type type = element == Type::Error ? Type::Error : CheckExpr(body);
+        scopes_.pop_back();
+        return element == Type::Error ? Type::Error : type;
     }
 
     void CheckReturn(Stmt& statement) {
@@ -842,10 +919,38 @@ private:
             case Expr::Kind::All:
                 Error("* can only be used in a subscript, as in A_{i,*}.", expr.ref);
                 return Type::Error;
-            case Expr::Kind::Range:
-                CheckArgs(expr);
-                Error("A range (a..b) can only be used in a for loop, for now.", expr.ref);
-                return Type::Error;
+            case Expr::Kind::Range: {
+                // As a value, a range is the set of its numbers.
+                const Type element = CheckDomain(expr, "A range");
+                return element == Type::Error ? Type::Error : SetOf(element);
+            }
+            case Expr::Kind::EmptySet: return Type::EmptySet;
+            case Expr::Kind::Set: return CheckSetLiteral(expr);
+            case Expr::Kind::Builder: {
+                Expr* condition = expr.conditions[0].get();
+                const Type element = CheckBound(expr, *expr.args[1], "A set", condition);
+                if (element == Type::Error) {
+                    return Type::Error;
+                }
+                const Type set = SetOf(element);
+                if (set == Type::Error) {
+                    Error("A set can hold numbers or strings, not " +
+                              std::string(TypeName(element)) + ".",
+                          expr.args[1]->ref);
+                }
+                return set;
+            }
+            case Expr::Kind::Quantifier: {
+                const Type type = CheckBound(expr, *expr.args[1], expr.text.c_str());
+                if (type != Type::Bool && type != Type::Error) {
+                    Error("After " + expr.text + " x ∈ S : comes a condition, true or false (𝔹); "
+                          "this is in " + TypeName(type) + ".",
+                          expr.args[1]->ref);
+                    return Type::Error;
+                }
+                return type;
+            }
+            case Expr::Kind::BigOp: return CheckBigOp(expr);
             default: break;
         }
 
@@ -1011,6 +1116,10 @@ private:
         if (op == "∧" || op == "∨" || op == "⊕") {
             return RequireBool(expr, op) ? Type::Bool : Type::Error;
         }
+        if (op == "∪" || op == "∩" || op == "Δ" || (op == "∖" && left != Type::Matrix) ||
+            IsSet(left) || IsSet(right)) {
+            return CheckSetBinary(expr);
+        }
         if (IsArray(left) || IsArray(right) || op == "⊙" || op == "∖") {
             return CheckArrayBinary(expr);
         }
@@ -1028,6 +1137,96 @@ private:
             return Type::Real;
         }
         return Join(left, right);
+    }
+
+    // ∪ ∩ ∖ Δ between sets. Sets expr.access to the runtime function.
+    Type CheckSetBinary(Expr& expr) {
+        const std::string& op = expr.op;
+        const Type left = expr.args[0]->type;
+        const Type right = expr.args[1]->type;
+        if (op != "∪" && op != "∩" && op != "∖" && op != "Δ") {
+            Error(op == "+" ? "To join two sets, write A ∪ B."
+                            : op + " can't be used with sets; they have ∪ ∩ ∖ Δ.",
+                  expr.opRef);
+            return Type::Error;
+        }
+        for (const Expr* side : {expr.args[0].get(), expr.args[1].get()}) {
+            if (!IsSet(side->type)) {
+                Error(op + " needs two sets, but this is in " + TypeName(side->type) + ".",
+                      side->ref);
+                return Type::Error;
+            }
+        }
+        bool ok = true;
+        Type type = Unify(left, right, ok);
+        if (!ok) {
+            Error("Can't combine " + std::string(TypeName(left)) + " with " + TypeName(right) +
+                      ".",
+                  expr.opRef);
+            return Type::Error;
+        }
+        expr.access = op == "∪" ? "set_union" : op == "∩" ? "set_intersection"
+                    : op == "∖" ? "set_difference" : "set_symmetric";
+        return type == Type::EmptySet ? Type::SetInt : type;
+    }
+
+    // {a, b, 1..n}: numbers or strings, all of one kind.
+    Type CheckSetLiteral(Expr& expr) {
+        Type element = Type::Error;
+        bool first = true;
+        bool failed = false;
+        for (auto& item : expr.args) {
+            Type type;
+            if (item->kind == Expr::Kind::Range) {
+                type = CheckDomain(*item, "A range");
+            } else {
+                type = CheckExpr(*item);
+                if (type != Type::Error && SetOf(type) == Type::Error) {
+                    Error("A set can hold numbers or strings, not " +
+                              std::string(TypeName(type)) + ".",
+                          item->ref);
+                    type = Type::Error;
+                }
+            }
+            if (type == Type::Error) {
+                failed = true;
+                continue;
+            }
+            if (first) {
+                element = type;
+                first = false;
+                continue;
+            }
+            bool ok = true;
+            element = Unify(element, type, ok);
+            if (!ok) {
+                Error("A set's elements must all be numbers or all be strings.", item->ref);
+                failed = true;
+            }
+        }
+        return failed ? Type::Error : SetOf(element);
+    }
+
+    // Σ and ∏ of numbers, ⋃ and ⋂ of sets.
+    Type CheckBigOp(Expr& expr) {
+        const bool numbers = expr.text == "sum" || expr.text == "prod";
+        const char* symbol = expr.text == "sum" ? "Σ" : expr.text == "prod" ? "∏"
+                           : expr.text == "bigcup" ? "⋃" : "⋂";
+        const Type type = CheckBound(expr, *expr.args[1], symbol);
+        if (type == Type::Error) {
+            return Type::Error;
+        }
+        if (numbers && !IsNumeric(type)) {
+            Error(std::string(symbol) + " needs numbers, but this is in " + TypeName(type) + ".",
+                  expr.args[1]->ref);
+            return Type::Error;
+        }
+        if (!numbers && !IsSet(type)) {
+            Error(std::string(symbol) + " needs sets, but this is in " + TypeName(type) + ".",
+                  expr.args[1]->ref);
+            return Type::Error;
+        }
+        return type == Type::EmptySet ? Type::SetInt : type;
     }
 
     // An operator with a vector or matrix on at least one side. Sets
@@ -1259,6 +1458,36 @@ private:
             const std::string& op = expr.ops[i];
             const Type a = expr.args[i]->type;
             const Type b = expr.args[i + 1]->type;
+            if (op == "∈" || op == "∉") {
+                if (expr.ops.size() > 1) {
+                    Error(op + " can't be chained with other comparisons; use ∧.", expr.opRef);
+                    ok = false;
+                    continue;
+                }
+                const Type element = CheckDomain(*expr.args[1], op.c_str());
+                if (element != Type::Error && a != Type::Error &&
+                    !(IsNumeric(element) && IsNumeric(a)) && element != a) {
+                    Error("Can't look for " + std::string(TypeName(a)) + " among " +
+                              TypeName(element) + ".",
+                          expr.args[i]->ref);
+                    ok = false;
+                }
+                ok &= element != Type::Error;
+                continue;
+            }
+            if (op == "⊂" || op == "⊆" || IsSet(a) || IsSet(b)) {
+                bool fits = true;
+                Unify(a, b, fits);
+                if (!IsSet(a) || !IsSet(b) || !fits ||
+                    (op != "⊂" && op != "⊆" && op != "=" && op != "≠")) {
+                    Error(op == "⊂" || op == "⊆"
+                              ? op + " compares two sets."
+                              : "Sets can be compared with = ≠ ⊂ ⊆, and tested with ∈.",
+                          Span(expr.args[i]->ref, expr.args[i + 1]->ref));
+                    ok = false;
+                }
+                continue;
+            }
             if (IsArray(a) || IsArray(b)) {
                 if (a != b || (op != "=" && op != "≠" && op != "≈")) {
                     Error(a != b ? "Can't compare " + std::string(TypeName(a)) + " with " +
@@ -1500,6 +1729,10 @@ private:
         }
         if (function->result == BuiltinFunction::Result::Special) {
             return CheckSpecialCall(expr);
+        }
+        if (expr.text == "abs" && expr.args.size() == 1 && IsSet(expr.args[0]->type)) {
+            expr.access = "size";
+            return Type::Int;
         }
         for (const auto& arg : expr.args) {
             if (IsArray(arg->type) && expr.text == "abs") {

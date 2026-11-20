@@ -1,0 +1,8 @@
+n := 50
+primes := \{p \in 2..n : \forall d \in 2..\floor{\sqrt{p}} : p mod d \neq 0\}
+print(primes)
+print(|primes|, "primes up to", n)
+print("sum:", \sum_{p \in primes}^{} p)
+twins := \{p \in primes : p + 2 \in primes\}
+print("twin primes start at", twins)
+print(\exists p \in primes : p > 45, \forall p \in primes : p mod 2 = 1)
