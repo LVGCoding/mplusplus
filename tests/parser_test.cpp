@@ -288,5 +288,6 @@ INSTANTIATE_TEST_SUITE_P(
                       "stray ] and &",
                       "\\{typed braces\\}",
                       "x_{i} + \\norm{v} and \"a\\_b\"",
+                      "\\sum_{k=1}^{n} k + \\bigcup_{i \\in S}^{} A_{i}",
                       "\\begin{matrix}a\\end{pmatrix}",
                       "trailing backslash \\"));

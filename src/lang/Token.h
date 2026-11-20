@@ -34,6 +34,7 @@ struct Token {
         Cases,     // slots: value, condition, value, condition, ... (rowLengths)
         Delimited, // text "abs", "floor", "ceil" or "norm"; slots: {contents}
         Subscript, // slots: {index}; belongs to what comes before it
+        BigOp,     // text "sum", "prod", "bigcup" or "bigcap"; slots: {lower, upper}
         Graph,
         Table,
     };

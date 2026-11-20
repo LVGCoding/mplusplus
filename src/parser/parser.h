@@ -15,6 +15,8 @@
 //   \abs{x}, \floor{x}, \ceil{x},
 //   \norm{x}                           -> DelimNode (|x|, ⌊x⌋, ⌈x⌉, ‖x‖)
 //   _{i}                               -> SubNode (a subscript)
+//   \sum_{k=1}^{n}, \prod, \bigcup, \bigcap
+//                                      -> BigOpNode
 //   \alpha ... \omega                  -> GreekNode
 //   \in, \leftarrow, \mathbb{R}, ...   -> SymbolNode (see its table)
 //   \begin{matrix} a & b \\ c & d \end{matrix}

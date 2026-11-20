@@ -2,6 +2,7 @@
 
 #include "layout_common.h"
 #include "layout_state.h"
+#include "math/BigOpNode.h"
 #include "math/DelimNode.h"
 #include "math/ExpoNode.h"
 #include "math/FracNode.h"
@@ -78,6 +79,13 @@ inline std::function<std::unique_ptr<EditorNode>()> MakeMathDelim(DelimNode::Kin
     };
 }
 
+inline std::function<std::unique_ptr<EditorNode>()> MakeMathBigOp(BigOpNode::Kind kind) {
+    return [kind]() -> std::unique_ptr<EditorNode> {
+        return std::make_unique<BigOpNode>(kind, std::make_unique<LineNode>(),
+                                           std::make_unique<LineNode>());
+    };
+}
+
 // A graph with axis labels "x" and "y" and one empty function.
 inline std::unique_ptr<EditorNode> MakeMathGraph() {
     return std::make_unique<GraphNode>();
@@ -118,6 +126,10 @@ inline const std::vector<MathMenuItem>& MathMenuItems() {
             {"\\bmatrix", MakeMathMatrix("bmatrix")},
             {"\\vmatrix", MakeMathMatrix("vmatrix")},
             {"\\cases", MakeMathMatrix("cases")},
+            {"\\sum", MakeMathBigOp(BigOpNode::Kind::SUM)},
+            {"\\prod", MakeMathBigOp(BigOpNode::Kind::PRODUCT)},
+            {"\\bigcup", MakeMathBigOp(BigOpNode::Kind::UNION)},
+            {"\\bigcap", MakeMathBigOp(BigOpNode::Kind::INTERSECTION)},
             {"\\abs", MakeMathDelim(DelimNode::Kind::ABS)},
             {"\\floor", MakeMathDelim(DelimNode::Kind::FLOOR)},
             {"\\ceil", MakeMathDelim(DelimNode::Kind::CEIL)},

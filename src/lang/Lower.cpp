@@ -1,5 +1,6 @@
 #include "Lower.h"
 
+#include "math/BigOpNode.h"
 #include "math/DelimNode.h"
 #include "math/ExpoNode.h"
 #include "math/FracNode.h"
@@ -268,6 +269,11 @@ private:
             token.shape = Token::Shape::Delimited;
             token.text = std::string(DelimNode::CommandName(delimited->GetKind()));
             token.slots.push_back(Slot(delimited->GetArgument(), {index, 0}));
+        } else if (const auto* big = dynamic_cast<const BigOpNode*>(&node)) {
+            token.shape = Token::Shape::BigOp;
+            token.text = std::string(BigOpNode::CommandName(big->GetKind()));
+            token.slots.push_back(Slot(big->GetLower(), {index, 0}));
+            token.slots.push_back(Slot(big->GetUpper(), {index, 1}));
         } else if (const auto* subscript = dynamic_cast<const SubNode*>(&node)) {
             token.shape = Token::Shape::Subscript;
             token.slots.push_back(Slot(subscript->GetIndex(), {index, 0}));

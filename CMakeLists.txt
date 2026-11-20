@@ -92,6 +92,7 @@ add_library(mplusplus_core STATIC
   src/editor/fileMppEdit.cpp
   src/editor/fileMppSelection.cpp
   src/editor/fileMppHistory.cpp
+  src/math/BigOpNode.cpp
   src/math/DelimNode.cpp
   src/math/ExpoNode.cpp
   src/math/FracNode.cpp

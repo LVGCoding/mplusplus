@@ -38,8 +38,8 @@ std::string DescribeTokens(const std::vector<Token>& tokens) {
             case Token::Kind::End: break;
             case Token::Kind::Structure: {
                 static const char* SHAPES[] = {"?",      "frac",  "root",  "pow",   "group",
-                                               "matrix", "cases", "delim", "sub",   "graph",
-                                               "table"};
+                                               "matrix", "cases", "delim", "sub",   "bigop",
+                                               "graph",  "table"};
                 text += SHAPES[static_cast<int>(token.shape)];
                 if (token.shape == Token::Shape::Delimited) {
                     text += ":" + token.text;
@@ -94,6 +94,16 @@ std::string DescribeExpr(const lang::Expr& expr) {
         case K::Index: return list("_");
         case K::All: return "*";
         case K::Transpose: return list("⊤");
+        case K::Set: return list("set");
+        case K::EmptySet: return "∅";
+        case K::Builder:
+            return "(set " + DescribeExpr(*expr.args[1]) + " : " + expr.var + " ∈ " +
+                   DescribeExpr(*expr.args[0]) +
+                   (expr.conditions[0] ? ", " + DescribeExpr(*expr.conditions[0]) : "") + ")";
+        case K::BigOp:
+        case K::Quantifier:
+            return "(" + expr.text + " " + expr.var + " ∈ " + DescribeExpr(*expr.args[0]) + " " +
+                   DescribeExpr(*expr.args[1]) + ")";
         case K::Cases: {
             std::string text = "(cases";
             for (std::size_t i = 0; i < expr.args.size(); ++i) {
@@ -418,6 +428,45 @@ TEST(Check, VectorsAndMatrices) {
     EXPECT_EQ(FirstError("print(I_{3} + 0_{3 \\times 3}, 1_{2})"), "");
 }
 
+TEST(Parse, Sets) {
+    EXPECT_EQ(ParseExpression("\\{1, 2, 5..9\\}"), "(print (set 1 2 (.. 5 9)))");
+    EXPECT_EQ(ParseExpression("\\{\\}"), "(print ∅)");
+    EXPECT_EQ(ParseExpression("\\{x \\in S : x > 1\\}"), "(print (set x : x ∈ S, (cmp x > 1)))");
+    EXPECT_EQ(ParseExpression("\\{2k | k \\in 1..n, k \\neq 3\\}"),
+              "(print (set (⋅ 2 k) : k ∈ (.. 1 n), (cmp k ≠ 3)))");
+    // ∩ binds tighter than ∪, and both tighter than ∈.
+    EXPECT_EQ(ParseExpression("x \\in A \\cup B \\cap C"),
+              "(print (cmp x ∈ (∪ A (∩ B C))))");
+    EXPECT_EQ(ParseExpression("\\forall x \\in S : x > 0 \\land x < 9"),
+              "(print (∀ x ∈ S (∧ (cmp x > 0) (cmp x < 9))))");
+    EXPECT_EQ(ParseExpression("\\sum_{k=1}^{n} k\\exp{}{2} + 1"),
+              "(print (+ (sum k ∈ (.. 1 n) (^ k 2)) 1))");
+    EXPECT_EQ(ParseExpression("\\prod_{k \\in S}^{} 2k"), "(print (prod k ∈ S (⋅ 2 k)))");
+    EXPECT_EQ(ParseExpression("\\sum_{k=1}^{} k"),
+              "error: This needs an upper limit, as in k=1 up to n.");
+    EXPECT_EQ(ParseExpression("\\{2k : k > 1\\}"),
+              "error: Expected a variable and where it comes from, as in {x² : x ∈ S}.");
+    // A block after a condition is still a block.
+    EXPECT_EQ(ParseStatements("if x \\in S \\{ print(x) \\}"), "if (cmp x ∈ S) { (print x) }");
+}
+
+TEST(Check, Sets) {
+    EXPECT_EQ(FirstError("A := \\{1, 2\\}\nB := \\{0.5\\} \\cup A\nprint(A \\subseteq B, |B|, "
+                         "\\sum_{x \\in B}^{} x)"),
+              "");
+    EXPECT_EQ(FirstError("print(\\{1, \"a\"\\})"),
+              "A set's elements must all be numbers or all be strings.");
+    EXPECT_EQ(FirstError("print(\\{1\\} \\cup 2)"), "∪ needs two sets, but this is in ℤ.");
+    EXPECT_EQ(FirstError("print(\\{1\\} + \\{2\\})"), "To join two sets, write A ∪ B.");
+    EXPECT_EQ(FirstError("print(\"a\" \\in \\{1\\})"), "Can't look for Σ* among ℤ.");
+    EXPECT_EQ(FirstError("print(\\sum_{k=1}^{3} \"a\")"), "Σ needs numbers, but this is in Σ*.");
+    EXPECT_EQ(FirstError("print(\\forall k \\in 1..3 : k)"),
+              "After ∀ x ∈ S : comes a condition, true or false (𝔹); this is in ℤ.");
+    // Bound variables may reuse names from outside, and don't leak out.
+    EXPECT_EQ(FirstError("k := 5\nprint(\\sum_{k=1}^{3} k, k)"), "");
+    EXPECT_EQ(FirstError("E := \\emptyset\nE \\leftarrow E \\cup \\{1\\}"), "");
+}
+
 TEST(Check, SubscriptsAreLabelsOrIndices) {
     // An undefined name in the subscript is part of the name.
     EXPECT_EQ(FirstError("v_{max} := 3\nprint(v_{max})"), "");
@@ -454,7 +503,7 @@ TEST(Parse, ForLoopsOverRanges) {
               "for i ∈ (.. 1 n) { (print i) }");
     EXPECT_EQ(ParseStatements("for i in 10..-2..0 \\{ break \\}"),
               "for i ∈ (.. 10 (− 2) 0) { break }");
-    EXPECT_EQ(ParseStatements("for i \\in x \\{ \\}"), "error: for needs a range, such as 1..n.");
+    EXPECT_EQ(ParseStatements("for i \\in S \\{ \\}"), "for i ∈ S { }");
 }
 
 TEST(Parse, Functions) {
@@ -578,7 +627,8 @@ TEST(Check, ControlFlow) {
               "i counts the loop, so it can't be changed inside it.");
     EXPECT_EQ(FirstError("for i \\in 1..\"a\" \\{ \\}"),
               "A range needs numbers, but this is in Σ*.");
-    EXPECT_EQ(FirstError("r := 1..3"), "A range (a..b) can only be used in a for loop, for now.");
+    EXPECT_EQ(FirstError("x := 2\nfor i \\in x \\{ \\}"),
+              "for needs a range (1..n), a set or a vector to go through, but this is in ℤ.");
 }
 
 TEST(Check, BlocksHaveTheirOwnNames) {

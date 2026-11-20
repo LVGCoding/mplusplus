@@ -16,3 +16,4 @@
 #include "linalg.hpp"
 #include "print.hpp"
 #include "scalar.hpp"
+#include "set.hpp"

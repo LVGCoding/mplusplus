@@ -1,5 +1,6 @@
 #include "font.h"
 
+#include "math/BigOpNode.h"
 #include "math/SymbolNode.h"
 
 #include <algorithm>
@@ -33,11 +34,19 @@ void LoadFontTable(Font fonts[]) {
     fonts[FONT_BOLD] =
         LoadFontEx("assets/font/LiberationSans-Bold.ttf", atlasSize, codepoints, count);
 
-    // The math font only draws SymbolNodes; load just their glyphs.
+    // The math font only draws SymbolNodes and big operators; load just their glyphs.
     static std::vector<int> symbolCodepoints = [] {
         std::vector<int> list;
+        std::vector<std::string_view> glyphs;
         for (const auto& symbol : SymbolNode::Symbols()) {
-            const std::string glyph(symbol.glyph);
+            glyphs.push_back(symbol.glyph);
+        }
+        for (const auto kind : {BigOpNode::Kind::SUM, BigOpNode::Kind::PRODUCT,
+                                BigOpNode::Kind::UNION, BigOpNode::Kind::INTERSECTION}) {
+            glyphs.push_back(BigOpNode::Glyph(kind));
+        }
+        for (const std::string_view symbolGlyph : glyphs) {
+            const std::string glyph(symbolGlyph);
             int length = 0;
             for (const char* at = glyph.c_str(); *at; at += length) {
                 list.push_back(GetCodepointNext(at, &length));
