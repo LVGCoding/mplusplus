@@ -1,5 +1,6 @@
 #pragma once
 
+#include "run/Driver.h"
 #include "ui/TextInput.h"
 
 // UI state shared between building the layout and processing its actions.
@@ -60,10 +61,16 @@ inline bool insertMathRequested = false;
 
 // Run dropdown in the menu bar.
 inline bool runMenuOpen = false;
-// Run -> Run was clicked this frame; handled in ProcessRunRequest.
+// Run -> Run / Run -> Stop was clicked this frame; handled in ProcessRunRequest.
 inline bool runRequested = false;
+inline bool stopRequested = false;
+// Compiles and runs documents in the background (src/run/Driver.h).
+inline run::Job runJob;
 // Lines shown in the terminal panel, e.g. the output of the last run.
-inline std::vector<std::string> terminalOutput;
+inline std::vector<run::OutputLine> terminalOutput;
+// Frames left in which the terminal scrolls to its last line (new output
+// is laid out a frame after it arrives, so this is more than one).
+inline int terminalScrollToEnd = 0;
 
 // Math popup (see layout_math_menu.h / layout_math_menu_items.h).
 inline bool mathMenuOpen = false;

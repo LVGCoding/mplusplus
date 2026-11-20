@@ -1,5 +1,7 @@
 #include "clay_renderer_raylib.h"
 
+#include "font.h"
+
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -103,7 +105,8 @@ Clay_Dimensions ClayRaylibMeasureText(Clay_StringSlice text,
     if (!font.glyphs) {
         font = GetFontDefault();
     }
-    float scale = static_cast<float>(config->fontSize) / font.baseSize;
+    float scale = static_cast<float>(config->fontSize) * AdjustmentFor(config->fontId).scale /
+                  font.baseSize;
 
     float lineWidth = 0, maxWidth = 0;
     int lineCount = 1;
@@ -163,10 +166,11 @@ void ClayRaylibRender(Clay_RenderCommandArray commands,
             }
             // raylib needs a null-terminated string; clay hands us a slice.
             text.assign(data.stringContents.chars, data.stringContents.length);
+            const FontAdjustment adjust = AdjustmentFor(data.fontId);
             DrawTextEx(font,
                        text.c_str(),
-                       {bounds.x, bounds.y},
-                       data.fontSize,
+                       {bounds.x, bounds.y + adjust.shiftY * data.fontSize},
+                       data.fontSize * adjust.scale,
                        data.letterSpacing,
                        ToRaylib(data.textColor));
             break;

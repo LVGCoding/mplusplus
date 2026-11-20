@@ -86,12 +86,12 @@ TEST(EditText,
 
 TEST(EditRows,
      EnterSplitsARowAndBackspaceJoinsItBack) {
-    auto file = MakeDocument("ab\\alpha cd", {0, 2, 1});
+    auto file = MakeDocument("ab\\alpha+cd", {0, 2, 1});
     ASSERT_TRUE(PressKey(file, KEY_ENTER));
-    EXPECT_EQ(file.ContentText(), "ab\\alpha \ncd");
+    EXPECT_EQ(file.ContentText(), "ab\\alpha+\ncd");
     EXPECT_EQ(file.cursorPos, (CursorPath{1, 0, 0}));
     ASSERT_TRUE(PressKey(file, KEY_BACKSPACE));
-    EXPECT_EQ(file.ContentText(), "ab\\alpha cd");
+    EXPECT_EQ(file.ContentText(), "ab\\alpha+cd");
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 2, 1}));
 }
 
@@ -114,9 +114,9 @@ TEST(EditRows,
 
 TEST(EditDelete,
      GreekLettersAreDeletedLikeCharacters) {
-    auto file = MakeDocument("a\\alpha b", {0, 2, 0});
+    auto file = MakeDocument("a\\alpha+b", {0, 2, 0});
     ASSERT_TRUE(PressKey(file, KEY_BACKSPACE));
-    EXPECT_EQ(file.ContentText(), "a b");
+    EXPECT_EQ(file.ContentText(), "a+b");
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 1}));
 }
 
@@ -313,7 +313,8 @@ TEST(EditInsert,
      SymbolsAreSteppedOver) {
     auto file = MakeDocument("ab", {0, 0, 1});
     ASSERT_TRUE(file.InsertNode(std::make_unique<GreekNode>(GreekNode::GREEK_PI)));
-    EXPECT_EQ(file.ContentText(), "a\\pib");
+    // Not "a\\pib": that would read back as one unknown command.
+    EXPECT_EQ(file.ContentText(), "a\\pi b");
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 2, 0}));
 }
 

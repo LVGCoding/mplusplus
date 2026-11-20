@@ -9,6 +9,7 @@
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
+#include "math/SymbolNode.h"
 #include "math/TextNode.h"
 #include "parser/parser.h"
 
@@ -46,6 +47,9 @@ inline std::string Describe(const EditorNode* node) {
     }
     if (auto* greek = dynamic_cast<const GreekNode*>(node)) {
         return "greek(" + std::string(GreekNode::SymbolName(greek->GetSymbol())) + ")";
+    }
+    if (auto* symbol = dynamic_cast<const SymbolNode*>(node)) {
+        return "symbol(" + std::string(symbol->Name()) + ")";
     }
     if (auto* line = dynamic_cast<const LineNode*>(node)) {
         std::string description = line->IsBraced() ? "group(" : "line(";
@@ -95,13 +99,9 @@ inline std::string ParseAndDescribe(const std::string& source) {
     return DescribeList(Parser().ParseText(source));
 }
 
-// Parse `source` and serialize it back with ToText().
+// Parse `source` and serialize it back the way a document row is saved.
 inline std::string RoundTrip(const std::string& source) {
-    std::string serializedText;
-    for (const auto& node : Parser().ParseText(source)) {
-        serializedText += node->ToText();
-    }
-    return serializedText;
+    return LineNode(Parser().ParseText(source)).ToText();
 }
 
 }  // namespace test

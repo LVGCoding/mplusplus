@@ -39,6 +39,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nativefiledialog)
 
+# Libraries for programs written in M++ (not linked into the editor). Running
+# a document compiles it against runtime/include, Eigen and Boost.Math; all
+# three are header-only and copied to <build>/runtime/include below.
+# SOURCE_SUBDIR points at a folder without a CMakeLists.txt so only the
+# sources are downloaded, without configuring their own builds and tests.
+FetchContent_Declare(
+  eigen
+  URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  SOURCE_SUBDIR do-not-configure
+)
+FetchContent_Declare(
+  boost_math
+  URL https://github.com/boostorg/math/archive/refs/tags/boost-1.86.0.tar.gz
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  SOURCE_SUBDIR do-not-configure
+)
+FetchContent_MakeAvailable(eigen boost_math)
+
 # Clay is a single-header library vendored in src/lib.
 add_library(clay INTERFACE)
 target_include_directories(clay SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
@@ -83,16 +102,36 @@ add_library(mplusplus_core STATIC
   src/math/NodeStyle.cpp
   src/math/Options.cpp
   src/math/SqrtNode.cpp
+  src/math/SymbolNode.cpp
   src/math/TableNode.cpp
   src/math/TextNode.cpp
   src/parser/parser.cpp
   src/run/Run.cpp
+  src/run/Process.cpp
+  src/run/Toolchain.cpp
+  src/run/Driver.cpp
   src/ui/clay_impl.cpp
   src/ui/clay_renderer_raylib.cpp
   src/ui/TextInput.cpp
 )
 target_include_directories(mplusplus_core PUBLIC src)
 target_link_libraries(mplusplus_core PUBLIC raylib clay)
+
+# --- Runtime for M++ programs ------------------------------------------------
+# The headers a compiled M++ program includes, gathered in one folder next to
+# the executable: <build>/runtime/include/{mpp,Eigen,boost}. The editor finds
+# it there (or through MPP_RUNTIME_INCLUDE_DIR, set for tests and dev builds).
+set(MPP_RUNTIME_INCLUDE_DIR ${CMAKE_BINARY_DIR}/runtime/include)
+# Third-party headers only change with the pinned versions above: copy once.
+file(COPY ${eigen_SOURCE_DIR}/Eigen DESTINATION ${MPP_RUNTIME_INCLUDE_DIR})
+file(COPY ${boost_math_SOURCE_DIR}/include/boost DESTINATION ${MPP_RUNTIME_INCLUDE_DIR})
+# Our own runtime changes during development: copy on every build.
+add_custom_target(mplusplus_copy_runtime
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime/include/mpp ${MPP_RUNTIME_INCLUDE_DIR}/mpp)
+add_dependencies(mplusplus_core mplusplus_copy_runtime)
+target_compile_definitions(mplusplus_core PUBLIC
+  MPP_RUNTIME_INCLUDE_DIR="${MPP_RUNTIME_INCLUDE_DIR}")
 mplusplus_set_warnings(mplusplus_core)
 
 # --- Executable -------------------------------------------------------------
@@ -151,6 +190,7 @@ if(MPLUSPLUS_BUILD_TESTS)
 
   add_executable(mplusplus_tests ${MPLUSPLUS_TEST_SOURCES})
   target_include_directories(mplusplus_tests PRIVATE tests)
+  target_compile_definitions(mplusplus_tests PRIVATE MPP_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   target_link_libraries(mplusplus_tests PRIVATE mplusplus_core GTest::gtest_main)
   mplusplus_set_warnings(mplusplus_tests)
 

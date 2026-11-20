@@ -93,7 +93,8 @@ void StretchedSymbol(const ClayRaylibCustomDraw* draw,
 }  // namespace
 
 void Text(std::string_view text,
-          float fontSize) {
+          float fontSize,
+          std::uint16_t fontId) {
     if (text.empty()) {
         return;
     }
@@ -102,7 +103,7 @@ void Text(std::string_view text,
                                 .chars = text.data()};
     CLAY_TEXT(string,
               {.textColor = TEXT_COLOR,
-               .fontId = FONT_BODY,
+               .fontId = fontId,
                .fontSize = static_cast<uint16_t>(fontSize),
                .wrapMode = CLAY_TEXT_WRAP_NONE});
 }

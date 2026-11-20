@@ -98,6 +98,16 @@ inline void UpdateTerminalHeight() {
 // No input is wired up yet. Call UpdateTerminalHeight() first, before the Root
 // element is opened.
 inline void LayoutTerminal() {
+    // Follow new output: scroll so the last line (from last frame's layout) shows.
+    if (terminalScrollToEnd > 0) {
+        --terminalScrollToEnd;
+        const Clay_ScrollContainerData scroll =
+            Clay_GetScrollContainerData(CLAY_ID("TerminalOutput"));
+        if (scroll.found) {
+            scroll.scrollPosition->y = std::min(
+                0.0f, scroll.scrollContainerDimensions.height - scroll.contentDimensions.height);
+        }
+    }
     CLAY(CLAY_ID("Terminal"),
          {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_FIXED(terminalHeight)},
                      .layoutDirection = CLAY_TOP_TO_BOTTOM},
@@ -138,12 +148,16 @@ inline void LayoutTerminal() {
                              .padding = {6, 6, 6, 6},
                              .layoutDirection = CLAY_TOP_TO_BOTTOM},
                   .clip = {.vertical = true, .childOffset = Clay_GetScrollOffset()}}) {
-                for (const std::string& line : terminalOutput) {
+                for (const run::OutputLine& line : terminalOutput) {
                     const Clay_String text = {.isStaticallyAllocated = false,
-                                              .length = static_cast<int32_t>(line.size()),
-                                              .chars = line.data()};
+                                              .length = static_cast<int32_t>(line.text.size()),
+                                              .chars = line.text.data()};
+                    const Clay_Color color =
+                        line.kind == run::OutputLine::Kind::Error  ? FORM_ERROR_COLOR
+                        : line.kind == run::OutputLine::Kind::Info ? FORM_MUTED_COLOR
+                                                                   : MENU_TEXT;
                     CLAY_TEXT(text,
-                              {.textColor = MENU_TEXT,
+                              {.textColor = color,
                                .fontId = FONT_BODY,
                                .fontSize = EDITOR_FONT_SIZE,
                                .lineHeight = EDITOR_LINE_HEIGHT});

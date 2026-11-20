@@ -182,8 +182,8 @@ inline void LayoutInsertDropdown() {
     }
 }
 
-// Run dropdown. Run -> Run sets runRequested; ProcessRunRequest
-// (layout_actions.h) calls RunFile in src/run/Run.h.
+// Run dropdown. Run -> Run sets runRequested and Run -> Stop sets
+// stopRequested; ProcessRunRequest (layout_actions.h) handles both.
 inline void LayoutRunDropdown(const FileBase* file) {
     CLAY(CLAY_ID("RunDropdown"),
          {.layout = {.sizing = {CLAY_SIZING_FIXED(200), CLAY_SIZING_FIT(0)},
@@ -198,6 +198,8 @@ inline void LayoutRunDropdown(const FileBase* file) {
                        .attachTo = CLAY_ATTACH_TO_ELEMENT_WITH_ID}}) {
         DropdownMenuItem(
             CLAY_ID("RunButton"), CLAY_STRING("Run"), file != nullptr, runRequested, runMenuOpen);
+        DropdownMenuItem(
+            CLAY_ID("StopButton"), CLAY_STRING("Stop"), runJob.Running(), stopRequested, runMenuOpen);
     }
 }
 }  // namespace layout_internal

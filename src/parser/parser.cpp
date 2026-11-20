@@ -8,6 +8,7 @@
 #include "math/MatrixNode.h"
 #include "math/Options.h"
 #include "math/SqrtNode.h"
+#include "math/SymbolNode.h"
 #include "math/TableNode.h"
 #include "math/TextNode.h"
 
@@ -128,10 +129,25 @@ private:
                 if (!node) {
                     node = ParseMatrix();
                 }
+            } else if (token == "\\mathbb") {
+                node = ParseBlackboard();
             } else if (token.size() > 1 && token[0] == '\\') {
-                if (auto symbol = GreekNode::SymbolFromName(std::string_view(token).substr(1))) {
+                const std::string_view name = std::string_view(token).substr(1);
+                if (auto symbol = GreekNode::SymbolFromName(name)) {
                     node = std::make_unique<GreekNode>(*symbol);
                     ++position_;
+                } else if (auto index = SymbolNode::IndexOf(name)) {
+                    node = std::make_unique<SymbolNode>(*index);
+                    ++position_;
+                }
+                // A space between a command word and a letter (\alpha b) only
+                // separates them, so it isn't text. LineNode::ToText writes it
+                // back in exactly these cases: before a letter or another space.
+                if (node && IsLetter(token.back()) && SeparatingSpaceFollows()) {
+                    push(std::move(node));
+                    pendingText += Peek().substr(1);
+                    ++position_;
+                    continue;
                 }
             }
 
@@ -174,6 +190,32 @@ private:
             return nullptr;
         }
         return std::make_unique<LineNode>(std::move(*contents));
+    }
+
+    // True if the next token is whitespace starting with a space that is
+    // followed by a letter or another space.
+    bool SeparatingSpaceFollows() const {
+        if (AtEnd() || Peek()[0] != ' ') {
+            return false;
+        }
+        const std::string& space = Peek();
+        if (space.size() > 1) {
+            return space[1] == ' ';
+        }
+        return position_ + 1 < tokens_.size() && IsLetter(tokens_[position_ + 1][0]);
+    }
+
+    // \mathbb{R} and the other built-in sets in SymbolNode's table.
+    std::unique_ptr<EditorNode> ParseBlackboard() {
+        if (position_ + 3 < tokens_.size() && tokens_[position_ + 1] == "{" &&
+            tokens_[position_ + 3] == "}") {
+            const std::string name = "mathbb{" + tokens_[position_ + 2] + "}";
+            if (auto index = SymbolNode::IndexOf(name)) {
+                position_ += 4;
+                return std::make_unique<SymbolNode>(*index);
+            }
+        }
+        return nullptr;
     }
 
     std::unique_ptr<EditorNode> ParseFrac() {

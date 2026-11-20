@@ -9,6 +9,7 @@
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
+#include "math/SymbolNode.h"
 #include "math/TableNode.h"
 
 #include <functional>
@@ -121,6 +122,17 @@ inline const std::vector<MathMenuItem>& MathMenuItems() {
         for (int i = GreekNode::GREEK_ALPHA; i <= GreekNode::GREEK_OMEGA; ++i) {
             list.push_back({greekLabels[static_cast<std::size_t>(i)],
                             MakeMathGreek(static_cast<GreekNode::GreekSymbolType>(i))});
+        }
+        // Symbols (\in, \mathbb{R}, \leftarrow, ...), named by their LaTeX commands.
+        static std::vector<std::string> symbolLabels;
+        const auto symbols = SymbolNode::Symbols();
+        for (const auto& symbol : symbols) {
+            symbolLabels.push_back("\\" + std::string(symbol.name));
+        }
+        for (std::size_t i = 0; i < symbols.size(); ++i) {
+            list.push_back({symbolLabels[i], [i]() -> std::unique_ptr<EditorNode> {
+                                return std::make_unique<SymbolNode>(i);
+                            }});
         }
         return list;
     }();

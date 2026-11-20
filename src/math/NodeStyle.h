@@ -34,10 +34,12 @@ inline float RuleThickness(float fontSize) {
     return std::max(1.0f, std::round(fontSize / 18.0f));
 }
 
-// A run of text in the document font. `text` must stay alive until the frame
-// has been rendered (node-owned strings or literals are fine).
+// A run of text in the document font (or `fontId`, e.g. FONT_MATH for
+// symbols). `text` must stay alive until the frame has been rendered
+// (node-owned strings or literals are fine).
 void Text(std::string_view text,
-          float fontSize);
+          float fontSize,
+          std::uint16_t fontId = 0);
 
 // Grey box shown in place of an empty argument or cell, so it stays visible
 // and clickable.

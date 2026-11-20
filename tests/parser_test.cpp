@@ -19,7 +19,7 @@ TEST(Parser,
 
 TEST(Parser,
      UnknownCommandIsText) {
-    EXPECT_EQ(ParseAndDescribe("a\\cdot b"), R"(text("a\cdot b"))");
+    EXPECT_EQ(ParseAndDescribe("a\\foo b"), R"(text("a\foo b"))");
 }
 
 // --- Greek ------------------------------------------------------------------
@@ -40,7 +40,56 @@ TEST(Parser,
 
 TEST(Parser,
      GreekLetterBetweenText) {
-    EXPECT_EQ(ParseAndDescribe("2\\pi r"), R"(text("2"), greek(pi), text(" r"))");
+    // The space only ends the command word, as in TeX.
+    EXPECT_EQ(ParseAndDescribe("2\\pi r"), R"(text("2"), greek(pi), text("r"))");
+}
+
+TEST(Parser,
+     OnlyOneSpaceEndsACommandWord) {
+    EXPECT_EQ(ParseAndDescribe("\\alpha  b"), R"(greek(alpha), text(" b"))");
+}
+
+TEST(Parser,
+     LetterAfterGreekRoundTrips) {
+    // Saving \alpha followed by b used to give \alphab, an unknown command.
+    LineNode line;
+    line.AddChild(std::make_unique<GreekNode>(GreekNode::GREEK_ALPHA));
+    line.AddChild(std::make_unique<TextNode>("b"));
+    EXPECT_EQ(line.ToText(), "\\alpha b");
+    EXPECT_EQ(ParseAndDescribe(line.ToText()), R"(greek(alpha), text("b"))");
+}
+
+TEST(Parser,
+     SpacesAfterCommandWordsRoundTrip) {
+    for (const char* source : {"2\\pi r", "\\alpha  b", "\\in x", "x\\in\\mathbb{R}", "\\pi (x)",
+                               "\\theta & 0", "\\alpha ",
+                               "\\mathbb{R}x", "\\pi(x)", "\\alpha\\beta"}) {
+        EXPECT_EQ(RoundTrip(source), source);
+    }
+}
+
+// --- Symbols ----------------------------------------------------------------
+
+TEST(Parser,
+     Symbols) {
+    EXPECT_EQ(ParseAndDescribe("x \\in \\mathbb{R}"),
+              R"(text("x "), symbol(in), text(" "), symbol(mathbb{R}))");
+    EXPECT_EQ(ParseAndDescribe("x \\in y"), R"(text("x "), symbol(in), text("y"))");
+    EXPECT_EQ(ParseAndDescribe("x\\leftarrow 1"), R"(text("x"), symbol(leftarrow), text(" 1"))");
+}
+
+TEST(Parser,
+     EverySymbolParses) {
+    for (const auto& symbol : SymbolNode::Symbols()) {
+        const std::string name(symbol.name);
+        EXPECT_EQ(ParseAndDescribe("\\" + name), "symbol(" + name + ")");
+        EXPECT_EQ(RoundTrip("\\" + name), "\\" + name);
+    }
+}
+
+TEST(Parser,
+     UnknownBlackboardLetterIsText) {
+    EXPECT_EQ(ParseAndDescribe("\\mathbb{X}"), R"(text("\mathbb"), group(text("X")))");
 }
 
 TEST(Parser,

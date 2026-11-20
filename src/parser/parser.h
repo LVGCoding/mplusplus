@@ -13,6 +13,7 @@
 //   \sqrt{x}, \sqrt[n]{x}              -> SqrtNode (children are LineNodes; root may be null)
 //   \exp{base}{exponent}               -> ExpoNode (children are LineNodes)
 //   \alpha ... \omega                  -> GreekNode
+//   \in, \leftarrow, \mathbb{R}, ...   -> SymbolNode (see its table)
 //   \begin{matrix} a & b \\ c & d \end{matrix}
 //                                      -> MatrixNode (cells are LineNodes); also
 //                                         pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix

@@ -49,15 +49,35 @@ inline void ProcessClipboardRequests(Editor& editor) {
     }
 }
 
-// Run -> Run: run the active file and show its output in the terminal.
-// What running does is implemented in RunFile (src/run/Run.cpp), not here.
+// Run -> Run: translate the active file (src/run/Run.cpp) and start compiling
+// and running it in the background. Run -> Stop kills it. Every frame, the
+// output that arrived is added to the terminal.
 inline void ProcessRunRequest(Editor& editor) {
-    if (!runRequested) {
-        return;
+    if (stopRequested) {
+        stopRequested = false;
+        runJob.Stop();
     }
-    runRequested = false;
-    if (const FileBase* file = editor.ActiveFile()) {
-        terminalOutput = RunFile(*file).output;
+    if (runRequested) {
+        runRequested = false;
+        if (const FileBase* file = editor.ActiveFile()) {
+            terminalOutput.clear();
+            terminalOutput.push_back({run::OutputLine::Kind::Info, "Running " + file->TabName()});
+            Translation translation = TranslateFile(*file);
+            if (translation.succeeded) {
+                runJob.Start(std::move(translation.cpp));
+            } else {
+                for (auto& error : translation.errors) {
+                    terminalOutput.push_back({run::OutputLine::Kind::Error, std::move(error)});
+                }
+            }
+            terminalScrollToEnd = 2;
+        }
+    }
+    auto output = runJob.TakeOutput();
+    if (!output.empty()) {
+        terminalOutput.insert(terminalOutput.end(), std::make_move_iterator(output.begin()),
+                              std::make_move_iterator(output.end()));
+        terminalScrollToEnd = 2;
     }
 }
 

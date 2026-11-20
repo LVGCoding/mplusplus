@@ -4,6 +4,7 @@
 #include "TextNode.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -229,13 +230,47 @@ LineNode::GetSize() {
     return {0.0f, 0.0f};
 }
 
+namespace {
+// True if `text` ends with a command word like "\\alpha" (a backslash and letters).
+bool EndsWithCommandWord(const std::string& text) {
+    std::size_t start = text.size();
+    while (start > 0 && std::isalpha(static_cast<unsigned char>(text[start - 1]))) {
+        --start;
+    }
+    return start < text.size() && start > 0 && text[start - 1] == '\\';
+}
+
+bool IsLetter(char c) {
+    return std::isalpha(static_cast<unsigned char>(c)) != 0;
+}
+
+// Whether text following a command word needs a space in between; mirrors
+// the parser's SeparatingSpaceFollows().
+bool NeedsSeparatingSpace(const std::string& text) {
+    if (text.empty()) {
+        return false;
+    }
+    if (IsLetter(text[0])) {
+        return true;
+    }
+    return text.size() > 1 && text[0] == ' ' && (text[1] == ' ' || IsLetter(text[1]));
+}
+}  // namespace
+
 std::string LineNode::ToText() const {
     std::string text;
     if (braced_) {
         text += '{';
     }
     for (const auto& child : children_) {
-        text += child->ToText();
+        std::string part = child->ToText();
+        // After a command word such as \alpha, a letter would join the word
+        // (\alphab). The parser drops one space between a command word and a
+        // letter or another space, so put that space back here.
+        if (EndsWithCommandWord(text) && NeedsSeparatingSpace(part)) {
+            text += ' ';
+        }
+        text += part;
     }
     if (braced_) {
         text += '}';
