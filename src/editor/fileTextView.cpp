@@ -45,7 +45,7 @@ Vector2 PositionOf(const std::string& text,
 }
 }  // namespace
 
-// --- Layout -----------------------------------------------------------------
+// Layout 
 
 void FileText::LayoutContent() const {
     // Clay borrows the text until the frame renders; document edits run before layout.
@@ -64,7 +64,7 @@ std::size_t FileText::LineCount() const {
     return static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n')) + 1;
 }
 
-// --- Drawing ----------------------------------------------------------------
+// Drawing 
 
 void FileText::DrawOverlay(const EditorView& view) const {
     if (view.viewport.width <= 0 || view.viewport.height <= 0) {
@@ -126,7 +126,7 @@ std::optional<Rectangle> FileText::CursorBounds(const EditorView& view) const {
     return Rectangle{cursor.x, cursor.y, CURSOR_WIDTH, float(LINE_HEIGHT)};
 }
 
-// --- Input ------------------------------------------------------------------
+// Input 
 
 bool FileText::HandleInput(const EditorView& view) {
     const auto previousCursor = cursorPos;

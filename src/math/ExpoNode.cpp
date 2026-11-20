@@ -5,8 +5,8 @@
 
 ExpoNode::ExpoNode(std::unique_ptr<EditorNode> base,
                    std::unique_ptr<EditorNode> exponent)
-    : base(std::move(base)),
-      exponent(std::move(exponent)) {}
+    : base_(std::move(base)),
+      exponent_(std::move(exponent)) {}
 
 
 void ExpoNode::Render(const RenderContext& context) {
@@ -30,10 +30,10 @@ void ExpoNode::Render(const RenderContext& context) {
                      .childGap = 1,
                      .childAlignment = {.y = CLAY_ALIGN_Y_TOP},
                      .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
-        renderPart(base, context);
+        renderPart(base_, context);
         CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
                                  .childAlignment = {.y = CLAY_ALIGN_Y_TOP}}}) {
-            renderPart(exponent, context.WithFontSize(exponentSize));
+            renderPart(exponent_, context.WithFontSize(exponentSize));
         }
     }
 }
@@ -49,23 +49,23 @@ KeyResult ExpoNode::KeyPress(const KeyEvent& event) {
     if (result.kind == KeyResult::Kind::MOVED) {
         return std::move(result).Prepend({slot});
     }
-    if (result.kind == KeyResult::Kind::EXIT_RIGHT && slot == 0 && exponent) {
-        return KeyResult::Moved(JoinPath({1}, exponent->FirstPosition()));
+    if (result.kind == KeyResult::Kind::EXIT_RIGHT && slot == 0 && exponent_) {
+        return KeyResult::Moved(JoinPath({1}, exponent_->FirstPosition()));
     }
-    if (result.kind == KeyResult::Kind::EXIT_LEFT && slot == 1 && base) {
-        return KeyResult::Moved(JoinPath({0}, base->LastPosition()));
+    if (result.kind == KeyResult::Kind::EXIT_LEFT && slot == 1 && base_) {
+        return KeyResult::Moved(JoinPath({0}, base_->LastPosition()));
     }
-    if (result.kind == KeyResult::Kind::EXIT_UP && slot == 1 && base) {
+    if (result.kind == KeyResult::Kind::EXIT_UP && slot == 1 && base_) {
         return KeyResult::Moved(JoinPath(
-            {0}, base->PositionNearX(event.cursorX, VerticalEntry::FROM_BELOW, event.measure)));
+            {0}, base_->PositionNearX(event.cursorX, VerticalEntry::FROM_BELOW, event.measure)));
     }
-    if (result.kind == KeyResult::Kind::EXIT_DOWN && slot == 0 && exponent) {
+    if (result.kind == KeyResult::Kind::EXIT_DOWN && slot == 0 && exponent_) {
         return KeyResult::Moved(JoinPath(
-            {1}, exponent->PositionNearX(event.cursorX, VerticalEntry::FROM_ABOVE, event.measure)));
+            {1}, exponent_->PositionNearX(event.cursorX, VerticalEntry::FROM_ABOVE, event.measure)));
     }
     if (result.kind == KeyResult::Kind::DELETE_LEFT) {
-        if (slot == 1 && base) {
-            return KeyResult::Moved(JoinPath({0}, base->LastPosition()));
+        if (slot == 1 && base_) {
+            return KeyResult::Moved(JoinPath({0}, base_->LastPosition()));
         }
         return KeyResult::Exit(KeyResult::Kind::DELETE_SELF);
     }
@@ -86,29 +86,29 @@ std::pair<float, float> ExpoNode::GetSize() {
 }
 
 std::string ExpoNode::ToText() const {
-    return "\\exp{" + (base ? base->ToText() : std::string()) + "}{" +
-           (exponent ? exponent->ToText() : std::string()) + "}";
+    return "\\exp{" + (base_ ? base_->ToText() : std::string()) + "}{" +
+           (exponent_ ? exponent_->ToText() : std::string()) + "}";
 }
 
 bool ExpoNode::HasChild() {
-    return base || exponent;
+    return base_ || exponent_;
 }
 
 CursorPath ExpoNode::FirstPosition() const {
-    return base ? JoinPath({0}, base->FirstPosition()) : CursorPath{};
+    return base_ ? JoinPath({0}, base_->FirstPosition()) : CursorPath{};
 }
 
 CursorPath ExpoNode::LastPosition() const {
-    return exponent ? JoinPath({1}, exponent->LastPosition()) : CursorPath{};
+    return exponent_ ? JoinPath({1}, exponent_->LastPosition()) : CursorPath{};
 }
 
 CursorPath ExpoNode::PositionNearX(float x,
                                    VerticalEntry entry,
                                    const TextMeasure* measure) const {
-    if (entry == VerticalEntry::FROM_ABOVE && exponent) {
-        return JoinPath({1}, exponent->PositionNearX(x, entry, measure));
+    if (entry == VerticalEntry::FROM_ABOVE && exponent_) {
+        return JoinPath({1}, exponent_->PositionNearX(x, entry, measure));
     }
-    return base ? JoinPath({0}, base->PositionNearX(x, entry, measure)) : CursorPath{};
+    return base_ ? JoinPath({0}, base_->PositionNearX(x, entry, measure)) : CursorPath{};
 }
 
 EditorNode* ExpoNode::PathChild(PathView path,
@@ -117,39 +117,39 @@ EditorNode* ExpoNode::PathChild(PathView path,
         return nullptr;
     }
     used = 1;
-    return path[0] == 0 ? base.get() : exponent.get();
+    return path[0] == 0 ? base_.get() : exponent_.get();
 }
 
 std::vector<EditorNode::ChildPath> ExpoNode::ChildPaths() const {
     std::vector<ChildPath> children;
-    if (base) {
-        children.push_back({{0}, base.get()});
+    if (base_) {
+        children.push_back({{0}, base_.get()});
     }
-    if (exponent) {
-        children.push_back({{1}, exponent.get()});
+    if (exponent_) {
+        children.push_back({{1}, exponent_.get()});
     }
     return children;
 }
 
 void ExpoNode::Normalize() {
-    base = LineNode::EnsureLine(std::move(base));
-    exponent = LineNode::EnsureLine(std::move(exponent));
-    base->Normalize();
-    exponent->Normalize();
+    base_ = LineNode::EnsureLine(std::move(base_));
+    exponent_ = LineNode::EnsureLine(std::move(exponent_));
+    base_->Normalize();
+    exponent_->Normalize();
 }
 
 std::pair<EditorNode*, EditorNode*> ExpoNode::GetChildren() const {
-    return {base.get(), exponent.get()};
+    return {base_.get(), exponent_.get()};
 }
 
 void ExpoNode::SetChildren(std::unique_ptr<EditorNode> base,
                            std::unique_ptr<EditorNode> exponent) {
-    this->base = std::move(base);
-    this->exponent = std::move(exponent);
+    this->base_ = std::move(base);
+    this->exponent_ = std::move(exponent);
 }
 
 std::unique_ptr<EditorNode> ExpoNode::Clone() const {
-    auto copy = std::make_unique<ExpoNode>(CloneOf(base), CloneOf(exponent));
+    auto copy = std::make_unique<ExpoNode>(CloneOf(base_), CloneOf(exponent_));
     copy->CopyIdFrom(*this);
     return copy;
 }

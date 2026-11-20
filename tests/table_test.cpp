@@ -44,7 +44,7 @@ TableNode* TableInRow0(FileMpp& file) {
 }
 }  // namespace
 
-// --- Parsing ----------------------------------------------------------------------
+// Parsing 
 
 TEST(TableParse, TitleHeaderAndCells) {
     const auto nodes = Parser().ParseText(
@@ -91,7 +91,7 @@ TEST(TableParse, MalformedStaysText) {
     }
 }
 
-// --- The "+" buttons and the header row --------------------------------------------------
+// The "+" buttons and the header row 
 
 TEST(TableActions, AddRowsColumnsAndAHeader) {
     TableNode table;  // 3x3, no header
@@ -122,7 +122,7 @@ TEST(TableActions, RemovingTheHeaderRowRemovesTheHeader) {
     EXPECT_EQ(table->ToText(), "\\begin{table}1\\end{table}");
 }
 
-// --- Editing ----------------------------------------------------------------------
+// Editing 
 
 TEST(TableEdit, EveryCellIsEditable) {
     FileMpp file = MakeDocument("\\begin{table}&\\\\&\\end{table}", InCell(0, 0, 0));

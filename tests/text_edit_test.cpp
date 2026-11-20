@@ -33,7 +33,7 @@ void TypeAscii(FileText& file,
 }
 }  // namespace
 
-// --- Up and Down ---------------------------------------------------------------------
+// Up and Down 
 
 TEST(TextKeys,
      UpAndDownKeepTheColumn) {
@@ -104,7 +104,7 @@ TEST(TextKeys,
     EXPECT_EQ(file.cursorPos, 10u);  // column 3, not 4
 }
 
-// --- Editing -----------------------------------------------------------------------------
+// Editing 
 
 TEST(TextEdit,
      TypingReplacesTheSelection) {
@@ -137,7 +137,7 @@ TEST(TextEdit,
     EXPECT_EQ(file.text, "x");
 }
 
-// --- Undo and redo --------------------------------------------------------------------
+// Undo and redo 
 
 TEST(TextHistory,
      TypingUndoesAWordAtATime) {

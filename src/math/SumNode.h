@@ -8,9 +8,9 @@
 
 class SumNode : public EditorNode {
 private:
-    std::unique_ptr<EditorNode> summand;
-    std::unique_ptr<EditorNode> index;
-    std::unique_ptr<EditorNode> upperLimit;
+    std::unique_ptr<EditorNode> summand_;
+    std::unique_ptr<EditorNode> index_;
+    std::unique_ptr<EditorNode> upperLimit_;
 
 public:
     SumNode() = default;
@@ -50,9 +50,9 @@ public:
 
     std::tuple<EditorNode*, EditorNode*, EditorNode*> GetChildren() const;
 
-    EditorNode* GetSummand() const { return summand.get(); }
-    EditorNode* GetIndex() const { return index.get(); }
-    EditorNode* GetUpperLimit() const { return upperLimit.get(); }
+    EditorNode* GetSummand() const { return summand_.get(); }
+    EditorNode* GetIndex() const { return index_.get(); }
+    EditorNode* GetUpperLimit() const { return upperLimit_.get(); }
 
     void SetChildren(std::unique_ptr<EditorNode> summand,
                      std::unique_ptr<EditorNode> index,

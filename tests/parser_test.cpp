@@ -5,8 +5,7 @@
 using test::ParseAndDescribe;
 using test::RoundTrip;
 
-// --- Text -------------------------------------------------------------------
-
+// Text 
 TEST(Parser,
      EmptyInputHasNoNodes) {
     EXPECT_EQ(ParseAndDescribe(""), "");
@@ -22,7 +21,7 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("a\\cdot b"), R"(text("a\cdot b"))");
 }
 
-// --- Greek ------------------------------------------------------------------
+// Greek 
 
 TEST(Parser,
      GreekLetter) {
@@ -49,7 +48,7 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("\\alphax"), R"(text("\alphax"))");
 }
 
-// --- Fractions --------------------------------------------------------------
+// Fractions 
 
 TEST(Parser,
      Fraction) {
@@ -78,7 +77,7 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("\\frac"), R"(text("\frac"))");
 }
 
-// --- Exponents -------------------------------------------------------------
+// Exponents
 
 TEST(Parser,
      Exponent) {
@@ -97,7 +96,7 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("\\exp x"), R"(text("\exp x"))");
 }
 
-// --- Sums -------------------------------------------------------------------
+// Sums 
 
 TEST(Parser,
      Sum) {
@@ -111,7 +110,7 @@ TEST(Parser,
               R"(sum(line(), line(), line()))");
 }
 
-// --- Square roots -----------------------------------------------------------
+// Square roots 
 
 TEST(Parser,
      SquareRoot) {
@@ -139,7 +138,7 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("\\sqrt x"), R"(text("\sqrt x"))");
 }
 
-// --- Groups -----------------------------------------------------------------
+// Groups 
 
 TEST(Parser,
      BareGroup) {
@@ -156,7 +155,7 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("a}b"), R"(text("a}b"))");
 }
 
-// --- Matrices ---------------------------------------------------------------
+// Matrices
 
 TEST(Parser,
      Matrix) {
@@ -221,7 +220,7 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("a & b"), R"(text("a & b"))");
 }
 
-// --- Round trips ------------------------------------------------------------
+// Round trips 
 // Parsing then calling ToText() should give back the original source.
 
 class ParserRoundTrip : public ::testing::TestWithParam<const char*> {};

@@ -9,8 +9,8 @@
 // \exp or shift+^
 class ExpoNode : public EditorNode {
 private:
-    std::unique_ptr<EditorNode> exponent;
-    std::unique_ptr<EditorNode> base;
+    std::unique_ptr<EditorNode> exponent_;
+    std::unique_ptr<EditorNode> base_;
 
 public:
     ExpoNode() = default;
@@ -54,11 +54,11 @@ public:
     std::pair<EditorNode*, EditorNode*> GetChildren() const;
 
     EditorNode* GetBase() const {
-        return base.get();
+        return base_.get();
     }
 
     EditorNode* GetExponent() const {
-        return exponent.get();
+        return exponent_.get();
     }
 
     void SetChildren(std::unique_ptr<EditorNode> base,

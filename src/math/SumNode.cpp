@@ -8,9 +8,9 @@
 SumNode::SumNode(std::unique_ptr<EditorNode> summand,
                  std::unique_ptr<EditorNode> index,
                  std::unique_ptr<EditorNode> upperLimit)
-    : summand(std::move(summand)),
-      index(std::move(index)),
-      upperLimit(std::move(upperLimit)) {}
+    : summand_(std::move(summand)),
+      index_(std::move(index)),
+      upperLimit_(std::move(upperLimit)) {}
 
 // Sigma in the middle, upper and lower limits above and below it, and the
 // summand on the right.
@@ -38,13 +38,13 @@ void SumNode::Render(const RenderContext& context) {
                                  .childGap = 1,
                                  .childAlignment = {.x = CLAY_ALIGN_X_CENTER},
                                  .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
-            renderLimit(upperLimit);
+            renderLimit(upperLimit_);
             node_style::Text("\xCE\xA3", fontSize);
-            renderLimit(index);
+            renderLimit(index_);
         }
         node_style::Slot(outlined, [&] {
-            if (summand) {
-                summand->Render(context);
+            if (summand_) {
+                summand_->Render(context);
             } else {
                 node_style::Placeholder(fontSize);
             }
@@ -65,36 +65,36 @@ KeyResult SumNode::KeyPress(const KeyEvent& event) {
         return std::move(result).Prepend({slot});
     }
     if (result.kind == KeyResult::Kind::EXIT_RIGHT) {
-        if (slot == 1 && upperLimit) {
-            return KeyResult::Moved(JoinPath({2}, upperLimit->FirstPosition()));
+        if (slot == 1 && upperLimit_) {
+            return KeyResult::Moved(JoinPath({2}, upperLimit_->FirstPosition()));
         }
-        if (slot == 2 && summand) {
-            return KeyResult::Moved(JoinPath({0}, summand->FirstPosition()));
+        if (slot == 2 && summand_) {
+            return KeyResult::Moved(JoinPath({0}, summand_->FirstPosition()));
         }
     }
     if (result.kind == KeyResult::Kind::EXIT_LEFT) {
-        if (slot == 2 && index) {
-            return KeyResult::Moved(JoinPath({1}, index->LastPosition()));
+        if (slot == 2 && index_) {
+            return KeyResult::Moved(JoinPath({1}, index_->LastPosition()));
         }
-        if (slot == 0 && index) {
-            return KeyResult::Moved(JoinPath({1}, index->LastPosition()));
+        if (slot == 0 && index_) {
+            return KeyResult::Moved(JoinPath({1}, index_->LastPosition()));
         }
     }
     if (result.kind == KeyResult::Kind::EXIT_UP) {
-        if (slot == 1 && upperLimit) {
+        if (slot == 1 && upperLimit_) {
             return KeyResult::Moved(JoinPath(
-                {2}, upperLimit->PositionNearX(event.cursorX, VerticalEntry::FROM_BELOW, event.measure)));
+                {2}, upperLimit_->PositionNearX(event.cursorX, VerticalEntry::FROM_BELOW, event.measure)));
         }
     }
     if (result.kind == KeyResult::Kind::EXIT_DOWN) {
-        if (slot == 2 && index) {
+        if (slot == 2 && index_) {
             return KeyResult::Moved(JoinPath(
-                {1}, index->PositionNearX(event.cursorX, VerticalEntry::FROM_ABOVE, event.measure)));
+                {1}, index_->PositionNearX(event.cursorX, VerticalEntry::FROM_ABOVE, event.measure)));
         }
     }
     if (result.kind == KeyResult::Kind::DELETE_LEFT) {
-        if (slot == 0 && index) {
-            return KeyResult::Moved(JoinPath({1}, index->LastPosition()));
+        if (slot == 0 && index_) {
+            return KeyResult::Moved(JoinPath({1}, index_->LastPosition()));
         }
         if (slot == 1 || slot == 2) {
             return KeyResult::Exit(KeyResult::Kind::DELETE_SELF);
@@ -118,40 +118,40 @@ std::pair<float, float> SumNode::GetSize() {
 }
 
 std::string SumNode::ToText() const {
-    return "\\sum_" + (index ? "{" + index->ToText() + "}" : "{}") +
-           "^" + (upperLimit ? "{" + upperLimit->ToText() + "}" : "{}") +
-           "{" + (summand ? summand->ToText() : std::string()) + "}";
+    return "\\sum_" + (index_ ? "{" + index_->ToText() + "}" : "{}") +
+           "^" + (upperLimit_ ? "{" + upperLimit_->ToText() + "}" : "{}") +
+           "{" + (summand_ ? summand_->ToText() : std::string()) + "}";
 }
 
 bool SumNode::HasChild() {
-    return summand || index || upperLimit;
+    return summand_ || index_ || upperLimit_;
 }
 
 CursorPath SumNode::FirstPosition() const {
-    if (index) {
-        return JoinPath({1}, index->FirstPosition());
+    if (index_) {
+        return JoinPath({1}, index_->FirstPosition());
     }
-    if (upperLimit) {
-        return JoinPath({2}, upperLimit->FirstPosition());
+    if (upperLimit_) {
+        return JoinPath({2}, upperLimit_->FirstPosition());
     }
-    return summand ? JoinPath({0}, summand->FirstPosition()) : CursorPath{};
+    return summand_ ? JoinPath({0}, summand_->FirstPosition()) : CursorPath{};
 }
 
 CursorPath SumNode::LastPosition() const {
-    return summand ? JoinPath({0}, summand->LastPosition()) : CursorPath{};
+    return summand_ ? JoinPath({0}, summand_->LastPosition()) : CursorPath{};
 }
 
 CursorPath SumNode::PositionNearX(float x,
                                   VerticalEntry entry,
                                   const TextMeasure* measure) const {
-    if (entry == VerticalEntry::FROM_ABOVE && upperLimit) {
-        return JoinPath({2}, upperLimit->PositionNearX(x, entry, measure));
+    if (entry == VerticalEntry::FROM_ABOVE && upperLimit_) {
+        return JoinPath({2}, upperLimit_->PositionNearX(x, entry, measure));
     }
-    if (entry == VerticalEntry::FROM_BELOW && index) {
-        return JoinPath({1}, index->PositionNearX(x, entry, measure));
+    if (entry == VerticalEntry::FROM_BELOW && index_) {
+        return JoinPath({1}, index_->PositionNearX(x, entry, measure));
     }
-    return summand ? JoinPath({0}, summand->PositionNearX(x, entry, measure))
-                    : FirstPosition();
+    return summand_ ? JoinPath({0}, summand_->PositionNearX(x, entry, measure))
+                     : FirstPosition();
 }
 
 EditorNode* SumNode::PathChild(PathView path,
@@ -160,43 +160,43 @@ EditorNode* SumNode::PathChild(PathView path,
         return nullptr;
     }
     used = 1;
-    if (path[0] == 0) return summand.get();
-    if (path[0] == 1) return index.get();
-    return upperLimit.get();
+    if (path[0] == 0) return summand_.get();
+    if (path[0] == 1) return index_.get();
+    return upperLimit_.get();
 }
 
 std::vector<EditorNode::ChildPath> SumNode::ChildPaths() const {
     std::vector<ChildPath> children;
-    if (summand) children.push_back({{0}, summand.get()});
-    if (index) children.push_back({{1}, index.get()});
-    if (upperLimit) children.push_back({{2}, upperLimit.get()});
+    if (summand_) children.push_back({{0}, summand_.get()});
+    if (index_) children.push_back({{1}, index_.get()});
+    if (upperLimit_) children.push_back({{2}, upperLimit_.get()});
     return children;
 }
 
 void SumNode::Normalize() {
-    summand = LineNode::EnsureLine(std::move(summand));
-    index = LineNode::EnsureLine(std::move(index));
-    upperLimit = LineNode::EnsureLine(std::move(upperLimit));
-    summand->Normalize();
-    index->Normalize();
-    upperLimit->Normalize();
+    summand_ = LineNode::EnsureLine(std::move(summand_));
+    index_ = LineNode::EnsureLine(std::move(index_));
+    upperLimit_ = LineNode::EnsureLine(std::move(upperLimit_));
+    summand_->Normalize();
+    index_->Normalize();
+    upperLimit_->Normalize();
 }
 
 std::tuple<EditorNode*, EditorNode*, EditorNode*> SumNode::GetChildren() const {
-    return {summand.get(), index.get(), upperLimit.get()};
+    return {summand_.get(), index_.get(), upperLimit_.get()};
 }
 
 void SumNode::SetChildren(std::unique_ptr<EditorNode> summand,
                           std::unique_ptr<EditorNode> index,
                           std::unique_ptr<EditorNode> upperLimit) {
-    summand = std::move(summand);
-    index = std::move(index);
-    upperLimit = std::move(upperLimit);
+    summand_ = std::move(summand);
+    index_ = std::move(index);
+    upperLimit_ = std::move(upperLimit);
 }
 
 std::unique_ptr<EditorNode> SumNode::Clone() const {
     auto copy = std::make_unique<SumNode>(
-        CloneOf(summand), CloneOf(index), CloneOf(upperLimit));
+        CloneOf(summand_), CloneOf(index_), CloneOf(upperLimit_));
     copy->CopyIdFrom(*this);
     return copy;
 }

@@ -141,7 +141,6 @@ void DelimiterSymbol(Delimiter kind,
     StretchedSymbol(draw, std::round(fontSize * DELIMITER_WIDTH_SCALE));
 }
 
-// --- Object cards (graphs, tables) --------------------------------------------------
 
 namespace {
 std::optional<std::uint32_t> settingsRequest;

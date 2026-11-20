@@ -39,7 +39,7 @@ public:
     // Replace all the text, put the cursor at the start and forget the undo history.
     void Reset(std::string newText = {});
 
-    // --- Keys and typing -----------------------------------------------------------
+    // Keys and typing 
 
     // Handle a key (raylib KEY_*): Left/Right, Up/Down, Backspace, Delete,
     // Enter. Shift extends the selection. `measure` may be null (e.g. in
@@ -59,7 +59,7 @@ public:
     bool HandleKeyboard(const LineMeasure* measure,
                         const CharacterFilter& accept = {});
 
-    // --- Selection and clipboard ----------------------------------------------------
+    // Selection and clipboard 
 
     bool HasSelection() const {
         return selectionStart != cursorPos;
@@ -71,7 +71,7 @@ public:
     // Insert text at the cursor, replacing the selection. Returns false for empty text.
     bool PasteText(std::string pasted);
 
-    // --- Undo and redo ----------------------------------------------------------------
+    // Undo and redo 
     //
     // Contiguous typing groups through the next space; consecutive character deletions
     // also group together and can span words. Enter, deleting a selection and pasting

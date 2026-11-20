@@ -61,7 +61,6 @@ void TableNode::Normalize() {
     MatrixNode::Normalize();
 }
 
-// --- Rows, columns and the "+" buttons --------------------------------------------
 
 std::size_t TableNode::InsertRow(std::size_t row) {
     if (header_ && row == 0) {
@@ -102,7 +101,6 @@ bool TableNode::RunAction(int action) {
     return true;
 }
 
-// --- Cursor -----------------------------------------------------------------------
 
 KeyResult TableNode::KeyPress(const KeyEvent& event) {
     if (event.path.empty()) {
@@ -172,7 +170,6 @@ std::vector<EditorNode::ChildPath> TableNode::ChildPaths() const {
     return children;
 }
 
-// --- Drawing ----------------------------------------------------------------------
 
 void TableNode::RenderCompact(const RenderContext& context) {
     // A small 3x3 grid icon.
@@ -328,7 +325,6 @@ void TableNode::Render(const RenderContext& context) {
     }
 }
 
-// --- Copying and saving -------------------------------------------------------------
 
 std::unique_ptr<EditorNode> TableNode::Clone() const {
     std::vector<Row> cells;

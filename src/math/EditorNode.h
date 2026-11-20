@@ -164,11 +164,19 @@ inline std::optional<Clay_BoundingBox> LastLayoutBounds(Clay_ElementId id) {
     return data.boundingBox;
 }
 
+
+//The base class of all nodes in the editor's tree. Each node type implements a
+//different mathematical structure (fraction, root, matrix, etc.) or a piece of
+//text (TextNode, GreekNode). The tree is traversed to render it, place the cursor, 
+//and handle key events. Each node has a unique id for Clay to track it across
 class EditorNode {
 public:
     EditorNode() : id_(GenerateId()) {}
     virtual ~EditorNode() = default;
 
+    // Render this node and its children, using the last frame's layout to place the
+    // cursor and highlight the active structure. The font size is passed down
+    // from the editor
     virtual void Render(const RenderContext& context) = 0;
 
     // A deep copy that keeps every node's id, so it lays out where the
@@ -188,15 +196,11 @@ public:
     virtual std::string ToText() const = 0;
 
     // Legacy geometry hooks; current cursor placement uses LastLayoutBounds() instead.
-    virtual std::pair<float,
-                      float>
-    GetNWCorner() = 0;
-    virtual std::pair<float,
-                      float>
-    GetSize() = 0;
+    virtual std::pair<float,float> GetNWCorner() = 0;
+    virtual std::pair<float,float> GetSize() = 0;
     virtual bool HasChild() = 0;
 
-    // --- Cursor ---------------------------------------------------------------
+
 
     // Cursor positions at the start and end of this node, relative to it.
     // Empty for nodes the cursor can't enter (e.g. GreekNode): it steps over them.

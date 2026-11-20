@@ -66,7 +66,7 @@ protected:
 constexpr uint32_t BOX_PART = 0, CURSOR_PART = 2, SELECTED_PART = 4;
 }  // namespace
 
-// --- Single-line editing ------------------------------------------------------------
+// Single-line editing 
 
 TEST(SingleLineText,
      EnterUpAndDownAreLeftForTheOwner) {
@@ -110,7 +110,7 @@ TEST(SingleLineText,
     EXPECT_FALSE(buffer.CanUndo());
 }
 
-// --- The box -----------------------------------------------------------------------------
+// The box 
 
 TEST_F(TextInputLayoutTest,
        CursorSitsBetweenCharactersWithoutMovingText) {

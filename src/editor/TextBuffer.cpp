@@ -62,7 +62,7 @@ std::string EncodeUtf8(char32_t codepoint) {
 }
 }  // namespace
 
-// --- Cursor movement ----------------------------------------------------------
+// Cursor movement 
 
 void TextBuffer::ClampPositions() {
     cursorPos = std::min(cursorPos, text.size());
@@ -201,7 +201,7 @@ void TextBuffer::SelectAll() {
     goalX_.reset();
 }
 
-// --- Editing ---------------------------------------------------------------------
+// Editing 
 
 bool TextBuffer::TypeCharacter(char32_t codepoint) {
     if (codepoint < 32 || codepoint == 127) {
@@ -348,7 +348,7 @@ bool TextBuffer::Redo() {
     return true;
 }
 
-// --- Keyboard ------------------------------------------------------------------------
+// Keyboard 
 
 bool TextBuffer::HandleKeyboard(const LineMeasure* measure,
                                 const CharacterFilter& accept) {

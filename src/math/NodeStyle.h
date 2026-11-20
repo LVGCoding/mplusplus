@@ -73,7 +73,6 @@ void DelimiterSymbol(Delimiter kind,
                      bool right,
                      float fontSize);
 
-// --- Object cards (graphs, tables) --------------------------------------------------
 
 inline constexpr Clay_Color CARD_COLOR = {252, 252, 252, 255};
 inline constexpr Clay_Color CARD_BORDER_COLOR = {200, 200, 200, 255};
