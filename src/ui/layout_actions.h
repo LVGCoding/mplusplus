@@ -7,6 +7,8 @@
 #include "layout_common.h"
 #include "layout_state.h"
 #include "layout_tabs.h"
+#include "editor/FileMpp.h"
+#include "lang/Compile.h"
 #include "run/Run.h"
 
 namespace layout_internal {
@@ -49,6 +51,89 @@ inline void ProcessClipboardRequests(Editor& editor) {
     }
 }
 
+// The terminal line for a problem in the document; clicking it goes there.
+inline run::OutputLine ProblemLine(const lang::Diagnostic& problem) {
+    return {run::OutputLine::Kind::Error, DescribeAt(problem.ref, problem.message), problem.ref};
+}
+
+// The document the terminal's errors are about, if it is still open and
+// unchanged since it was run (so the positions in the errors still fit).
+inline FileMpp* TerminalDocument(Editor& editor, bool requireSameVersion) {
+    if (FileIndex(editor.Files(), terminalFile) == SIZE_MAX) {
+        return nullptr;
+    }
+    auto* document = dynamic_cast<FileMpp*>(const_cast<FileBase*>(terminalFile));
+    if (document && requireSameVersion && document->ContentVersion() != terminalFileVersion) {
+        return nullptr;
+    }
+    return document;
+}
+
+// A runtime error from the program ("error:7: division by zero") as
+// "Row 3: division by zero", pointing at where it happened. The place is
+// underlined in the document too, if it hasn't changed since.
+inline void AddRuntimeErrorSource(Editor& editor, run::OutputLine& line) {
+    const auto error = ParseRuntimeError(line.text);
+    if (!error) {
+        return;
+    }
+    if (error->location < 0 || static_cast<std::size_t>(error->location) >= runLocations.size()) {
+        line.text = error->message;
+        return;
+    }
+    const lang::SourceRef& ref = runLocations[static_cast<std::size_t>(error->location)];
+    line.text = DescribeAt(ref, error->message);
+    line.source = ref;
+    if (FileMpp* document = TerminalDocument(editor, true)) {
+        document->diagnostics.push_back({error->message, ref});
+    }
+}
+
+// Clicking an error in the terminal: show the document and put the cursor
+// at the start of the problem.
+inline void ProcessTerminalJump(Editor& editor) {
+    const std::size_t index = terminalJumpRequested;
+    terminalJumpRequested = SIZE_MAX;
+    if (index >= terminalOutput.size() || terminalOutput[index].source.Empty()) {
+        return;
+    }
+    FileMpp* document = TerminalDocument(editor, false);
+    if (!document) {
+        return;
+    }
+    SwitchTab(editor, FileIndex(editor.Files(), document));
+    const CursorPath& target = terminalOutput[index].source.start;
+    if (document->CursorText(target)) {
+        document->MoveCursorTo(target);
+        historyActivity = true;  // scrolls the cursor into view
+    }
+}
+
+// Once a document has been run, check it again a moment after each edit,
+// so its underlines stay up to date while it is fixed.
+inline void CheckWhileEditing(Editor& editor) {
+    auto* document = dynamic_cast<FileMpp*>(editor.ActiveFile());
+    if (!document || !document->checkWhileEditing) {
+        return;
+    }
+    const std::uint64_t version = document->ContentVersion();
+    if (checkedVersions[document] == version) {
+        return;
+    }
+    if (uncheckedFile != document || uncheckedVersion != version) {
+        uncheckedFile = document;
+        uncheckedVersion = version;
+        uncheckedSince = GetTime();
+        return;
+    }
+    constexpr double CHECK_DELAY = 0.4;  // seconds after the last edit
+    if (GetTime() - uncheckedSince >= CHECK_DELAY) {
+        document->diagnostics =
+            lang::Compile(document->content, lang::CompileMode::CheckOnly).diagnostics;
+        checkedVersions[document] = version;
+    }
+}
+
 // Run -> Run: translate the active file (src/run/Run.cpp) and start compiling
 // and running it in the background. Run -> Stop kills it. Every frame, the
 // output that arrived is added to the terminal.
@@ -63,11 +148,32 @@ inline void ProcessRunRequest(Editor& editor) {
             terminalOutput.clear();
             terminalOutput.push_back({run::OutputLine::Kind::Info, "Running " + file->TabName()});
             Translation translation = TranslateFile(*file);
+            terminalFile = file;
+            if (auto* document = dynamic_cast<FileMpp*>(editor.ActiveFile())) {
+                document->checkWhileEditing = true;
+                document->diagnostics = translation.diagnostics;
+                terminalFileVersion = document->ContentVersion();
+                checkedVersions[document] = terminalFileVersion;
+            }
             if (translation.succeeded) {
+                runLocations = std::move(translation.locations);
                 runJob.Start(std::move(translation.cpp));
             } else {
                 for (auto& error : translation.errors) {
                     terminalOutput.push_back({run::OutputLine::Kind::Error, std::move(error)});
+                }
+                for (const auto& problem : translation.diagnostics) {
+                    terminalOutput.push_back(ProblemLine(problem));
+                }
+                const std::size_t count = translation.diagnostics.size();
+                if (count > 0) {
+                    terminalOutput.push_back(
+                        {run::OutputLine::Kind::Info,
+                         count == 1 ? "Fix the problem above to run the document (click it to "
+                                      "go there)."
+                                    : "Fix the " + std::to_string(count) +
+                                          " problems above to run the document (click one to "
+                                          "go there)."});
                 }
             }
             terminalScrollToEnd = 2;
@@ -75,10 +181,19 @@ inline void ProcessRunRequest(Editor& editor) {
     }
     auto output = runJob.TakeOutput();
     if (!output.empty()) {
+        for (auto& line : output) {
+            if (line.kind == run::OutputLine::Kind::Error) {
+                AddRuntimeErrorSource(editor, line);
+            }
+        }
         terminalOutput.insert(terminalOutput.end(), std::make_move_iterator(output.begin()),
                               std::make_move_iterator(output.end()));
         terminalScrollToEnd = 2;
     }
+    if (terminalJumpRequested != SIZE_MAX) {
+        ProcessTerminalJump(editor);
+    }
+    CheckWhileEditing(editor);
 }
 
 inline bool SaveActiveFile(Editor& editor,

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lang/Source.h"
+
 #include <atomic>
 #include <mutex>
 #include <string>
@@ -18,6 +20,8 @@ struct OutputLine {
     };
     Kind kind = Kind::Info;
     std::string text;
+    // The place in the document an error is about; clicking the line goes there.
+    lang::SourceRef source;
 };
 
 // Compiles and runs one C++ program on a background thread: builds the

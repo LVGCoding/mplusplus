@@ -6,6 +6,7 @@
 #include "layout_linenum.h"
 #include "layout_state.h"
 #include "layout_style.h"
+#include "rich_text.h"
 
 #include <algorithm>
 
@@ -148,19 +149,30 @@ inline void LayoutTerminal() {
                              .padding = {6, 6, 6, 6},
                              .layoutDirection = CLAY_TOP_TO_BOTTOM},
                   .clip = {.vertical = true, .childOffset = Clay_GetScrollOffset()}}) {
-                for (const run::OutputLine& line : terminalOutput) {
-                    const Clay_String text = {.isStaticallyAllocated = false,
-                                              .length = static_cast<int32_t>(line.text.size()),
-                                              .chars = line.text.data()};
+                for (std::size_t i = 0; i < terminalOutput.size(); ++i) {
+                    const run::OutputLine& line = terminalOutput[i];
+                    // Errors about a place in the document are links to it.
+                    const bool link = !line.source.Empty();
+                    const Clay_ElementId lineId = CLAY_IDI("TerminalLine", static_cast<uint32_t>(i));
+                    const bool hovered = link && !IsAnyMenuOpen() && Clay_PointerOver(lineId);
+                    if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        terminalJumpRequested = i;
+                    }
                     const Clay_Color color =
                         line.kind == run::OutputLine::Kind::Error  ? FORM_ERROR_COLOR
                         : line.kind == run::OutputLine::Kind::Info ? FORM_MUTED_COLOR
                                                                    : MENU_TEXT;
-                    CLAY_TEXT(text,
-                              {.textColor = color,
-                               .fontId = FONT_BODY,
-                               .fontSize = EDITOR_FONT_SIZE,
-                               .lineHeight = EDITOR_LINE_HEIGHT});
+                    CLAY(lineId,
+                         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                                     .layoutDirection = CLAY_LEFT_TO_RIGHT},
+                          .backgroundColor = hovered ? TERMINAL_LINK_HOVER_COLOR
+                                                     : Clay_Color{0, 0, 0, 0}}) {
+                        rich_text::Layout(line.text,
+                                          {.textColor = color,
+                                           .fontId = FONT_BODY,
+                                           .fontSize = EDITOR_FONT_SIZE,
+                                           .lineHeight = EDITOR_LINE_HEIGHT});
+                    }
                 }
                 CLAY_TEXT(CLAY_STRING(">"),
                           {.textColor = MENU_TEXT,

@@ -90,6 +90,9 @@ void FileMpp::SetSource(std::string text) {
     goalX_.reset();
     pendingDelete_.reset();
     insertWheel_.reset();
+    ++contentVersion_;
+    diagnostics.clear();
+    hoveredDiagnostic_.reset();
     ClearHistory();
 }
 

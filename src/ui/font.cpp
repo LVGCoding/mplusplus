@@ -11,13 +11,21 @@ void LoadFontTable(Font fonts[]) {
     // Rasterize at the display's pixel density; layout sizes stay in logical pixels.
     const float dpi = std::max(1.0f, GetWindowScaleDPI().y);
     const int atlasSize = static_cast<int>(std::ceil(32 * dpi));
-    // Printable ASCII plus lowercase Greek (U+03B1..U+03C9) for GreekNode.
-    static int codepoints[95 + 25];
+    // Printable ASCII, Latin-1, lowercase Greek (U+03B1..U+03C9) for
+    // GreekNode, and some punctuation for messages. Keep in sync with
+    // rich_text::InBodyFont, which sends other characters to FONT_MATH.
+    static int codepoints[95 + 96 + 25 + 8];
     int count = 0;
     for (int codepoint = 32; codepoint < 127; ++codepoint) {
         codepoints[count++] = codepoint;
     }
+    for (int codepoint = 0xA0; codepoint <= 0xFF; ++codepoint) {
+        codepoints[count++] = codepoint;
+    }
     for (int codepoint = 0x03B1; codepoint <= 0x03C9; ++codepoint) {
+        codepoints[count++] = codepoint;
+    }
+    for (int codepoint : {0x2026, 0x2212, 0x2018, 0x2019, 0x201A, 0x201B, 0x201C, 0x201D}) {
         codepoints[count++] = codepoint;
     }
     fonts[FONT_BODY] =

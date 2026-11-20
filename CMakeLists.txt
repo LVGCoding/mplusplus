@@ -105,6 +105,12 @@ add_library(mplusplus_core STATIC
   src/math/SymbolNode.cpp
   src/math/TableNode.cpp
   src/math/TextNode.cpp
+  src/lang/Builtins.cpp
+  src/lang/Checker.cpp
+  src/lang/CodeGen.cpp
+  src/lang/Compile.cpp
+  src/lang/Lower.cpp
+  src/lang/Parser.cpp
   src/parser/parser.cpp
   src/run/Run.cpp
   src/run/Process.cpp

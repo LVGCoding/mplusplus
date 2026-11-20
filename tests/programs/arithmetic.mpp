@@ -1,0 +1,9 @@
+n \in \mathbb{N} := 7
+print(n mod 3, -7 mod 3, 2^10, \exp{2}{-1}, \frac{1}{4})
+r \in \mathbb{R} := n
+r <- r / 2
+print(r, floor(r), ceil(r), round(r), abs(-3), min(4, 2, 9), max(1, 2.5))
+print(\sqrt[3]{-8}, \sqrt{16}, 2\pi > 6, 0 \leq n < 10, n = 7 \land \neg (n \neq 7))
+print(\infty > 1, true \oplus true, "\alpha \cdot \beta")
+\alpha := 3; \beta := 4
+print(\sqrt{\alpha\exp{}{2} + \beta\exp{}{2}})

@@ -2,6 +2,9 @@
 
 #include "editor/FileMpp.h"
 #include "editor/fileBase.h"
+#include "lang/Compile.h"
+
+#include <charconv>
 
 Translation TranslateFile(const FileBase& file) {
     Translation result;
@@ -11,19 +14,37 @@ Translation TranslateFile(const FileBase& file) {
         result.errors.push_back("Only M++ (.mpp) documents can be run.");
         return result;
     }
-
-    // Phase 0 of docs/language-plan.md: no language yet, just a program that
-    // proves the compile-and-run pipeline works end to end.
-    // TODO(phase 1): lower document->content, parse, check and generate code.
-    const std::size_t rows = document->content.size();
-    result.cpp = "#include <mpp/mpp.hpp>\n"
-                 "\n"
-                 "int main() {\n"
-                 "    return mpp::run([] {\n"
-                 "        mpp::print(\"Hello from M++! This document has \", std::int64_t{" +
-                 std::to_string(rows) + "}, \" rows.\");\n" +
-                 "        mpp::print(\"The math in it can't be run yet.\");\n"
-                 "    });\n"
-                 "}\n";
+    lang::Compilation compilation = lang::Compile(document->content);
+    result.succeeded = compilation.Succeeded();
+    result.diagnostics = std::move(compilation.diagnostics);
+    result.cpp = std::move(compilation.code.cpp);
+    result.locations = std::move(compilation.code.locations);
     return result;
+}
+
+std::optional<RuntimeError> ParseRuntimeError(std::string_view line) {
+    constexpr std::string_view PREFIX = "error:";
+    if (!line.starts_with(PREFIX)) {
+        return std::nullopt;
+    }
+    line.remove_prefix(PREFIX.size());
+    RuntimeError error;
+    const auto [end, problem] = std::from_chars(line.data(), line.data() + line.size(),
+                                                error.location);
+    if (problem != std::errc() || end == line.data() + line.size() || *end != ':') {
+        return std::nullopt;
+    }
+    line.remove_prefix(end - line.data() + 1);
+    if (line.starts_with(' ')) {
+        line.remove_prefix(1);
+    }
+    error.message = std::string(line);
+    return error;
+}
+
+std::string DescribeAt(const lang::SourceRef& ref, const std::string& message) {
+    if (ref.Empty()) {
+        return message;
+    }
+    return "Row " + std::to_string(ref.Row() + 1) + ": " + message;
 }

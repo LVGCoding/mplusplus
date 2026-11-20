@@ -13,3 +13,4 @@
 
 #include "core.hpp"
 #include "print.hpp"
+#include "scalar.hpp"

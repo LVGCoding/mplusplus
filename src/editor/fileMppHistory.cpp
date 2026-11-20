@@ -36,6 +36,9 @@ void FileMpp::MarkEdited() {
 }
 
 void FileMpp::UpdateSource() {
+    ++contentVersion_;
+    diagnostics.clear();
+    hoveredDiagnostic_.reset();
     source = ContentText();
     modified = !savedSource_ || source != *savedSource_;
 }

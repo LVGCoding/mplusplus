@@ -21,6 +21,7 @@
 #include "ui/clay_renderer_raylib.h"
 #include "ui/EditorView.h"
 #include "ui/font.h"
+#include "ui/rich_text.h"
 #include "ui/shortcuts.h"
 
 #include <algorithm>
@@ -41,6 +42,13 @@ constexpr Color WHEEL_CHOSEN = {46, 160, 67, 240};
 constexpr Color WHEEL_EDGE = {150, 150, 150, 255};
 constexpr Color WHEEL_SHADOW = {0, 0, 0, 40};
 constexpr Color WHEEL_TEXT = {40, 40, 40, 255};
+
+// Problems in the document (FileMpp::diagnostics).
+constexpr Color DIAGNOSTIC_COLOR = {215, 40, 40, 255};
+constexpr float DIAGNOSTIC_MIN_WIDTH = 8.0f;  // for an error at an empty spot
+constexpr Clay_Color TOOLTIP_COLOR = {255, 251, 240, 255};
+constexpr Clay_Color TOOLTIP_BORDER = {215, 40, 40, 255};
+constexpr Clay_Color TOOLTIP_TEXT = {20, 20, 20, 255};
 
 // Measures text the same way Clay does when laying out a TextNode.
 TextMeasure MakeMeasure(Font* fonts) {
@@ -273,6 +281,26 @@ void FileMpp::LayoutContent() const {
             }
         }
     }
+    // The message of the problem under the mouse, next to it.
+    if (hoveredDiagnostic_ && *hoveredDiagnostic_ < diagnostics.size()) {
+        const std::string& message = diagnostics[*hoveredDiagnostic_].message;
+        CLAY(CLAY_ID("DiagnosticTooltip"),
+             {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
+                         .padding = {8, 8, 5, 5},
+                         .layoutDirection = CLAY_LEFT_TO_RIGHT},
+              .backgroundColor = TOOLTIP_COLOR,
+              .cornerRadius = CLAY_CORNER_RADIUS(4),
+              .floating = {.offset = {hoverPoint_.x + 4, hoverPoint_.y + 20},
+                           .zIndex = 40,
+                           .attachTo = CLAY_ATTACH_TO_ROOT},
+              .border = {.color = TOOLTIP_BORDER, .width = CLAY_BORDER_OUTSIDE(1)}}) {
+            rich_text::Layout(message,
+                              {.textColor = TOOLTIP_TEXT,
+                               .fontId = FONT_BODY,
+                               .fontSize = 16,
+                               .wrapMode = CLAY_TEXT_WRAP_NONE});
+        }
+    }
 }
 
 const EditorNode* FileMpp::ActiveStructure() const {
@@ -402,6 +430,7 @@ uint32_t FileMpp::LineElementId(std::size_t line) const {
 }
 
 void FileMpp::DrawOverlay(const EditorView& view) const {
+    DrawDiagnostics(view);
     DrawSelection(view);
     if (view.cursorVisible) {
         if (const auto bounds = CursorBounds(view)) {
@@ -460,6 +489,79 @@ void FileMpp::DrawSelection(const EditorView& view) const {
             }
             if (box->width > 0) {
                 DrawRectangleRec(*box, SELECTION_COLOR);
+            }
+        }
+    }
+    EndScissorMode();
+}
+
+std::vector<Rectangle> FileMpp::RangeBoxes(const CursorPath& start,
+                                           const CursorPath& end,
+                                           const TextMeasure& measure) const {
+    std::vector<Rectangle> boxes;
+    // Positions from a check of an older version of the content may no
+    // longer exist.
+    if (start.size() < 3 || end.size() < 3 || !CursorText(start) || !CursorText(end)) {
+        return boxes;
+    }
+    const bool sameLine =
+        start.size() == end.size() && std::equal(start.begin(), start.end() - 2, end.begin());
+    if (sameLine) {
+        const CursorPath linePath(start.begin(), start.end() - 2);
+        if (const auto* line = dynamic_cast<const LineNode*>(NodeAt(linePath))) {
+            if (auto box = RangeBox(*line, start[start.size() - 2], start.back(),
+                                    end[end.size() - 2], end.back(), measure)) {
+                boxes.push_back(*box);
+            }
+        }
+        return boxes;
+    }
+    if (start.size() != 3 || end.size() != 3) {
+        return boxes;
+    }
+    for (std::size_t row = start[0]; row <= end[0] && row < content.size(); ++row) {
+        const LineNode& line = *content[row];
+        const CursorPath from =
+            row == start[0] ? CursorPath{start[1], start[2]} : line.FirstPosition();
+        const CursorPath to = row == end[0] ? CursorPath{end[1], end[2]} : line.LastPosition();
+        if (auto box = RangeBox(line, from[0], from[1], to[0], to[1], measure)) {
+            boxes.push_back(*box);
+        }
+    }
+    return boxes;
+}
+
+// A red wavy line under each problem; remembers which one the mouse is over
+// so the next layout shows its message (see LayoutContent).
+void FileMpp::DrawDiagnostics(const EditorView& view) const {
+    const std::optional<std::size_t> wasHovered = hoveredDiagnostic_;
+    hoveredDiagnostic_.reset();
+    if (diagnostics.empty()) {
+        return;
+    }
+    const TextMeasure measure = MakeMeasure(view.fonts);
+    const Vector2 mouse = GetMousePosition();
+    const bool mouseInEditor = view.acceptsMouse && CheckCollisionPointRec(mouse, view.viewport);
+    BeginEditorClip(view);
+    for (std::size_t i = 0; i < diagnostics.size(); ++i) {
+        for (Rectangle box : RangeBoxes(diagnostics[i].ref.start, diagnostics[i].ref.end, measure)) {
+            if (box.width < DIAGNOSTIC_MIN_WIDTH) {
+                box.width = DIAGNOSTIC_MIN_WIDTH;
+            }
+            const float y = box.y + box.height;
+            constexpr float STEP = 3.0f;
+            for (float x = box.x; x < box.x + box.width; x += STEP) {
+                const bool up = static_cast<int>((x - box.x) / STEP) % 2 == 0;
+                const float x2 = std::min(x + STEP, box.x + box.width);
+                DrawLineEx({x, up ? y : y - 2}, {x2, up ? y - 2 : y}, 1.3f, DIAGNOSTIC_COLOR);
+            }
+            const Rectangle hoverArea = {box.x, box.y, box.width, box.height + 3};
+            if (mouseInEditor && !hoveredDiagnostic_ && CheckCollisionPointRec(mouse, hoverArea)) {
+                hoveredDiagnostic_ = i;
+                // Keep the tooltip still while the mouse stays on the same problem.
+                if (wasHovered != i) {
+                    hoverPoint_ = mouse;
+                }
             }
         }
     }

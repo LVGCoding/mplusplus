@@ -20,6 +20,7 @@ inline constexpr uint16_t EDITOR_LINE_HEIGHT = editor_style::LINE_HEIGHT;
 inline constexpr float GUTTER_WIDTH = 46;
 inline constexpr Clay_Color TERMINAL_BORDER_COLOR = {174, 174, 174, 255};
 inline constexpr Clay_Color TERMINAL_HANDLE_HOVER_COLOR = {120, 120, 120, 255};
+inline constexpr Clay_Color TERMINAL_LINK_HOVER_COLOR = {255, 228, 228, 255};
 
 // Settings popups and their forms (layout_form.h).
 inline constexpr float FORM_LABEL_WIDTH = 52;

@@ -68,6 +68,20 @@ inline bool stopRequested = false;
 inline run::Job runJob;
 // Lines shown in the terminal panel, e.g. the output of the last run.
 inline std::vector<run::OutputLine> terminalOutput;
+// The document the terminal's errors are about (the one last run), and its
+// version then. Check it is still open (FileIndex) before using it.
+inline const FileBase* terminalFile = nullptr;
+inline std::uint64_t terminalFileVersion = 0;
+// Where the running program can stop with an error (Translation::locations).
+inline std::vector<lang::SourceRef> runLocations;
+// Terminal line clicked this frame (it has a source to jump to), if any.
+inline std::size_t terminalJumpRequested = SIZE_MAX;
+// Checking documents while they are edited (FileMpp::checkWhileEditing):
+// the content version each was last checked at, and the edit waited on.
+inline std::unordered_map<const FileBase*, std::uint64_t> checkedVersions;
+inline const FileBase* uncheckedFile = nullptr;
+inline std::uint64_t uncheckedVersion = 0;
+inline double uncheckedSince = 0;
 // Frames left in which the terminal scrolls to its last line (new output
 // is laid out a frame after it arrives, so this is more than one).
 inline int terminalScrollToEnd = 0;

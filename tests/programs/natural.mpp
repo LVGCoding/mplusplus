@@ -1,0 +1,2 @@
+n \in \mathbb{N} := 2
+n <- n - 5

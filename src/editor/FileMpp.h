@@ -2,6 +2,7 @@
 
 #include "EditorSettings.h"
 #include "fileBase.h"
+#include "lang/Source.h"
 #include "math/EditorNode.h"
 #include "math/LineNode.h"
 
@@ -64,6 +65,20 @@ struct FileMpp : FileBase {
         std::size_t column = 0;
         std::optional<WheelDirection> direction;
     };
+
+    // Problems found by checking or running the document (see src/lang).
+    // Each is underlined in red, and hovering it shows the message. Cleared
+    // whenever the content changes, since their positions would be stale.
+    std::vector<lang::Diagnostic> diagnostics;
+
+    // Re-check the document while it is edited. Set once it has been run, so
+    // documents that are just notes don't fill up with red.
+    bool checkWhileEditing = false;
+
+    // Goes up with every change to the content (edits, undo, redo, loading).
+    std::uint64_t ContentVersion() const {
+        return contentVersion_;
+    }
 
     FileMpp();
 
@@ -196,6 +211,11 @@ private:
     CursorPath goalPath_;
 
     std::optional<PendingDelete> pendingDelete_;
+    std::uint64_t contentVersion_ = 0;
+    // The diagnostic under the mouse (from the last overlay drawn) and where
+    // the mouse was, for its tooltip.
+    mutable std::optional<std::size_t> hoveredDiagnostic_;
+    mutable Vector2 hoverPoint_ = {};
     std::optional<InsertWheel> insertWheel_;
     bool mathMenuRequested_ = false;
 
@@ -274,6 +294,11 @@ private:
     std::optional<Clay_BoundingBox> CaretBox(const TextMeasure* measure) const;
     void DrawInsertWheel(const EditorView& view) const;
     void DrawSelection(const EditorView& view) const;
+    void DrawDiagnostics(const EditorView& view) const;
+    // Screen boxes covering a range, one per row it spans.
+    std::vector<Rectangle> RangeBoxes(const CursorPath& start,
+                                      const CursorPath& end,
+                                      const TextMeasure& measure) const;
     bool HandleMouse(const EditorView& view,
                      const TextMeasure& measure);
 

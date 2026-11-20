@@ -203,6 +203,31 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 - Editor: error underline with hover; clicking a terminal error jumps to it.
 - Done when: `quadratic.mpp` computes roots with √ and fractions.
 
+**Status: done.** Notes:
+- `src/lang`: `Lower` → `Parse` → `Check` → `Generate`, wrapped by `Compile`.
+  `SourceRef` is a pair of full cursor paths (like a selection), so the
+  editor underlines with the same range code as selections.
+- Runtime errors print `error:N: message`, where N indexes the locations the
+  code generator recorded (statements, denominators, roots, ...), not a
+  row/column; the editor maps N back to a range.
+- ℤ arithmetic is overflow-checked; `/` by zero, √ of a negative, `mod 0`,
+  domain errors in ln/arcsin and negative ℕ values stop with an error.
+- `print(a, b)` separates arguments with spaces. Built-ins: π, e, ∞, sin…tanh,
+  arcsin/arccos/arctan, exp, ln, log10, log2, sqrt, abs, floor, ceil, round,
+  sign, min, max.
+- `:=` and `←` don't continue onto the next row (a half-typed row would
+  swallow the next one); binary operators and open parentheses do.
+- An ExpoNode with an empty base (what typing `^` inserts) raises the value
+  before it; `^` typed as text works too.
+- Editor: diagnostics live on `FileMpp` and are cleared on every edit; after
+  a document's first run it is re-checked 0.4 s after each edit. Terminal
+  error lines link to their range. Messages are drawn with
+  `ui/rich_text.h`, which sends symbols the body font lacks (ℝ, ⋅, ←) to the
+  math font.
+- Phase 2 note: the editor refuses typed `{` `}` (they'd unbalance the LaTeX),
+  so blocks need a brace node or another way to type them.
+- Golden programs: `tests/programs/*.mpp` + `.out`, run by `programs_test.cpp`.
+
 ### Phase 2: control flow and functions
 - Lang: if/else, while, `for` over ranges with steps, break/continue,
   functions (one-line, block, recursive), piecewise.

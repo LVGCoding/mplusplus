@@ -74,9 +74,9 @@ TEST_F(RunJobTest, RuntimeLibrariesAreAvailable) {
     EXPECT_EQ(Lines(output, Kind::Output), (std::vector<std::string>{"8", "0.5"}));
 }
 
-TEST_F(RunJobTest, RuntimeErrorsNameTheRow) {
-    const auto output = RunMain(R"(mpp::row = 7; mpp::column = 2; mpp::fail("index 4 out of range");)");
-    EXPECT_TRUE(Contains(output, Kind::Error, "error:7:2: index 4 out of range"));
+TEST_F(RunJobTest, RuntimeErrorsNameTheirLocation) {
+    const auto output = RunMain(R"(mpp::where = 7; mpp::fail("index 4 out of range");)");
+    EXPECT_TRUE(Contains(output, Kind::Error, "error:7: index 4 out of range"));
     EXPECT_TRUE(Contains(output, Kind::Error, "stopped with an error"));
 }
 
