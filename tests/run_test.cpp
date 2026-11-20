@@ -61,7 +61,7 @@ protected:
 TEST_F(RunJobTest, PrintsTheProgramsOutput) {
     const auto output = RunMain(R"(mpp::print("x = ", 0.1 + 0.2); mpp::print(true, " ", std::int64_t{42});)");
     EXPECT_EQ(Lines(output, Kind::Output),
-              (std::vector<std::string>{"x = 0.30000000000000004", "true 42"}));
+              (std::vector<std::string>{"x = 0.3", "true 42"}));
     EXPECT_TRUE(Contains(output, Kind::Info, "Finished"));
 }
 

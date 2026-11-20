@@ -15,6 +15,8 @@ const char* TypeName(Type type) {
         case Type::Real: return "ℝ";
         case Type::Bool: return "𝔹";
         case Type::String: return "Σ*";
+        case Type::Vector: return "ℝ^n";
+        case Type::Matrix: return "ℝ^(n×m)";
         case Type::Void: return "nothing";
         case Type::Error: return "?";
     }
@@ -24,6 +26,13 @@ const char* TypeName(Type type) {
 namespace {
 
 bool IsNumeric(Type type) { return type == Type::Int || type == Type::Real; }
+bool IsArray(Type type) { return type == Type::Vector || type == Type::Matrix; }
+
+// The type of a declaration with sizes: ℝ^n is a vector, ℝ^{n×m} a matrix.
+Type WithDims(Type element, std::size_t dims) {
+    if (dims == 0 || element == Type::Error) return element;
+    return dims == 1 ? Type::Vector : Type::Matrix;
+}
 
 // The type of an arithmetic result: ℝ if either side is ℝ.
 Type Join(Type a, Type b) { return a == Type::Real || b == Type::Real ? Type::Real : Type::Int; }
@@ -58,7 +67,9 @@ public:
     void CheckProgram(Program& program) {
         // Where each name is first defined, to explain "used before defined".
         for (const auto& statement : program.statements) {
-            if (statement->kind == Stmt::Kind::Define ||
+            // (A subscripted definition is a label or a family element; which
+            // isn't known yet.)
+            if ((statement->kind == Stmt::Kind::Define && statement->indices.empty()) ||
                 statement->kind == Stmt::Kind::Function) {
                 laterDefinitions_.try_emplace(statement->name, statement->nameRef);
             }
@@ -67,15 +78,16 @@ public:
         for (auto& statement : program.statements) {
             CheckStatement(*statement);
         }
+        for (const auto& [name, family] : families_) {
+            program.families.push_back(family.family);
+        }
         // A function nobody calls is still checked, with ℝ for parameters
         // without a type, so its mistakes show up.
         for (auto& [name, function] : functions_) {
             if (function.definition->instances.empty()) {
                 std::vector<Type> types;
                 for (const Param& param : function.definition->params) {
-                    bool natural = false;
-                    const Type declared = SetType(param.declaredType, natural);
-                    types.push_back(param.declaredType.empty() ? Type::Real : declared);
+                    types.push_back(param.declaredType.empty() ? Type::Real : ParamType(param));
                 }
                 Instantiate(function, types);
             }
@@ -114,8 +126,15 @@ private:
         bool bareReturn = false;
     };
 
+    struct FamilyInfo {
+        Family family;
+        SourceRef ref;
+    };
+
     std::vector<Diagnostic>& diagnostics_;
     std::vector<Scope> scopes_;
+    // Families exist for the whole program, from their first element.
+    std::map<std::string, FamilyInfo> families_;
     std::map<std::string, Function> functions_;
     std::map<std::string, SourceRef> laterDefinitions_;
     // Names whose block has ended, and where they were defined.
@@ -238,6 +257,49 @@ private:
         return type;
     }
 
+    // A parameter's declared type, sizes included (ℝ^n is a vector).
+    static Type ParamType(const Param& param) {
+        bool natural = false;
+        return WithDims(SetType(param.declaredType, natural), param.dims.size());
+    }
+
+    // A declared type with sizes: reports a set that can't have them, and
+    // checks the sizes are whole numbers if `checkSizes`.
+    Type DeclaredWithDims(const std::string& set, const SourceRef& ref,
+                          const std::vector<std::shared_ptr<Expr>>& dims, bool& natural,
+                          bool checkSizes) {
+        const Type element = DeclaredType(set, ref, natural);
+        if (dims.empty() || element == Type::Error) {
+            return element;
+        }
+        if (element != Type::Real || natural) {
+            Error("Vectors and matrices hold real numbers: write ℝ^… .", ref);
+            return Type::Error;
+        }
+        if (dims.size() > 2) {
+            Error("Only vectors (ℝ^n) and matrices (ℝ^{n×m}) can be used for now.", ref);
+            return Type::Error;
+        }
+        if (checkSizes) {
+            for (const auto& size : dims) {
+                if (!size) {
+                    if (dims.size() == 2) {
+                        Error("A matrix needs both of its sizes.", ref);
+                        return Type::Error;
+                    }
+                    continue;
+                }
+                const Type type = CheckExpr(*size);
+                if (type != Type::Int && type != Type::Error) {
+                    Error("A size must be a whole number (ℤ), but this is in " +
+                              std::string(TypeName(type)) + ".",
+                          size->ref);
+                }
+            }
+        }
+        return WithDims(element, dims.size());
+    }
+
     // Can `name` be defined here? Reports why not at `ref`.
     bool CheckNewName(const std::string& name, const SourceRef& ref) {
         if (FindBuiltinFunction(name)) {
@@ -250,6 +312,12 @@ private:
                   ref);
             return false;
         }
+        if (auto family = families_.find(name); family != families_.end()) {
+            Error(name + " is already a family (" + Row(family->second.ref) +
+                      "), with elements like " + name + "_1; choose another name.",
+                  ref);
+            return false;
+        }
         if (const Variable* existing = Lookup(name)) {
             Error(name + " is already defined (" + Row(existing->ref) +
                       "). To change it, write " + name + " ← …",
@@ -259,10 +327,116 @@ private:
         return true;
     }
 
+    // Is the subscript on `name` a label, part of the name (v_{max})? It is
+    // when it is a single name that isn't defined, on a name that isn't a
+    // variable or family; otherwise it is an index.
+    bool IsLabel(const std::string& name, const std::vector<std::unique_ptr<Expr>>& items) {
+        if (items.size() != 1 || items[0]->kind != Expr::Kind::Name) {
+            return false;
+        }
+        if (Lookup(name) || families_.contains(name)) {
+            return false;
+        }
+        const std::string& label = items[0]->text;
+        return !Lookup(label) && !families_.contains(label);
+    }
+
+    // The statement's subscript is a label: move it into the name.
+    void ApplyLabel(Stmt& statement) {
+        const Expr& label = *statement.indices[0];
+        statement.name += "_" + label.text;
+        statement.ident += "_" + label.ident;
+        statement.nameRef = Span(statement.nameRef, statement.indexRef);
+        statement.indices.clear();
+    }
+
+    // Each index must be a whole number; reports one that isn't.
+    bool RequireWholeIndices(std::vector<std::unique_ptr<Expr>>& items) {
+        bool ok = true;
+        for (auto& item : items) {
+            if (item->kind == Expr::Kind::All || item->kind == Expr::Kind::Range) {
+                Error("Only a single entry can be given a value here, not a range.", item->ref);
+                ok = false;
+                continue;
+            }
+            const Type type = CheckExpr(*item);
+            if (type != Type::Int && type != Type::Error) {
+                Error("An index must be a whole number (ℤ), but this is in " +
+                          std::string(TypeName(type)) + ".",
+                      item->ref);
+                ok = false;
+            }
+            ok &= type != Type::Error;
+        }
+        return ok;
+    }
+
+    // x_i := value: an element of the family x, made on first use.
+    void CheckDefineElement(Stmt& statement) {
+        if (!statement.declaredType.empty()) {
+            Error("An element of a family can't have its own type.", statement.typeRef);
+        }
+        const Type value = statement.value ? CheckExpr(*statement.value) : Type::Error;
+        if (!RequireWholeIndices(statement.indices)) {
+            return;
+        }
+        const std::string& name = statement.name;
+        if (const Variable* variable = Lookup(name)) {
+            if (IsArray(variable->type)) {
+                Error(name + " is " + (variable->type == Type::Vector ? "a vector" : "a matrix") +
+                          ". To change an entry, write " + name + "_… ← …",
+                      statement.nameRef);
+            } else {
+                Error(name + " is already defined (" + Row(variable->ref) +
+                          ") as a single value, so it can't have elements.",
+                      statement.nameRef);
+            }
+            return;
+        }
+        if (statement.indices.size() != 1) {
+            Error("A family has one index, as in " + name + "_i.", statement.indexRef);
+            return;
+        }
+        if (value == Type::Error) {
+            return;
+        }
+        statement.access = "family";
+        auto existing = families_.find(name);
+        if (existing == families_.end()) {
+            if (FindBuiltinFunction(name) || functions_.contains(name)) {
+                Error(name + " is a function; choose another name.", statement.nameRef);
+                return;
+            }
+            Type element = value;
+            if (IsNumeric(value)) {
+                element = Type::Real;
+            } else if (value != Type::Bool && value != Type::String) {
+                Error("A family holds numbers, true/false or strings, not " +
+                          std::string(TypeName(value)) + ".",
+                      statement.value->ref);
+                return;
+            }
+            Family family{.name = name, .ident = statement.ident, .greek = statement.greek,
+                          .element = element};
+            existing = families_.emplace(name, FamilyInfo{family, statement.nameRef}).first;
+        }
+        statement.type = existing->second.family.element;
+        CheckStore(statement.type, value, name + "_…", TypeName(statement.type),
+                   statement.value->ref);
+    }
+
     void CheckDefine(Stmt& statement) {
+        if (!statement.indices.empty()) {
+            if (!IsLabel(statement.name, statement.indices)) {
+                CheckDefineElement(statement);
+                return;
+            }
+            ApplyLabel(statement);
+        }
         Type type = Type::Error;
         if (!statement.declaredType.empty()) {
-            type = DeclaredType(statement.declaredType, statement.typeRef, statement.natural);
+            type = DeclaredWithDims(statement.declaredType, statement.typeRef, statement.dims,
+                                    statement.natural, true);
         }
         if (statement.value) {
             const Type value = CheckExpr(*statement.value);
@@ -274,7 +448,8 @@ private:
                     type = Type::Error;
                 }
             } else {
-                CheckStore(type, value, statement.name, statement.declaredType.c_str(),
+                CheckStore(type, value, statement.name,
+                           IsArray(type) ? TypeName(type) : statement.declaredType.c_str(),
                            statement.value->ref);
             }
         }
@@ -284,7 +459,60 @@ private:
         }
     }
 
+    // x_i ← value: an entry of a vector or matrix, or an element of a family.
+    void CheckAssignElement(Stmt& statement) {
+        const Type value = CheckExpr(*statement.value);
+        if (!RequireWholeIndices(statement.indices)) {
+            return;
+        }
+        const std::string& name = statement.name;
+        std::size_t wanted = 1;
+        if (auto family = families_.find(name); family != families_.end()) {
+            statement.access = "family";
+            statement.type = family->second.family.element;
+        } else if (const Variable* variable = Lookup(name)) {
+            if (variable->loop) {
+                Error(name + " counts the loop, so it can't be changed inside it.",
+                      statement.nameRef);
+                return;
+            }
+            if (variable->type == Type::Vector) {
+                statement.access = "vector";
+            } else if (variable->type == Type::Matrix) {
+                statement.access = "matrix";
+                wanted = 2;
+            } else {
+                if (variable->type != Type::Error) {
+                    Error(name + " is a single value (" + TypeName(variable->type) +
+                              "), so it has no entries.",
+                          statement.nameRef);
+                }
+                return;
+            }
+            statement.type = Type::Real;
+        } else {
+            Error(name + " isn't defined yet. To define an element, write " + name + "_… := …",
+                  statement.nameRef);
+            return;
+        }
+        if (statement.indices.size() != wanted) {
+            Error(wanted == 1 ? name + " has one index, as in " + name + "_i."
+                              : name + " is a matrix, with two indices: " + name + "_{i,j}.",
+                  statement.indexRef);
+            return;
+        }
+        CheckStore(statement.type, value, name + "_…", TypeName(statement.type),
+                   statement.value->ref);
+    }
+
     void CheckAssign(Stmt& statement) {
+        if (!statement.indices.empty()) {
+            if (!IsLabel(statement.name, statement.indices)) {
+                CheckAssignElement(statement);
+                return;
+            }
+            ApplyLabel(statement);
+        }
         const Type value = CheckExpr(*statement.value);
         const Variable* variable = Lookup(statement.name);
         if (!variable) {
@@ -422,7 +650,8 @@ private:
         bool ok = true;
         for (const Param& param : statement.params) {
             if (!param.declaredType.empty()) {
-                ok &= DeclaredType(param.declaredType, param.typeRef, natural) != Type::Error;
+                ok &= DeclaredWithDims(param.declaredType, param.typeRef, param.dims, natural,
+                                       false) != Type::Error;
             }
             if (FindBuiltinFunction(param.name)) {
                 Error(param.name + " is a built-in function; choose another name.", param.ref);
@@ -437,7 +666,8 @@ private:
             }
         }
         if (!statement.declaredType.empty()) {
-            ok &= DeclaredType(statement.declaredType, statement.typeRef, natural) != Type::Error;
+            ok &= DeclaredWithDims(statement.declaredType, statement.typeRef, statement.dims,
+                                   natural, false) != Type::Error;
         }
         if (!CheckNewName(statement.name, statement.nameRef) || !ok) {
             return;
@@ -451,7 +681,7 @@ private:
         std::vector<Type> types;
         for (const Param& param : statement.params) {
             allDeclared &= !param.declaredType.empty();
-            types.push_back(SetType(param.declaredType, natural));
+            types.push_back(ParamType(param));
         }
         if (allDeclared) {
             Instantiate(function, types);
@@ -484,7 +714,8 @@ private:
         FunctionContext context{.instance = &instance, .function = &function};
         if (!definition.declaredType.empty()) {
             context.declared = true;
-            instance.result = SetType(definition.declaredType, instance.naturalResult);
+            instance.result = WithDims(SetType(definition.declaredType, instance.naturalResult),
+                                       definition.dims.size());
         }
         if (definition.value) {
             instance.value = Clone(*definition.value);
@@ -607,6 +838,10 @@ private:
             case Expr::Kind::Name: return CheckName(expr);
             case Expr::Kind::Call: return CheckCall(expr, statement);
             case Expr::Kind::Cases: return CheckCases(expr);
+            case Expr::Kind::Index: return CheckIndex(expr);
+            case Expr::Kind::All:
+                Error("* can only be used in a subscript, as in A_{i,*}.", expr.ref);
+                return Type::Error;
             case Expr::Kind::Range:
                 CheckArgs(expr);
                 Error("A range (a..b) can only be used in a for loop, for now.", expr.ref);
@@ -622,13 +857,51 @@ private:
                 if (expr.op == "¬") {
                     return RequireBool(expr, "¬") ? Type::Bool : Type::Error;
                 }
+                if (IsArray(expr.args[0]->type)) {
+                    return expr.args[0]->type;
+                }
                 return RequireNumbers(expr, expr.op) ? expr.args[0]->type : Type::Error;
             case Expr::Kind::Binary: return CheckBinary(expr);
+            case Expr::Kind::Matrix: {
+                if (!RequireNumbers(expr, "A matrix")) {
+                    return Type::Error;
+                }
+                if (expr.text == "vmatrix") {
+                    return Type::Real;  // |…| of a matrix is its determinant
+                }
+                return expr.columns == 1 ? Type::Vector : Type::Matrix;
+            }
+            case Expr::Kind::Transpose:
+                if (!IsArray(expr.args[0]->type)) {
+                    Error("⊤ turns a vector or matrix on its side; this is in " +
+                              std::string(TypeName(expr.args[0]->type)) + ".",
+                          expr.args[0]->ref);
+                    return Type::Error;
+                }
+                return Type::Matrix;
             case Expr::Kind::Fraction:
+                if (IsArray(expr.args[0]->type) && IsNumeric(expr.args[1]->type)) {
+                    return expr.args[0]->type;
+                }
                 return RequireNumbers(expr, "A fraction") ? Type::Real : Type::Error;
             case Expr::Kind::Root:
                 return RequireNumbers(expr, "A root") ? Type::Real : Type::Error;
             case Expr::Kind::Power: {
+                if (expr.args[0]->type == Type::Matrix) {
+                    if (expr.args[1]->type != Type::Int) {
+                        Error("A matrix can only be raised to a whole power (ℤ), such as A^2 or "
+                              "A^{-1}.",
+                              expr.args[1]->ref);
+                        return Type::Error;
+                    }
+                    return Type::Matrix;
+                }
+                if (expr.args[0]->type == Type::Vector) {
+                    Error("A vector can't be raised to a power. For its transpose, write ^⊤; "
+                          "for v⋅v, write v⋅v.",
+                          expr.args[0]->ref);
+                    return Type::Error;
+                }
                 if (!RequireNumbers(expr, "A power")) {
                     return Type::Error;
                 }
@@ -680,6 +953,16 @@ private:
             expr.natural = variable->natural;
             return variable->type;
         }
+        if (auto family = families_.find(expr.text); family != families_.end()) {
+            if (family->second.family.element != Type::Real) {
+                Error(expr.text + " is a family of " + TypeName(family->second.family.element) +
+                          "; use its elements, as in " + expr.text + "_1.",
+                      expr.ref);
+                return Type::Error;
+            }
+            expr.access = "family";
+            return Type::Vector;
+        }
         if (expr.text == "π" || expr.text == "e") {
             expr.kind = Expr::Kind::Constant;
             return Type::Real;
@@ -728,11 +1011,8 @@ private:
         if (op == "∧" || op == "∨" || op == "⊕") {
             return RequireBool(expr, op) ? Type::Bool : Type::Error;
         }
-        if (op == "⊙") {
-            Error("⊙ multiplies vectors and matrices, which are coming in a later version of "
-                  "M++. Use ⋅ for numbers.",
-                  expr.opRef);
-            return Type::Error;
+        if (IsArray(left) || IsArray(right) || op == "⊙" || op == "∖") {
+            return CheckArrayBinary(expr);
         }
         if (op == "+" && left == Type::String && right == Type::String) {
             Error("Strings can't be joined with + yet. To print several things, write "
@@ -750,13 +1030,244 @@ private:
         return Join(left, right);
     }
 
+    // An operator with a vector or matrix on at least one side. Sets
+    // expr.access to what the code generator should do.
+    Type CheckArrayBinary(Expr& expr) {
+        const std::string& op = expr.op;
+        const Expr& a = *expr.args[0];
+        const Expr& b = *expr.args[1];
+        const Type left = a.type;
+        const Type right = b.type;
+        auto fail = [&](const std::string& message) {
+            Error(message, expr.opRef.Empty() ? expr.ref : expr.opRef);
+            return Type::Error;
+        };
+        auto describe = [](Type type) -> std::string {
+            switch (type) {
+                case Type::Vector: return "a vector";
+                case Type::Matrix: return "a matrix";
+                case Type::Int:
+                case Type::Real: return "a number";
+                default: return std::string("something in ") + TypeName(type);
+            }
+        };
+        if (op == "+" || op == "−") {
+            if (left == right) {
+                expr.access = op == "+" ? "add" : "sub";
+                return left;
+            }
+            return fail(std::string("Can't ") + (op == "+" ? "add " : "subtract ") +
+                        describe(right) + (op == "+" ? " to " : " from ") + describe(left) +
+                        ".");
+        }
+        if (op == "⊙") {
+            if (left == right && IsArray(left)) {
+                expr.access = "hadamard";
+                return left;
+            }
+            return fail("⊙ multiplies two vectors (or two matrices) entry by entry.");
+        }
+        if (op == "∖") {
+            if (left == Type::Matrix && IsArray(right)) {
+                expr.access = "solve";
+                return right;
+            }
+            return fail("A∖b solves A⋅x = b: it needs a matrix on the left and a vector or "
+                        "matrix on the right.");
+        }
+        if (op == "/") {
+            if (IsArray(left) && IsNumeric(right)) {
+                expr.access = "divide";
+                return left;
+            }
+            return fail("Only a vector or matrix divided by a number can be written with /. "
+                        "To solve A⋅x = b, write A∖b.");
+        }
+        if (op == "mod") {
+            return fail("mod needs whole numbers.");
+        }
+        // ⋅, × and writing values next to each other.
+        if (IsNumeric(left) && IsArray(right)) {
+            expr.access = "scale";
+            return right;
+        }
+        if (IsArray(left) && IsNumeric(right)) {
+            expr.access = "scale_right";
+            return left;
+        }
+        if (left == Type::Vector && right == Type::Vector) {
+            expr.access = op == "×" ? "cross" : "dot";
+            return op == "×" ? Type::Vector : Type::Real;
+        }
+        // vᵀ⋅w is the dot product, a number.
+        if (a.kind == Expr::Kind::Transpose && a.args[0]->type == Type::Vector &&
+            right == Type::Vector) {
+            expr.access = "dot_transposed";
+            return Type::Real;
+        }
+        if (left == Type::Matrix && IsArray(right)) {
+            expr.access = "matmul";
+            return right;
+        }
+        if (left == Type::Vector && right == Type::Matrix) {
+            return fail("A vector (a column) can't be multiplied by a matrix. Did you mean "
+                        "v^⊤⋅A?");
+        }
+        return fail("Can't multiply " + describe(left) + " by " + describe(right) + ".");
+    }
+
+    // x_i, A_{i,j}, v_{2..4}, A_{i,*}; a label (v_{max}) becomes a name, and
+    // I_n, 0_n, 1_n become identity, zeros and ones.
+    Type CheckIndex(Expr& expr) {
+        Expr& base = *expr.args[0];
+        std::vector<std::unique_ptr<Expr>> items;
+        for (std::size_t i = 1; i < expr.args.size(); ++i) {
+            items.push_back(std::move(expr.args[i]));
+        }
+        expr.args.resize(1);
+        auto restore = [&] {
+            for (auto& item : items) {
+                expr.args.push_back(std::move(item));
+            }
+        };
+        if (base.kind == Expr::Kind::Name && IsLabel(base.text, items)) {
+            expr.kind = Expr::Kind::Name;
+            expr.text = base.text + "_" + items[0]->text;
+            expr.ident = base.ident + "_" + items[0]->ident;
+            expr.greek = base.greek;
+            expr.args.clear();
+            return CheckName(expr);
+        }
+        // I_n, 0_n, 0_{n×m}, 1_n: sized identity, zeros and ones.
+        const bool identity = base.kind == Expr::Kind::Name && base.text == "I" && !Lookup("I") &&
+                              !families_.contains("I");
+        const bool filled = base.kind == Expr::Kind::Number && (base.text == "0" || base.text == "1");
+        if (identity || filled) {
+            std::vector<std::unique_ptr<Expr>> sizes;
+            for (auto& item : items) {
+                if (item->kind == Expr::Kind::Binary && item->op == "×") {
+                    sizes.push_back(std::move(item->args[0]));
+                    sizes.push_back(std::move(item->args[1]));
+                } else {
+                    sizes.push_back(std::move(item));
+                }
+            }
+            expr.kind = Expr::Kind::Call;
+            expr.text = identity ? "identity" : base.text == "0" ? "zeros" : "ones";
+            expr.opRef = expr.ref;
+            expr.args = std::move(sizes);
+            if (identity && expr.args.size() != 1) {
+                Error("I_n is the n×n identity matrix: it has one size.", expr.ref);
+                return Type::Error;
+            }
+            if (expr.args.size() > 2) {
+                Error("Give one size (a vector) or two (a matrix).", expr.ref);
+                return Type::Error;
+            }
+            return CheckCall(expr, false);
+        }
+
+        restore();
+        // A family element.
+        if (base.kind == Expr::Kind::Name && !Lookup(base.text)) {
+            auto family = families_.find(base.text);
+            if (family == families_.end()) {
+                CheckName(base);
+                return Type::Error;
+            }
+            base.type = Type::Vector;
+            if (expr.args.size() != 2) {
+                Error("A family has one index, as in " + base.text + "_i.", expr.opRef);
+                return Type::Error;
+            }
+            const Type index = CheckExpr(*expr.args[1]);
+            if (index != Type::Int) {
+                if (index != Type::Error) {
+                    Error("An index must be a whole number (ℤ), but this is in " +
+                              std::string(TypeName(index)) + ".",
+                          expr.args[1]->ref);
+                }
+                return Type::Error;
+            }
+            expr.access = "family";
+            return family->second.family.element;
+        }
+
+        const Type type = CheckExpr(base);
+        if (type == Type::Error) {
+            return Type::Error;
+        }
+        if (!IsArray(type)) {
+            Error((base.kind == Expr::Kind::Name ? base.text : std::string("This")) +
+                      " is a single value (" + TypeName(type) + "), so it has no entries.",
+                  expr.opRef);
+            return Type::Error;
+        }
+        const std::size_t wanted = type == Type::Vector ? 1 : 2;
+        if (expr.args.size() - 1 != wanted) {
+            Error(type == Type::Vector ? "A vector has one index, as in v_i."
+                                       : "A matrix has two indices, as in A_{i,j}.",
+                  expr.opRef);
+            return Type::Error;
+        }
+        // Each index picks one entry (a whole number), or several (a range or *).
+        std::size_t spans = 0;
+        bool ok = true;
+        for (std::size_t i = 1; i < expr.args.size(); ++i) {
+            Expr& item = *expr.args[i];
+            if (item.kind == Expr::Kind::All) {
+                ++spans;
+                continue;
+            }
+            if (item.kind == Expr::Kind::Range) {
+                ++spans;
+                item.type = Type::Int;
+                for (auto& bound : item.args) {
+                    const Type bound_type = CheckExpr(*bound);
+                    if (bound_type != Type::Int && bound_type != Type::Error) {
+                        Error("A range of indices needs whole numbers (ℤ).", bound->ref);
+                        ok = false;
+                    }
+                }
+                continue;
+            }
+            const Type index = CheckExpr(item);
+            if (index != Type::Int && index != Type::Error) {
+                Error("An index must be a whole number (ℤ), but this is in " +
+                          std::string(TypeName(index)) + ".",
+                      item.ref);
+                ok = false;
+            }
+            ok &= index != Type::Error;
+        }
+        if (!ok) {
+            return Type::Error;
+        }
+        expr.access = type == Type::Vector ? "vector" : "matrix";
+        if (spans == 0) {
+            return Type::Real;
+        }
+        if (type == Type::Vector || spans == 1) {
+            return Type::Vector;
+        }
+        return Type::Matrix;
+    }
+
     Type CheckCompare(Expr& expr) {
         bool ok = true;
         for (std::size_t i = 0; i < expr.ops.size(); ++i) {
             const std::string& op = expr.ops[i];
             const Type a = expr.args[i]->type;
             const Type b = expr.args[i + 1]->type;
-            if (op == "=" || op == "≠") {
+            if (IsArray(a) || IsArray(b)) {
+                if (a != b || (op != "=" && op != "≠" && op != "≈")) {
+                    Error(a != b ? "Can't compare " + std::string(TypeName(a)) + " with " +
+                                       TypeName(b) + "."
+                                 : op + " can't compare vectors or matrices; = ≠ and ≈ can.",
+                          Span(expr.args[i]->ref, expr.args[i + 1]->ref));
+                    ok = false;
+                }
+            } else if (op == "=" || op == "≠") {
                 if (!(IsNumeric(a) && IsNumeric(b)) && a != b) {
                     Error("Can't compare " + std::string(TypeName(a)) + " with " +
                               TypeName(b) + ".",
@@ -800,9 +1311,9 @@ private:
                 types.push_back(argument);
                 continue;
             }
-            bool natural = false;
-            const Type declared = SetType(param.declaredType, natural);
-            ok &= CheckStore(declared, argument, param.name, param.declaredType.c_str(),
+            const Type declared = ParamType(param);
+            ok &= CheckStore(declared, argument, param.name,
+                             IsArray(declared) ? TypeName(declared) : param.declaredType.c_str(),
                              expr.args[i]->ref);
             types.push_back(declared);
         }
@@ -887,6 +1398,61 @@ private:
         return failed ? Type::Error : type;
     }
 
+    // Functions of vectors and matrices (Builtins: Result::Special).
+    Type CheckSpecialCall(Expr& expr) {
+        const std::string& name = expr.text;
+        auto want = [&](std::size_t i, Type type, const char* what) {
+            const Type actual = expr.args[i]->type;
+            if (actual == type || (type == Type::Real && IsNumeric(actual))) {
+                return true;
+            }
+            Error(name + " needs " + what + ", but this is in " + TypeName(actual) + ".",
+                  expr.args[i]->ref);
+            return false;
+        };
+        if (name == "det" || name == "trace" || name == "inverse" || name == "eigenvalues" ||
+            name == "eigenvectors" || name == "rank" || name == "rows" || name == "columns") {
+            if (!want(0, Type::Matrix, "a matrix")) return Type::Error;
+            if (name == "inverse" || name == "eigenvectors") return Type::Matrix;
+            if (name == "eigenvalues") return Type::Vector;
+            if (name == "rank" || name == "rows" || name == "columns") return Type::Int;
+            return Type::Real;
+        }
+        if (name == "transpose") {
+            if (!IsArray(expr.args[0]->type)) {
+                return want(0, Type::Matrix, "a vector or matrix") ? Type::Matrix : Type::Error;
+            }
+            return Type::Matrix;
+        }
+        if (name == "length") {
+            return want(0, Type::Vector, "a vector") ? Type::Int : Type::Error;
+        }
+        if (name == "norm") {
+            const Type type = expr.args[0]->type;
+            if (!IsArray(type) && !IsNumeric(type)) {
+                return want(0, Type::Vector, "a vector, matrix or number") ? Type::Real
+                                                                           : Type::Error;
+            }
+            return Type::Real;
+        }
+        if (name == "solve") {
+            if (!want(0, Type::Matrix, "a matrix first")) return Type::Error;
+            if (!IsArray(expr.args[1]->type)) {
+                return want(1, Type::Vector, "a vector or matrix second") ? Type::Vector
+                                                                          : Type::Error;
+            }
+            return expr.args[1]->type;
+        }
+        // identity(n), zeros(n), zeros(n, m), ones(n), ones(n, m)
+        bool ok = true;
+        for (std::size_t i = 0; i < expr.args.size(); ++i) {
+            ok &= want(i, Type::Int, "whole-number sizes (ℤ)");
+        }
+        if (!ok) return Type::Error;
+        if (name == "identity") return Type::Matrix;
+        return expr.args.size() == 1 ? Type::Vector : Type::Matrix;
+    }
+
     Type CheckCall(Expr& expr, bool statement) {
         if (Function* user = LookupFunction(expr.text)) {
             return CheckUserCall(*user, expr, statement);
@@ -932,7 +1498,17 @@ private:
         if (CheckArgs(expr) == Type::Error) {
             return function->result == BuiltinFunction::Result::Void ? Type::Void : Type::Error;
         }
+        if (function->result == BuiltinFunction::Result::Special) {
+            return CheckSpecialCall(expr);
+        }
+        for (const auto& arg : expr.args) {
+            if (IsArray(arg->type) && expr.text == "abs") {
+                Error("For the length of a vector, write ‖v‖ (\\norm) or norm(v).", arg->ref);
+                return Type::Error;
+            }
+        }
         switch (function->result) {
+            case BuiltinFunction::Result::Special: break;
             case BuiltinFunction::Result::Void:
                 if (!statement) {
                     Error(expr.text + "(…) doesn't give a value.", expr.ref);

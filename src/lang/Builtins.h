@@ -14,6 +14,7 @@ struct BuiltinFunction {
         Real,     // sin, ln, ...
         Int,      // floor, ceil, round
         Numeric,  // abs, min, max: ℤ if every argument is ℤ, else ℝ
+        Special,  // vectors and matrices: det, solve, ... (see the checker)
     };
 
     std::string_view name;

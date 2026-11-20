@@ -8,6 +8,7 @@
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
+#include "math/SubNode.h"
 #include "math/SymbolNode.h"
 #include "math/TableNode.h"
 #include "math/TextNode.h"
@@ -267,7 +268,11 @@ private:
             token.shape = Token::Shape::Delimited;
             token.text = std::string(DelimNode::CommandName(delimited->GetKind()));
             token.slots.push_back(Slot(delimited->GetArgument(), {index, 0}));
+        } else if (const auto* subscript = dynamic_cast<const SubNode*>(&node)) {
+            token.shape = Token::Shape::Subscript;
+            token.slots.push_back(Slot(subscript->GetIndex(), {index, 0}));
         } else if (const auto* matrix = dynamic_cast<const MatrixNode*>(&node)) {
+            token.text = matrix->GetEnvironment();
             token.shape = matrix->GetEnvironment() == "cases" ? Token::Shape::Cases
                                                              : Token::Shape::Matrix;
             for (std::size_t row = 0; row < matrix->RowCount(); ++row) {

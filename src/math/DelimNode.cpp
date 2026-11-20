@@ -17,6 +17,8 @@ node_style::Delimiter DelimiterFor(DelimNode::Kind kind) {
         return node_style::Delimiter::FLOOR;
     case DelimNode::Kind::CEIL:
         return node_style::Delimiter::CEIL;
+    case DelimNode::Kind::NORM:
+        return node_style::Delimiter::DOUBLE_BAR;
     case DelimNode::Kind::ABS:
         break;
     }
@@ -133,6 +135,8 @@ std::string_view DelimNode::CommandName(Kind kind) {
         return "floor";
     case Kind::CEIL:
         return "ceil";
+    case Kind::NORM:
+        return "norm";
     case Kind::ABS:
         break;
     }
@@ -140,7 +144,7 @@ std::string_view DelimNode::CommandName(Kind kind) {
 }
 
 std::optional<DelimNode::Kind> DelimNode::KindFromCommand(std::string_view name) {
-    for (Kind kind : {Kind::ABS, Kind::FLOOR, Kind::CEIL}) {
+    for (Kind kind : {Kind::ABS, Kind::FLOOR, Kind::CEIL, Kind::NORM}) {
         if (CommandName(kind) == name) {
             return kind;
         }

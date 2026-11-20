@@ -14,6 +14,8 @@ const char* CppType(Type type) {
         case Type::Real: return "double";
         case Type::Bool: return "bool";
         case Type::String: return "std::string";
+        case Type::Vector: return "mpp::Vector";
+        case Type::Matrix: return "mpp::Matrix";
         default: return "auto";
     }
 }
@@ -49,6 +51,11 @@ public:
     GeneratedCode Run(const Program& program) {
         body_ = "";
         indent_ = 2;
+        // Families exist for the whole program.
+        for (const Family& family : program.families) {
+            Line("mpp::Family<" + std::string(CppType(family.element)) + "> " +
+                 Variable(family.ident, family.greek) + ";");
+        }
         Statements(program.statements);
         GeneratedCode code;
         code.cpp = "#include <mpp/mpp.hpp>\n"
@@ -114,21 +121,46 @@ private:
         const std::string name = Variable(statement.ident, statement.greek);
         switch (statement.kind) {
             case Stmt::Kind::Define:
-                if (statement.value) {
+                if (statement.access == "family") {
+                    Line(name + ".define(" + Loc(statement.indexRef) + ", " +
+                         Expression(*statement.indices[0]) + ", " +
+                         Converted(*statement.value, statement.type, false, statement.name) +
+                         ", " + Quote(statement.name) + ");");
+                } else if (statement.value) {
                     Line(std::string(CppType(statement.type)) + " " + name + " = " +
-                         Converted(*statement.value, statement.type, statement.natural,
-                                   statement.name) +
+                         Sized(statement,
+                               Converted(*statement.value, statement.type, statement.natural,
+                                         statement.name)) +
                          ";");
+                } else if (!statement.dims.empty() && statement.dims[0]) {
+                    // ℝ^n starts as zeros.
+                    std::string code = "mpp::zeros(" + Loc(statement.typeRef);
+                    for (const auto& size : statement.dims) {
+                        code += ", " + Expression(*size);
+                    }
+                    Line(std::string(CppType(statement.type)) + " " + name + " = " + code + ");");
                 } else {
                     Line(std::string(CppType(statement.type)) + " " + name + "{};");
                 }
                 break;
-            case Stmt::Kind::Assign:
-                Line(name + " = " +
-                     Converted(*statement.value, statement.type, statement.natural,
-                               statement.name) +
-                     ";");
+            case Stmt::Kind::Assign: {
+                const std::string value = Converted(*statement.value, statement.type,
+                                                    statement.natural, statement.name);
+                if (statement.access == "family") {
+                    Line(name + ".set(" + Loc(statement.indexRef) + ", " +
+                         Expression(*statement.indices[0]) + ", " + value + ", " +
+                         Quote(statement.name) + ");");
+                } else if (!statement.access.empty()) {
+                    std::string code = "mpp::at(" + Loc(statement.indexRef) + ", " + name;
+                    for (const auto& index : statement.indices) {
+                        code += ", " + Expression(*index);
+                    }
+                    Line(code + ") = " + value + ";");
+                } else {
+                    Line(name + " = " + value + ";");
+                }
                 break;
+            }
             case Stmt::Kind::Expr:
                 Line("(void)" + Expression(*statement.value) + ";");
                 break;
@@ -164,6 +196,18 @@ private:
                 break;
             case Stmt::Kind::Function: break;
         }
+    }
+
+    // A value for a variable declared with sizes (v ∈ ℝ^3), checked to fit.
+    std::string Sized(const Stmt& statement, std::string value) {
+        if (statement.dims.empty() || !statement.dims[0]) {
+            return value;
+        }
+        std::string code = "mpp::sized(" + Loc(statement.value->ref) + ", " + value;
+        for (const auto& size : statement.dims) {
+            code += ", " + Expression(*size);
+        }
+        return code + ", " + Quote(statement.name) + ")";
     }
 
     // if (…) { … } else if (…) { … } else { … }
@@ -270,11 +314,19 @@ private:
             case Expr::Kind::Infinity: return "mpp::infinity";
             case Expr::Kind::Constant:
                 return expr.text == "π" ? "std::numbers::pi" : "std::numbers::e";
-            case Expr::Kind::Name: return Variable(expr.ident, expr.greek);
+            case Expr::Kind::Name:
+                if (expr.access == "family") {
+                    return Variable(expr.ident, expr.greek) + ".vector(" + Loc(expr.ref) + ", " +
+                           Quote(expr.text) + ")";
+                }
+                return Variable(expr.ident, expr.greek);
             case Expr::Kind::Unary: {
                 const Expr& operand = *expr.args[0];
                 if (expr.op == "¬") return "(!" + Expression(operand) + ")";
                 if (expr.op == "+") return Expression(operand);
+                if (expr.type == Type::Vector || expr.type == Type::Matrix) {
+                    return std::string(CppType(expr.type)) + "(-" + Expression(operand) + ")";
+                }
                 if (expr.type == Type::Int) {
                     return "mpp::neg(" + Loc(expr.ref) + ", " + Expression(operand) + ")";
                 }
@@ -282,9 +334,21 @@ private:
             }
             case Expr::Kind::Binary: return Binary(expr);
             case Expr::Kind::Fraction:
+                if (expr.type == Type::Vector || expr.type == Type::Matrix) {
+                    return "mpp::divide(" + Loc(expr.args[1]->ref) + ", " +
+                           Expression(*expr.args[0]) + ", " + Real(*expr.args[1]) + ")";
+                }
                 return "mpp::div(" + Loc(expr.args[1]->ref) + Args(expr, true) + ")";
             case Expr::Kind::Power:
+                if (expr.type == Type::Matrix) {
+                    return "mpp::pow(" + Loc(expr.ref) + Args(expr, false) + ")";
+                }
                 return "mpp::pow(" + Loc(expr.ref) + Args(expr, expr.type == Type::Real) + ")";
+            case Expr::Kind::Matrix: return MatrixLiteral(expr);
+            case Expr::Kind::Index: return Index(expr);
+            case Expr::Kind::Transpose:
+                return "mpp::transpose(" + Expression(*expr.args[0]) + ")";
+            case Expr::Kind::All: return "mpp::all";
             case Expr::Kind::Root:
                 if (expr.args.size() == 1) {
                     return "mpp::sqrt(" + Loc(expr.ref) + Args(expr, true) + ")";
@@ -298,7 +362,73 @@ private:
         return "";
     }
 
+    std::string MatrixLiteral(const Expr& expr) {
+        std::string values;
+        for (std::size_t i = 0; i < expr.args.size(); ++i) {
+            values += (i ? ", " : "") + Real(*expr.args[i]);
+        }
+        if (expr.type == Type::Vector) {
+            return "mpp::vector({" + values + "})";
+        }
+        const std::string matrix = "mpp::matrix(" + std::to_string(expr.rows) + ", " +
+                                   std::to_string(expr.columns) + ", {" + values + "})";
+        if (expr.text == "vmatrix") {
+            return "mpp::det(" + Loc(expr.ref) + ", " + matrix + ")";
+        }
+        return matrix;
+    }
+
+    std::string Index(const Expr& expr) {
+        const Expr& base = *expr.args[0];
+        if (expr.access == "family") {
+            return Variable(base.ident, base.greek) + ".get(" + Loc(expr.ref) + ", " +
+                   Expression(*expr.args[1]) + ", " + Quote(base.text) + ")";
+        }
+        std::string code = "mpp::at(" + Loc(expr.opRef) + ", " + Expression(base);
+        for (std::size_t i = 1; i < expr.args.size(); ++i) {
+            const Expr& item = *expr.args[i];
+            if (item.kind == Expr::Kind::Range) {
+                code += ", mpp::range(" + Loc(item.ref);
+                for (const auto& bound : item.args) {
+                    code += ", " + Expression(*bound);
+                }
+                code += ")";
+            } else {
+                code += ", " + Expression(item);
+            }
+        }
+        return code + ")";
+    }
+
+    // An operator on vectors or matrices (the checker set expr.access).
+    std::string ArrayBinary(const Expr& expr) {
+        const std::string& how = expr.access;
+        const Expr& left = *expr.args[0];
+        const Expr& right = *expr.args[1];
+        const std::string at = Loc(expr.opRef.Empty() ? expr.ref : expr.opRef);
+        if (how == "scale") {
+            return "mpp::scale(" + Real(left) + ", " + Expression(right) + ")";
+        }
+        if (how == "scale_right") {
+            return "mpp::scale(" + Real(right) + ", " + Expression(left) + ")";
+        }
+        if (how == "divide") {
+            return "mpp::divide(" + Loc(right.ref) + ", " + Expression(left) + ", " +
+                   Real(right) + ")";
+        }
+        if (how == "dot_transposed") {
+            return "mpp::dot(" + at + ", " + Expression(*left.args[0]) + ", " +
+                   Expression(right) + ")";
+        }
+        const char* function = how == "matmul" ? "mul" : how.c_str();
+        return std::string("mpp::") + function + "(" + at + ", " + Expression(left) + ", " +
+               Expression(right) + ")";
+    }
+
     std::string Binary(const Expr& expr) {
+        if (!expr.access.empty()) {
+            return ArrayBinary(expr);
+        }
         const std::string& op = expr.op;
         if (op == "∧" || op == "∨" || op == "⊕") {
             const char* cpp = op == "∧" ? " && " : op == "∨" ? " || " : " != ";
@@ -339,6 +469,14 @@ private:
     }
 
     std::string Compare(const Expr& expr) {
+        const Type first = expr.args[0]->type;
+        if (expr.ops.size() == 1 && (first == Type::Vector || first == Type::Matrix)) {
+            const std::string a = Expression(*expr.args[0]);
+            const std::string b = Expression(*expr.args[1]);
+            const std::string& op = expr.ops[0];
+            if (op == "≈") return "mpp::approx(" + a + ", " + b + ")";
+            return std::string(op == "≠" ? "(!" : "(") + "mpp::equal(" + a + ", " + b + "))";
+        }
         bool anyReal = false;
         for (const auto& arg : expr.args) {
             anyReal |= arg->type == Type::Real;
@@ -407,6 +545,14 @@ private:
             return code + ")";
         }
         const BuiltinFunction* function = FindBuiltinFunction(expr.text);
+        if (function->result == BuiltinFunction::Result::Special) {
+            // Sizes stay whole; a number given to norm becomes ℝ.
+            std::string code = "mpp::" + expr.text + "(" + Loc(expr.ref);
+            for (const auto& arg : expr.args) {
+                code += ", " + (expr.text == "norm" ? Real(*arg) : Expression(*arg));
+            }
+            return code + ")";
+        }
         const bool real = function->result != BuiltinFunction::Result::Numeric ||
                           expr.type == Type::Real;
         return "mpp::" + expr.text + "(" + Loc(expr.ref) + Args(expr, real) + ")";

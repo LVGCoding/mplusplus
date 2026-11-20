@@ -10,6 +10,7 @@
 #include "math/ExpoNode.h"
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
+#include "math/SubNode.h"
 #include "math/TextNode.h"
 #include "raylib.h"
 
@@ -235,6 +236,29 @@ void FileMpp::SplitRow(std::size_t row) {
     MarkEdited();
 }
 
+// True if the cursor is between the quotes of a string in its line.
+bool FileMpp::InsideString() const {
+    const CursorPath linePath = Prefix(cursorPos, 2);
+    const auto* line = dynamic_cast<const LineNode*>(NodeAt(linePath));
+    if (!line) {
+        return false;
+    }
+    const std::size_t child = cursorPos[cursorPos.size() - 2];
+    bool inside = false;
+    for (std::size_t i = 0; i <= child && i < line->ChildCount(); ++i) {
+        const auto* text = dynamic_cast<const TextNode*>(line->GetChild(i));
+        if (!text) {
+            continue;
+        }
+        const std::string& value = text->GetText();
+        const std::size_t end = i == child ? std::min(cursorPos.back(), value.size()) : value.size();
+        for (std::size_t k = 0; k < end; ++k) {
+            inside ^= value[k] == '"';
+        }
+    }
+    return inside;
+}
+
 bool FileMpp::PressKey(int key,
                        bool shift,
                        const TextMeasure* measure) {
@@ -424,6 +448,9 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
     if (codepoint == U'\\') {
         mathMenuRequested_ = true;
         return true;
+    }
+    if (codepoint == U'_' && !InsideString()) {
+        return InsertNode(std::make_unique<SubNode>(std::make_unique<LineNode>()));
     }
     if (codepoint == U'^') {
         return InsertNode(std::make_unique<ExpoNode>(

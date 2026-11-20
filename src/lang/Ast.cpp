@@ -12,6 +12,8 @@ std::unique_ptr<Expr> Clone(const Expr& expr) {
     copy->op = expr.op;
     copy->ops = expr.ops;
     copy->opRef = expr.opRef;
+    copy->rows = expr.rows;
+    copy->columns = expr.columns;
     for (const auto& arg : expr.args) {
         copy->args.push_back(Clone(*arg));
     }
@@ -31,6 +33,11 @@ std::unique_ptr<Stmt> Clone(const Stmt& statement) {
     copy->nameRef = statement.nameRef;
     copy->declaredType = statement.declaredType;
     copy->typeRef = statement.typeRef;
+    copy->dims = statement.dims;
+    for (const auto& index : statement.indices) {
+        copy->indices.push_back(Clone(*index));
+    }
+    copy->indexRef = statement.indexRef;
     if (statement.value) {
         copy->value = Clone(*statement.value);
     }

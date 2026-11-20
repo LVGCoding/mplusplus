@@ -264,6 +264,33 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 - Editor: Subscript node; `‖·‖`; labels and indices drawn differently.
 - Done when: `linsolve.mpp`, `alpha_family.mpp` pass.
 
+**Status: done**, except drawing labels and indices differently. Notes:
+- Editor: typing `_` inserts a `SubNode`, saved as LaTeX `_{…}` (inside a
+  string `_` stays text, saved as `\_`). `\norm{x}` draws ‖x‖. `cases` and
+  the delimiters are in the math popup.
+- Types: `Vector` (ℝⁿ) and `Matrix` (ℝ^{n×m}), always of reals, Eigen
+  `VectorXd`/`MatrixXd` at run time. Sizes are checked when the program runs,
+  not at compile time: `v ∈ ℝ^3 := …` checks the value's size once; `ℝ^*` is
+  any length. A one-column matrix literal is a vector; a `vmatrix` is its
+  determinant.
+- Operators: `+ −` same shapes; number⋅array; `A⋅B`, `A⋅v`; `v⋅w` dot,
+  `v×w` cross, `vᵀ⋅w` dot; `⊙` entry by entry; `/` by a number; `A∖b`
+  solves (least squares if not square); `A^k`, `A^{-1}`; `A^⊤`. `= ≠ ≈`
+  compare whole arrays.
+- Built-ins: det, trace, rank, inverse, transpose, solve, eigenvalues
+  (real only, ascending), eigenvectors (unit columns), norm, length, rows,
+  columns, identity, zeros, ones; also `I_n`, `0_n`, `0_{n×m}`, `1_n`.
+- Subscripts: `v_i`, `A_{i,j}`, `A_{i,*}` (row as a vector), `A_{*,j}`,
+  `v_{2..4}`, `A_{1..2,*}`; entries can be assigned with `←`. A subscript is
+  a label when it is a single undefined name on a name that isn't a variable
+  or family (`v_{max}` is the variable `v_max`); otherwise an index.
+- Families: `α_n := …` on an unused name makes a family (numbers are always
+  ℝ); elements are defined once with `:=` and changed with `←`; reading a
+  missing one is a runtime error. The bare name (`α`) is the family as a
+  vector, if it is numbered 1..n. Families exist for the whole program.
+- Reals print with 12 significant digits (`0.1 + 0.2` is `0.3`). Vectors
+  print as `(1, 2)`, matrices as bracketed rows starting on their own line.
+
 ### Phase 4: sets and big operators
 - Lang: set literals, ranges as sets, ∪ ∩ ∖ Δ ∈ ∉ ⊂; set-builder; Σ/Π/⋃/⋂ with
   limits or `x ∈ S`; ∀/∃ with one separator; `|S|`.

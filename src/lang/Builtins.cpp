@@ -9,7 +9,7 @@ using R = BuiltinFunction::Result;
 
 // The runtime (runtime/include/mpp/scalar.hpp) has a function of the same
 // name in namespace mpp for each of these, except print.
-constexpr std::array<BuiltinFunction, 22> FUNCTIONS = {{
+constexpr std::array<BuiltinFunction, 37> FUNCTIONS = {{
     {"print", 0, -1, R::Void},
     {"sin"}, {"cos"}, {"tan"},
     {"arcsin"}, {"arccos"}, {"arctan"},
@@ -23,6 +23,22 @@ constexpr std::array<BuiltinFunction, 22> FUNCTIONS = {{
     {"sign", 1, 1, R::Int},
     {"min", 2, -1, R::Numeric},
     {"max", 2, -1, R::Numeric},
+    // Vectors and matrices.
+    {"det", 1, 1, R::Special},
+    {"trace", 1, 1, R::Special},
+    {"rank", 1, 1, R::Special},
+    {"inverse", 1, 1, R::Special},
+    {"transpose", 1, 1, R::Special},
+    {"solve", 2, 2, R::Special},
+    {"eigenvalues", 1, 1, R::Special},
+    {"eigenvectors", 1, 1, R::Special},
+    {"norm", 1, 1, R::Special},
+    {"length", 1, 1, R::Special},
+    {"rows", 1, 1, R::Special},
+    {"columns", 1, 1, R::Special},
+    {"identity", 1, 1, R::Special},
+    {"zeros", 1, 2, R::Special},
+    {"ones", 1, 2, R::Special},
 }};
 }  // namespace
 

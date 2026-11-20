@@ -11,10 +11,11 @@
 //   \abs{x}    |x|   absolute value
 //   \floor{x}  ⌊x⌋   rounded down
 //   \ceil{x}   ⌈x⌉   rounded up
+//   \norm{x}   ‖x‖   length of a vector
 // The cursor path is [0, ...] into the argument.
 class DelimNode : public EditorNode {
 public:
-    enum class Kind { ABS, FLOOR, CEIL };
+    enum class Kind { ABS, FLOOR, CEIL, NORM };
 
 private:
     Kind kind_ = Kind::ABS;
@@ -66,7 +67,7 @@ public:
         return argument_.get();
     }
 
-    // The LaTeX command for each kind ("abs", "floor", "ceil"), and back.
+    // The LaTeX command for each kind ("abs", "floor", "ceil", "norm"), and back.
     static std::string_view CommandName(Kind kind);
     static std::optional<Kind> KindFromCommand(std::string_view name);
 };

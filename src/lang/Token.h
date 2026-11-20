@@ -29,9 +29,11 @@ struct Token {
         Root,      // slots: {argument} or {argument, index}
         Power,     // slots: {base, exponent}; an empty base raises what comes before
         Group,     // slots: {contents}, a bare {...} group from the source
-        Matrix,    // slots: the cells, row by row (rowLengths: cells per row)
+        Matrix,    // slots: the cells, row by row (rowLengths: cells per row);
+                   // text: the environment ("pmatrix", "vmatrix", ...)
         Cases,     // slots: value, condition, value, condition, ... (rowLengths)
-        Delimited, // text "abs", "floor" or "ceil"; slots: {contents}
+        Delimited, // text "abs", "floor", "ceil" or "norm"; slots: {contents}
+        Subscript, // slots: {index}; belongs to what comes before it
         Graph,
         Table,
     };

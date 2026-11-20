@@ -41,6 +41,7 @@ std::string Describe(const Token& token) {
                 case Shape::Root: return "a root";
                 case Shape::Power: return "a power";
                 case Shape::Matrix: return "a matrix";
+                case Shape::Subscript: return "a subscript";
                 case Shape::Graph: return "a graph";
                 case Shape::Table: return "a table";
                 default: return "a group";
@@ -283,8 +284,13 @@ private:
             }
         }
         const Token& second = PeekAt(1);
+        auto definesOrAssigns = [](const Token& op) {
+            return op.IsOp(":=") || op.IsOp("∈") || op.IsOp("←");
+        };
         if (first.kind == Kind::Word && !IsKeyword(first.text) &&
-            (second.IsOp(":=") || second.IsOp("∈") || second.IsOp("←"))) {
+            (definesOrAssigns(second) ||
+             (second.kind == Kind::Structure && second.shape == Shape::Subscript &&
+              definesOrAssigns(PeekAt(2))))) {
             return ParseDefineOrAssign();
         }
         if (first.kind == Kind::Word && !IsKeyword(first.text) && second.IsOp("(") &&
@@ -382,13 +388,58 @@ private:
         return false;
     }
 
-    // A set name after ∈ or →, such as ℝ.
-    const Token& ExpectType(const char* context) {
-        const Token& type = Peek();
-        if (!IsBuiltinSet(type)) {
-            Unexpected(type, context);
+    struct TypeSpec {
+        std::string set;
+        SourceRef ref;
+        std::vector<std::shared_ptr<Expr>> dims;
+    };
+
+    // A type after ∈ or →: a set such as ℝ, or ℝ^n, ℝ^{n×m}, ℝ^*.
+    TypeSpec ParseType(const char* context) {
+        const Token& token = Peek();
+        TypeSpec type;
+        if (IsBuiltinSet(token)) {
+            Advance();
+            type.set = token.text;
+            type.ref = token.ref;
+            // ℝ followed by a power typed after it.
+            const Token& next = Peek();
+            if (next.kind == Kind::Structure && next.shape == Shape::Power &&
+                next.slots[0].empty()) {
+                const Token& power = Advance();
+                type.dims = ParseDims(power.slots[1], power);
+                type.ref = Span(token.ref, power.ref);
+            }
+            return type;
         }
-        return Advance();
+        // A power whose base is the set: \exp{ℝ}{n}.
+        if (token.kind == Kind::Structure && token.shape == Shape::Power &&
+            token.slots[0].size() == 1 && IsBuiltinSet(token.slots[0][0])) {
+            Advance();
+            type.set = token.slots[0][0].text;
+            type.ref = token.ref;
+            type.dims = ParseDims(token.slots[1], token);
+            return type;
+        }
+        Unexpected(token, context);
+    }
+
+    // The sizes in the exponent of ℝ^…: n, n×m, or * for any length.
+    std::vector<std::shared_ptr<Expr>> ParseDims(const std::vector<Token>& slot,
+                                                 const Token& owner) {
+        std::vector<std::shared_ptr<Expr>> dims;
+        if (slot.size() == 1 && slot[0].IsOp("⋅")) {
+            dims.push_back(nullptr);
+            return dims;
+        }
+        auto size = ParseSlot(slot, owner, "size");
+        if (size->kind == Expr::Kind::Binary && size->op == "×") {
+            dims.push_back(std::move(size->args[0]));
+            dims.push_back(std::move(size->args[1]));
+        } else {
+            dims.push_back(std::move(size));
+        }
+        return dims;
     }
 
     std::unique_ptr<Stmt> ParseFunction() {
@@ -411,9 +462,10 @@ private:
                             .greek = parameter.greek, .ref = parameter.ref};
                 if (Peek().IsOp("∈")) {
                     Advance();
-                    const Token& type = ExpectType("Expected a type such as ℝ or ℤ after ∈");
-                    param.declaredType = type.text;
+                    TypeSpec type = ParseType("Expected a type such as ℝ or ℤ after ∈");
+                    param.declaredType = type.set;
                     param.typeRef = type.ref;
+                    param.dims = std::move(type.dims);
                 }
                 statement->params.push_back(std::move(param));
                 if (!Peek().IsOp(",")) {
@@ -427,9 +479,10 @@ private:
         statement->ref = Span(name.ref, close.ref);
         if (Peek().IsOp("→")) {
             Advance();
-            const Token& type = ExpectType("Expected the type of the result after →, such as ℝ");
-            statement->declaredType = type.text;
+            TypeSpec type = ParseType("Expected the type of the result after →, such as ℝ");
+            statement->declaredType = type.set;
             statement->typeRef = type.ref;
+            statement->dims = std::move(type.dims);
         }
         if (Peek().IsOp(":=")) {
             const Token& define = Advance();
@@ -453,6 +506,11 @@ private:
         statement->ident = name.ident;
         statement->greek = name.greek;
         statement->nameRef = name.ref;
+        if (Peek().kind == Kind::Structure && Peek().shape == Shape::Subscript) {
+            const Token& subscript = Advance();
+            statement->indices = ParseSubscript(subscript);
+            statement->indexRef = subscript.ref;
+        }
 
         const Token& op = Advance();
         if (op.IsOp("←")) {
@@ -461,9 +519,10 @@ private:
         } else {
             statement->kind = Stmt::Kind::Define;
             if (op.IsOp("∈")) {
-                const Token& type = ExpectType("Expected a type such as ℝ or ℤ after ∈");
-                statement->declaredType = type.text;
+                TypeSpec type = ParseType("Expected a type such as ℝ or ℤ after ∈");
+                statement->declaredType = type.set;
                 statement->typeRef = type.ref;
+                statement->dims = std::move(type.dims);
                 if (Peek().IsOp(":=")) {
                     Advance();
                     statement->value = ParseExpression();
@@ -476,6 +535,34 @@ private:
                                         : statement->typeRef);
         return statement;
     }
+
+    // The items of a subscript, separated by commas; * alone is All.
+    std::vector<std::unique_ptr<Expr>> ParseSubscript(const Token& subscript) {
+        const std::vector<Token>& slot = subscript.slots[0];
+        if (slot.empty()) {
+            Fail("The subscript is empty.", subscript.ref);
+        }
+        SyntaxParser parser(slot, diagnostics_, subscript.ref);
+        return parser.ParseSubscriptItems();
+    }
+
+public:
+    std::vector<std::unique_ptr<Expr>> ParseSubscriptItems() {
+        std::vector<std::unique_ptr<Expr>> items;
+        for (;;) {
+            if (Peek().IsOp("⋅") && (PeekAt(1).IsOp(",") || PeekAt(1).kind == Kind::End)) {
+                items.push_back(MakeExpr(Expr::Kind::All, Advance().ref));
+            } else {
+                items.push_back(ParseExpression());
+            }
+            if (Peek().kind == Kind::End) {
+                return items;
+            }
+            Expect(",", "Expected ',' or the end of the subscript");
+        }
+    }
+
+private:
 
     // --- Expressions, lowest precedence first ------------------------------------
 
@@ -594,7 +681,8 @@ private:
             case Kind::Op:
                 return token.text == "(" || token.text == "∞";
             case Kind::Structure:
-                return !(token.shape == Shape::Power && token.slots[0].empty());
+                return !(token.shape == Shape::Power && token.slots[0].empty()) &&
+                       token.shape != Shape::Subscript;
             default:
                 return false;
         }
@@ -634,7 +722,7 @@ private:
         for (;;) {
             const Token& next = Peek();
             if (next.IsOp("⋅") || next.IsOp("×") || next.IsOp("/") || next.IsWord("mod") ||
-                next.IsOp("⊙")) {
+                next.IsOp("⊙") || next.IsOp("∖")) {
                 const Token& op = Advance();
                 SkipNewlines();
                 left = Binary(op.text, op.ref, std::move(left), ParseUnary());
@@ -671,6 +759,19 @@ private:
         return expr;
     }
 
+    // base^{exponent}, or base^⊤ (the transpose).
+    std::unique_ptr<Expr> PowerOrTranspose(std::unique_ptr<Expr> base, const Token& power,
+                                           const SourceRef& ref) {
+        const std::vector<Token>& exponent = power.slots[1];
+        if (exponent.size() == 1 && exponent[0].IsOp("⊤")) {
+            auto transpose = MakeExpr(Expr::Kind::Transpose, ref);
+            transpose->opRef = exponent[0].ref;
+            transpose->args.push_back(std::move(base));
+            return transpose;
+        }
+        return Power(std::move(base), ParseSlot(exponent, power, "exponent"), ref);
+    }
+
     std::unique_ptr<Expr> ParsePostfix() {
         auto expr = ParsePrimary();
         for (;;) {
@@ -678,9 +779,17 @@ private:
             if (next.kind == Kind::Structure && next.shape == Shape::Power &&
                 next.slots[0].empty()) {
                 const Token& power = Advance();
-                auto exponent = ParseSlot(power.slots[1], power, "exponent");
                 const SourceRef ref = Span(expr->ref, power.ref);
-                expr = Power(std::move(expr), std::move(exponent), ref);
+                expr = PowerOrTranspose(std::move(expr), power, ref);
+            } else if (next.kind == Kind::Structure && next.shape == Shape::Subscript) {
+                const Token& subscript = Advance();
+                auto index = MakeExpr(Expr::Kind::Index, Span(expr->ref, subscript.ref));
+                index->opRef = subscript.ref;
+                index->args.push_back(std::move(expr));
+                for (auto& item : ParseSubscript(subscript)) {
+                    index->args.push_back(std::move(item));
+                }
+                expr = std::move(index);
             } else if (next.IsOp("^")) {
                 Advance();
                 // Right-associative: 2^3^2 is 2^(3^2).
@@ -807,6 +916,25 @@ private:
         return call;
     }
 
+    // A matrix of numbers; a single column is a vector. A vmatrix (bars) is
+    // its determinant.
+    std::unique_ptr<Expr> ParseMatrix(const Token& token) {
+        auto expr = MakeExpr(Expr::Kind::Matrix, token.ref);
+        expr->text = token.text;
+        expr->opRef = token.ref;
+        expr->rows = token.rowLengths.size();
+        expr->columns = token.rowLengths.empty() ? 0 : token.rowLengths.front();
+        for (std::size_t length : token.rowLengths) {
+            if (length != expr->columns) {
+                Fail("Every row of a matrix needs the same number of entries.", token.ref);
+            }
+        }
+        for (const auto& cell : token.slots) {
+            expr->args.push_back(ParseSlot(cell, token, "matrix entry"));
+        }
+        return expr;
+    }
+
     // Rows of "value & condition"; the last condition may be "otherwise".
     std::unique_ptr<Expr> ParseCases(const Token& token) {
         auto expr = MakeExpr(Expr::Kind::Cases, token.ref);
@@ -854,8 +982,7 @@ private:
                          "first box.", token.ref);
                 }
                 auto base = ParseSlot(token.slots[0], token, "base");
-                auto exponent = ParseSlot(token.slots[1], token, "exponent");
-                return Power(std::move(base), std::move(exponent), token.ref);
+                return PowerOrTranspose(std::move(base), token, token.ref);
             }
             case Shape::Group: {
                 auto inner = ParseSlot(token.slots[0], token, "group");
@@ -872,8 +999,9 @@ private:
                 return call;
             }
             case Shape::Cases: return ParseCases(token);
-            case Shape::Matrix:
-                Fail("Matrices can't be run yet: they're coming in a later version of M++.",
+            case Shape::Matrix: return ParseMatrix(token);
+            case Shape::Subscript:
+                Fail("This subscript has nothing before it: put a name in front, as in x_i.",
                      token.ref);
             case Shape::Graph:
             case Shape::Table:

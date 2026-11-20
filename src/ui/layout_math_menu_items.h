@@ -10,6 +10,7 @@
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
+#include "math/SubNode.h"
 #include "math/SymbolNode.h"
 #include "math/TableNode.h"
 
@@ -120,6 +121,10 @@ inline const std::vector<MathMenuItem>& MathMenuItems() {
             {"\\abs", MakeMathDelim(DelimNode::Kind::ABS)},
             {"\\floor", MakeMathDelim(DelimNode::Kind::FLOOR)},
             {"\\ceil", MakeMathDelim(DelimNode::Kind::CEIL)},
+            {"\\norm", MakeMathDelim(DelimNode::Kind::NORM)},
+            {"\\sub", [] () -> std::unique_ptr<EditorNode> {
+                 return std::make_unique<SubNode>(std::make_unique<LineNode>());
+             }},
             {"\\graph", MakeMathGraph, MakeMathGraphPreview},
             {"\\table", MakeMathTable, MakeMathTablePreview},
         };

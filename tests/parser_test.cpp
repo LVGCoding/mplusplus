@@ -287,5 +287,6 @@ INSTANTIATE_TEST_SUITE_P(
                       "\\frac{a}",
                       "stray ] and &",
                       "\\{typed braces\\}",
+                      "x_{i} + \\norm{v} and \"a\\_b\"",
                       "\\begin{matrix}a\\end{pmatrix}",
                       "trailing backslash \\"));

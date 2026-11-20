@@ -216,6 +216,8 @@ private:
     // Enter with the cursor directly in `row`: split it, keeping the
     // indentation (one level more after a "{").
     void SplitRow(std::size_t row);
+    // True if the cursor is between the quotes of a string in its line.
+    bool InsideString() const;
     // The diagnostic under the mouse (from the last overlay drawn) and where
     // the mouse was, for its tooltip.
     mutable std::optional<std::size_t> hoveredDiagnostic_;

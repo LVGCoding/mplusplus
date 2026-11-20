@@ -66,6 +66,18 @@ TEST(EditText,
 }
 
 TEST(EditText,
+     UnderscoreInsertsASubscriptExceptInAString) {
+    auto file = MakeDocument("x", {0, 0, 1});
+    ASSERT_TRUE(file.TypeCharacter(U'_'));
+    ASSERT_TRUE(file.TypeCharacter(U'i'));
+    EXPECT_EQ(file.ContentText(), "x_{i}");
+
+    file = MakeDocument("\"a", {0, 0, 2});
+    ASSERT_TRUE(file.TypeCharacter(U'_'));
+    EXPECT_EQ(file.ContentText(), "\"a\\_");
+}
+
+TEST(EditText,
      BracesAreTypedAsEscapedText) {
     auto file = MakeDocument("a", {0, 0, 1});
     EXPECT_TRUE(file.TypeCharacter(U'{'));

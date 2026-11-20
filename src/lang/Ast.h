@@ -12,7 +12,9 @@ namespace lang {
 
 // Types of values. Error marks an expression that already has a reported
 // problem, so one mistake doesn't cause a cascade of messages.
-enum class Type { Error, Void, Int, Real, Bool, String };
+// Vector is a column of reals (ℝⁿ), Matrix a grid of reals (ℝ^{n×m}); their
+// sizes are checked when the program runs.
+enum class Type { Error, Void, Int, Real, Bool, String, Vector, Matrix };
 
 // How a type is written in messages: ℤ, ℝ, 𝔹, Σ*.
 const char* TypeName(Type type);
@@ -34,6 +36,10 @@ struct Expr {
         Call,     // text: function name, args
         Range,    // args {first, last} or {first, step, last}: a..b, a..s..b
         Cases,    // args: the values; conditions: one per value, null for "otherwise"
+        Matrix,   // args: the cells row by row; rows, columns; text: the environment
+        Index,    // args {base, index...}: x_i, A_{i,j}, v_{2..4}; see `op` below
+        All,      // * in a subscript: A_{i,*} is row i
+        Transpose,// args {base}: A^⊤
     };
 
     Kind kind;
@@ -47,6 +53,9 @@ struct Expr {
     std::vector<std::unique_ptr<Expr>> conditions;
     // Where an operator itself is, e.g. the "/" in a / b.
     SourceRef opRef;
+    // Matrix: its size. A single column is a vector.
+    std::size_t rows = 0;
+    std::size_t columns = 0;
 
     // Set by the checker.
     Type type = Type::Error;
@@ -55,6 +64,11 @@ struct Expr {
     // For calls of functions defined in the document: the C++ function for
     // these argument types (see FunctionInstance).
     std::string function;
+    // Set by the checker for Index: "family" (an element of a family, α_n),
+    // "vector" or "matrix" (an entry or a slice). A label (v_{max}) is turned
+    // into a Name instead, and I_n, 0_n, 1_n into calls.
+    // For a Name: "family" when it is a whole family, used as a vector.
+    std::string access;
 };
 
 struct Stmt;
@@ -69,6 +83,8 @@ struct Param {
     // The declared set ("ℝ"), or empty to take the argument's type.
     std::string declaredType;
     SourceRef typeRef;
+    // Sizes after the set: ℝ^n has one, ℝ^{n×m} two; null for *.
+    std::vector<std::shared_ptr<Expr>> dims;
 };
 
 // A function is checked once for each combination of argument types it is
@@ -109,9 +125,18 @@ struct Stmt {
     SourceRef nameRef;
 
     // Define: the declared type (∈ T), as written ("ℝ"), or empty if
-    // inferred. Function: the declared result type (→ T).
+    // inferred. Function: the declared result type (→ T). With dims for
+    // vectors and matrices, as in Param.
     std::string declaredType;
     SourceRef typeRef;
+    std::vector<std::shared_ptr<Expr>> dims;
+
+    // Define, Assign: a subscript on the name (x_i := …, A_{i,j} ← …).
+    // The checker decides what it is (`access`): "family", "vector",
+    // "matrix", or a label, which it turns into part of the name.
+    std::vector<std::unique_ptr<Expr>> indices;
+    SourceRef indexRef;
+    std::string access;
 
     // Define: null for a declaration without a value (x ∈ ℝ). If/While: the
     // condition. For: the range. Return: null for a bare return.
@@ -130,8 +155,19 @@ struct Stmt {
     bool natural = false;
 };
 
+// A family of values named by an index, made by defining its elements:
+// α_1 := 1, α_2 := 1. Families of numbers hold ℝ.
+struct Family {
+    std::string name;
+    std::string ident;
+    bool greek = false;
+    Type element = Type::Error;
+};
+
 struct Program {
     Block statements;
+    // Set by the checker; they exist for the whole program.
+    std::vector<Family> families;
 };
 
 // Deep copies, without anything the checker set.

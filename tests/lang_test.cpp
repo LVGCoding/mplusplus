@@ -38,7 +38,8 @@ std::string DescribeTokens(const std::vector<Token>& tokens) {
             case Token::Kind::End: break;
             case Token::Kind::Structure: {
                 static const char* SHAPES[] = {"?",      "frac",  "root",  "pow",   "group",
-                                               "matrix", "cases", "delim", "graph", "table"};
+                                               "matrix", "cases", "delim", "sub",   "graph",
+                                               "table"};
                 text += SHAPES[static_cast<int>(token.shape)];
                 if (token.shape == Token::Shape::Delimited) {
                     text += ":" + token.text;
@@ -88,6 +89,11 @@ std::string DescribeExpr(const lang::Expr& expr) {
         case K::Root: return list("√");
         case K::Call: return list(expr.text);
         case K::Range: return list("..");
+        case K::Matrix: return list(expr.text + " " + std::to_string(expr.rows) + "×" +
+                                    std::to_string(expr.columns));
+        case K::Index: return list("_");
+        case K::All: return "*";
+        case K::Transpose: return list("⊤");
         case K::Cases: {
             std::string text = "(cases";
             for (std::size_t i = 0; i < expr.args.size(); ++i) {
@@ -113,9 +119,24 @@ std::string DescribeStatement(const lang::Stmt& statement) {
     using K = lang::Stmt::Kind;
     switch (statement.kind) {
         case K::Define: {
-            std::string text =
-                statement.name +
-                (statement.declaredType.empty() ? "" : " ∈ " + statement.declaredType);
+            std::string text = statement.name;
+            if (!statement.indices.empty()) {
+                text += "_{";
+                for (std::size_t i = 0; i < statement.indices.size(); ++i) {
+                    text += (i ? "," : "") + DescribeExpr(*statement.indices[i]);
+                }
+                text += "}";
+            }
+            if (!statement.declaredType.empty()) {
+                text += " ∈ " + statement.declaredType;
+                if (!statement.dims.empty()) {
+                    text += "^";
+                    for (std::size_t i = 0; i < statement.dims.size(); ++i) {
+                        text += (i ? "×" : "") +
+                                (statement.dims[i] ? DescribeExpr(*statement.dims[i]) : "*");
+                    }
+                }
+            }
             if (statement.value) {
                 text += " := " + DescribeExpr(*statement.value);
             }
@@ -358,9 +379,57 @@ TEST(Parse, EmptySlotsAreErrors) {
     EXPECT_EQ(ParseExpression("\\frac{}{2}"), "error: The numerator is empty.");
 }
 
-TEST(Parse, NotYetSupported) {
-    EXPECT_NE(ParseStatements("A := \\begin{pmatrix}1&2\\end{pmatrix}").find("Matrices"),
-              std::string::npos);
+TEST(Lower, SubscriptsAndMatrices) {
+    EXPECT_EQ(Lower("x_{i+1}"), "x sub[i + 1] ⏎");
+    EXPECT_EQ(Lower("\\begin{pmatrix}1&2\\end{pmatrix}"), "matrix[1 | 2] ⏎");
+}
+
+TEST(Parse, VectorsAndMatrices) {
+    EXPECT_EQ(ParseExpression("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}"),
+              "(print (pmatrix 2×2 1 2 3 4))");
+    EXPECT_EQ(ParseExpression("A_{i,*} + v_{2..n}"), "(print (+ (_ A i *) (_ v (.. 2 n))))");
+    EXPECT_EQ(ParseExpression("A\\exp{}{\\top} \\cdot x_{1}\\exp{}{2}"),
+              "(print (⋅ (⊤ A) (^ (_ x 1) 2)))");
+    EXPECT_EQ(ParseExpression("A \\setminus b"), "(print (∖ A b))");
+    EXPECT_EQ(ParseStatements("v \\in \\mathbb{R}\\exp{}{3}"), "v ∈ ℝ^3");
+    EXPECT_EQ(ParseStatements("A \\in \\exp{\\mathbb{R}}{n \\times m}"), "A ∈ ℝ^n×m");
+    EXPECT_EQ(ParseStatements("v \\in \\mathbb{R}\\exp{}{*}"), "v ∈ ℝ^*");
+    EXPECT_EQ(ParseStatements("\\alpha_{n} := 1"), "α_{n} := 1");
+    EXPECT_EQ(ParseExpression("\\begin{pmatrix}1&2\\\\3\\end{pmatrix}"),
+              "error: Every row of a matrix needs the same number of entries.");
+}
+
+TEST(Check, VectorsAndMatrices) {
+    const std::string setup = "A := \\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}\n"
+                              "v := \\begin{pmatrix}1\\\\2\\end{pmatrix}\n";
+    EXPECT_EQ(FirstError(setup + "print(A \\cdot v, v \\cdot v, 2A, A\\exp{}{-1}, A_{1,*})"), "");
+    EXPECT_EQ(FirstError(setup + "print(A + v)"), "Can't add a vector to a matrix.");
+    EXPECT_EQ(FirstError(setup + "print(v \\cdot A)"),
+              "A vector (a column) can't be multiplied by a matrix. Did you mean v^⊤⋅A?");
+    EXPECT_EQ(FirstError(setup + "print(A_{1})"), "A matrix has two indices, as in A_{i,j}.");
+    EXPECT_EQ(FirstError(setup + "print(v_{1.5})"),
+              "An index must be a whole number (ℤ), but this is in ℝ.");
+    EXPECT_EQ(FirstError(setup + "print(A < A)"),
+              "< can't compare vectors or matrices; = ≠ and ≈ can.");
+    EXPECT_EQ(FirstError(setup + "print(det(v))"), "det needs a matrix, but this is in ℝ^n.");
+    EXPECT_EQ(FirstError("n \\in \\mathbb{Z}\\exp{}{3}"),
+              "Vectors and matrices hold real numbers: write ℝ^… .");
+    EXPECT_EQ(FirstError("x := 2\nprint(x_{1})"), "x is a single value (ℤ), so it has no entries.");
+    EXPECT_EQ(FirstError("print(I_{3} + 0_{3 \\times 3}, 1_{2})"), "");
+}
+
+TEST(Check, SubscriptsAreLabelsOrIndices) {
+    // An undefined name in the subscript is part of the name.
+    EXPECT_EQ(FirstError("v_{max} := 3\nprint(v_{max})"), "");
+    EXPECT_EQ(FirstError("v_{max} := 3\nprint(v)"), "v isn't defined.");
+    // A defined name or a number makes it an index: an element of a family.
+    EXPECT_EQ(FirstError("x_{1} := 3\nn := 1\nprint(x_{n}, x)"), "");
+    EXPECT_EQ(FirstError("x := 1\nx_{1} := 3"),
+              "x is already defined (row 1) as a single value, so it can't have elements.");
+    EXPECT_EQ(FirstError("s_{1} := \"a\"\nprint(s)"),
+              "s is a family of Σ*; use its elements, as in s_1.");
+    EXPECT_EQ(FirstError("x_{1} := 3\nx := 2"),
+              "x is already a family (row 1), with elements like x_1; choose another name.");
 }
 
 TEST(Lower, BracesDelimitersAndCases) {

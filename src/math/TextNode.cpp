@@ -86,12 +86,13 @@ TextNode::GetSize() {
 }
 
 std::string TextNode::ToText() const {
-    // Typed braces (blocks in M++ programs) are saved as \{ and \} so they
-    // don't open or close a LaTeX group; the parser reads them back as text.
+    // Typed braces (blocks in M++ programs) and underscores (in strings) are
+    // saved as \{ \} \_ so they aren't read back as a group or a subscript;
+    // the parser reads them back as text.
     std::string text;
     text.reserve(text_.size());
     for (char c : text_) {
-        if (c == '{' || c == '}') {
+        if (c == '{' || c == '}' || c == '_') {
             text += '\\';
         }
         text += c;

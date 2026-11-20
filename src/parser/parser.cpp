@@ -9,6 +9,7 @@
 #include "math/MatrixNode.h"
 #include "math/Options.h"
 #include "math/SqrtNode.h"
+#include "math/SubNode.h"
 #include "math/SymbolNode.h"
 #include "math/TableNode.h"
 #include "math/TextNode.h"
@@ -20,7 +21,7 @@
 namespace {
 bool IsDelimiter(char character) {
     return character == '{' || character == '}' || character == '[' || character == ']' ||
-           character == '&';
+           character == '&' || character == '_';
 }
 
 bool IsSpace(char character) {
@@ -111,7 +112,15 @@ private:
             const std::string& token = Peek();
             std::unique_ptr<EditorNode> node;
 
-            if (token == "{") {
+            if (token == "_") {
+                // _{index}: a subscript. A lone _ stays text.
+                ++position_;
+                if (auto index = ParseBracedGroup()) {
+                    push(std::make_unique<SubNode>(std::make_unique<LineNode>(std::move(*index))));
+                    continue;
+                }
+                --position_;
+            } else if (token == "{") {
                 if (auto group = ParseBracedGroup()) {
                     push(std::make_unique<LineNode>(std::move(*group), true));
                     continue;
@@ -157,8 +166,8 @@ private:
 
             if (node) {
                 push(std::move(node));
-            } else if (token == "\\{" || token == "\\}") {
-                // A brace typed as text (see TextNode::ToText).
+            } else if (token == "\\{" || token == "\\}" || token == "\\_") {
+                // A brace or underscore typed as text (see TextNode::ToText).
                 pendingText += token[1];
                 ++position_;
             } else {
