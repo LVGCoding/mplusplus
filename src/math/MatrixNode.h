@@ -10,7 +10,8 @@
 
 // \begin{matrix} a & b \\ c & d \end{matrix}
 // Also used for the pmatrix/bmatrix/Bmatrix/vmatrix/Vmatrix variants, and for
-// cases (a left brace, rows of "value & condition").
+// cases (a left brace, rows of "value & condition"), and angle (⟨…⟩, a struct:
+// one field per row, or several separated by commas).
 class MatrixNode : public EditorNode {
 public:
     using Row = std::vector<std::unique_ptr<EditorNode>>;

@@ -2,6 +2,41 @@
 
 namespace lang {
 
+std::string FieldInfo::TagValue(const std::string& tag) const {
+    for (const Tag& t : tags) {
+        if (t.name == tag) {
+            return t.args.empty() ? "" : t.args[0];
+        }
+    }
+    return "";
+}
+
+bool FieldInfo::HasTag(const std::string& tag) const {
+    for (const Tag& t : tags) {
+        if (t.name == tag) return true;
+    }
+    return false;
+}
+
+const FieldInfo* TypeInfo::Field(const std::string& name) const {
+    for (const FieldInfo& field : fields) {
+        if (field.name == name) return &field;
+    }
+    return nullptr;
+}
+
+bool SameType(const Type& a, const Type& b) {
+    if (a.kind != b.kind) return false;
+    switch (a.kind) {
+        case Type::List: return SameType(a.info->element, b.info->element);
+        case Type::Map:
+            return SameType(a.info->element, b.info->element) &&
+                   SameType(a.info->key, b.info->key);
+        case Type::Struct: return a.info == b.info;
+        default: return true;
+    }
+}
+
 std::unique_ptr<Expr> Clone(const Expr& expr) {
     auto copy = std::make_unique<Expr>();
     copy->kind = expr.kind;
@@ -16,6 +51,7 @@ std::unique_ptr<Expr> Clone(const Expr& expr) {
     copy->varIdent = expr.varIdent;
     copy->varGreek = expr.varGreek;
     copy->varRef = expr.varRef;
+    copy->fields = expr.fields;
     copy->rows = expr.rows;
     copy->columns = expr.columns;
     for (const auto& arg : expr.args) {
@@ -38,6 +74,11 @@ std::unique_ptr<Stmt> Clone(const Stmt& statement) {
     copy->declaredType = statement.declaredType;
     copy->typeRef = statement.typeRef;
     copy->dims = statement.dims;
+    copy->mapKey = statement.mapKey;
+    copy->list = statement.list;
+    copy->choices = statement.choices;
+    copy->member = statement.member;
+    copy->memberRef = statement.memberRef;
     for (const auto& index : statement.indices) {
         copy->indices.push_back(Clone(*index));
     }

@@ -8,8 +8,13 @@ namespace lang {
 
 namespace {
 
-const char* CppType(Type type) {
-    switch (type) {
+std::string CppType(const Type& type) {
+    switch (type.kind) {
+        case Type::Struct: return type.info->cppName;
+        case Type::List: return "mpp::List<" + CppType(type.info->element) + ">";
+        case Type::Map:
+            return "mpp::Map<" + CppType(type.info->key) + ", " + CppType(type.info->element) +
+                   ">";
         case Type::Int: return "std::int64_t";
         case Type::Real: return "double";
         case Type::Bool: return "bool";
@@ -55,6 +60,9 @@ public:
     GeneratedCode Run(const Program& program) {
         body_ = "";
         indent_ = 2;
+        for (const auto& info : program.structs) {
+            StructDefinition(*info);
+        }
         // Families exist for the whole program.
         for (const Family& family : program.families) {
             Line("mpp::Family<" + std::string(CppType(family.element)) + "> " +
@@ -109,7 +117,7 @@ private:
 
     // `value` converted to `type` (ℤ to ℝ) and checked if it must be in ℕ.
     std::string Converted(const Expr& value, Type type, bool natural, const std::string& name) {
-        std::string code = type == Type::Real ? Real(value) : Expression(value);
+        std::string code = As(value, type);
         if (natural) {
             code = "mpp::natural(" + Loc(value.ref) + ", " + code + ", " + Quote(name) + ")";
         }
@@ -125,6 +133,19 @@ private:
         const std::string name = Variable(statement.ident, statement.greek);
         switch (statement.kind) {
             case Stmt::Kind::Define:
+                if (statement.access == "type") {
+                    break;  // a struct type, written at the start
+                }
+                if (statement.access == "map" || statement.access == "list") {
+                    ElementAssign(statement, name);
+                    break;
+                }
+                if (statement.choices && !statement.value) {
+                    // x ∈ {"a", "b"} starts as the first choice.
+                    Line(CppType(statement.type) + " " + name + " = " +
+                         As(*statement.choices->args[0], statement.type) + ";");
+                    break;
+                }
                 if (statement.access == "family") {
                     Line(name + ".define(" + Loc(statement.indexRef) + ", " +
                          Expression(*statement.indices[0]) + ", " +
@@ -132,9 +153,10 @@ private:
                          ", " + Quote(statement.name) + ");");
                 } else if (statement.value) {
                     Line(std::string(CppType(statement.type)) + " " + name + " = " +
-                         Sized(statement,
-                               Converted(*statement.value, statement.type, statement.natural,
-                                         statement.name)) +
+                         Chosen(statement,
+                                Sized(statement,
+                                      Converted(*statement.value, statement.type,
+                                                statement.natural, statement.name))) +
                          ";");
                 } else if (!statement.dims.empty() && statement.dims[0]) {
                     // ℝ^n starts as zeros.
@@ -148,8 +170,18 @@ private:
                 }
                 break;
             case Stmt::Kind::Assign: {
-                const std::string value = Converted(*statement.value, statement.type,
-                                                    statement.natural, statement.name);
+                if (!statement.member.empty()) {
+                    Line(name + "." + MemberName(statement) + " = " +
+                         As(*statement.value, statement.type) + ";");
+                    break;
+                }
+                if (statement.access == "map" || statement.access == "list") {
+                    ElementAssign(statement, name);
+                    break;
+                }
+                const std::string value = Chosen(
+                    statement, Converted(*statement.value, statement.type, statement.natural,
+                                         statement.name));
                 if (statement.access == "family") {
                     Line(name + ".set(" + Loc(statement.indexRef) + ", " +
                          Expression(*statement.indices[0]) + ", " + value + ", " +
@@ -194,6 +226,76 @@ private:
                 break;
             case Stmt::Kind::Function: break;
         }
+    }
+
+    // A struct type: its fields, how it prints (text()), and for a list of
+    // them printed as a table, its columns (from the @tags) and cells.
+    void StructDefinition(const TypeInfo& info) {
+        Line("struct " + info.cppName + " {");
+        ++indent_;
+        std::string text = "std::string(\"⟨\")";
+        std::string columns;
+        std::string cells;
+        for (std::size_t i = 0; i < info.fields.size(); ++i) {
+            const FieldInfo& field = info.fields[i];
+            const std::string member = Variable(field.ident, field.greek);
+            Line(CppType(field.type) + " " + member + "{};");
+            text += " + " + Quote((i ? ", " : "") + field.name + " = ") + " + mpp::to_text(" +
+                    member + ")";
+            const std::string label =
+                field.HasTag("label") ? field.TagValue("label") : field.name;
+            columns += std::string(i ? ", " : "") + "mpp::Column{.label = " + Quote(label) +
+                       ", .align = " + Quote(field.TagValue("align")) +
+                       ", .filler = " + Quote(field.TagValue("filler")) +
+                       ", .format = " + Quote(field.TagValue("format")) +
+                       ", .prefix = " + Quote(field.TagValue("prefix")) +
+                       ", .postfix = " + Quote(field.TagValue("postfix")) +
+                       ", .unit = " + Quote(field.TagValue("unit")) +
+                       ", .hidden = " + (field.HasTag("hidden") ? "true" : "false") + "}";
+            cells += std::string(i ? ", " : "") + "mpp::cell(" + member + ", c[" +
+                     std::to_string(i) + "])";
+        }
+        Line("std::string text() const { return " + text + " + \"⟩\"; }");
+        Line("bool operator==(const " + info.cppName + "&) const = default;");
+        Line("static std::vector<mpp::Column> columns() { return {" + columns + "}; }");
+        Line("std::vector<std::string> cells() const { const auto c = columns(); return {" +
+             cells + "}; }");
+        --indent_;
+        Line("};");
+    }
+
+    // A field's @default(…) as C++ (the checker made sure it fits the type).
+    static std::string DefaultValue(const FieldInfo& field) {
+        const std::string value = field.TagValue("default");
+        if (field.type == Type::String) return "std::string(" + Quote(value) + ")";
+        if (field.type == Type::Int) return "std::int64_t(" + value + ")";
+        if (field.type == Type::Real) return "double(" + value + ")";
+        return value;
+    }
+
+    // m_{key} ← v, L_i ← v
+    void ElementAssign(const Stmt& statement, const std::string& name) {
+        const std::string value = As(*statement.value, statement.type);
+        const std::string& index = Expression(*statement.indices[0]);
+        if (statement.access == "map") {
+            Line(name + ".set(" + index + ", " + value + ");");
+        } else {
+            Line(name + ".at(" + Loc(statement.indexRef) + ", " + index + ") = " + value + ";");
+        }
+    }
+
+    // A value for a variable with choices (x ∈ {"a", "b"}), checked to be one.
+    std::string Chosen(const Stmt& statement, std::string value) {
+        if (!statement.choices) {
+            return value;
+        }
+        return "mpp::one_of(" + Loc(statement.value->ref) + ", " + value + ", " +
+               Expression(*statement.choices) + ", " + Quote(statement.name) + ")";
+    }
+
+    static std::string MemberName(const Stmt& statement) {
+        // The field's ident is its name (fields are plain words).
+        return Variable(statement.member, false);
     }
 
     // A value for a variable declared with sizes (v ∈ ℝ^3), checked to fit.
@@ -279,7 +381,7 @@ private:
         }
     }
 
-    static const char* ResultType(Type type) {
+    static std::string ResultType(const Type& type) {
         return type == Type::Void ? "void" : CppType(type);
     }
 
@@ -361,6 +463,35 @@ private:
             case Expr::Kind::Builder: return Builder(expr);
             case Expr::Kind::BigOp: return BigOp(expr);
             case Expr::Kind::Quantifier: return Quantifier(expr);
+            case Expr::Kind::TypeName:
+            case Expr::Kind::StructType: return "";
+            case Expr::Kind::StructValue: return StructValue(expr);
+            case Expr::Kind::ListOf: return CppType(expr.type) + "{}";
+            case Expr::Kind::List: {
+                const Type& element = expr.type.info->element;
+                std::string code = CppType(expr.type) + "(std::vector<" + CppType(element) + ">{";
+                for (std::size_t i = 0; i < expr.args.size(); ++i) {
+                    code += (i ? ", " : "") + As(*expr.args[i], element);
+                }
+                return code + "})";
+            }
+            case Expr::Kind::Member:
+                return "(" + Expression(*expr.args[0]) + ")." + Variable(expr.text, false);
+            case Expr::Kind::Method: {
+                const Expr& list = *expr.args[0];
+                return Expression(list) + ".push(" +
+                       As(*expr.args[1], list.type.info->element) + ")";
+            }
+            case Expr::Kind::Template: {
+                std::string code = "(std::string(" + Quote(expr.ops[0]) + ")";
+                for (std::size_t i = 0; i < expr.args.size(); ++i) {
+                    code += " + mpp::to_text(" + Expression(*expr.args[i]) + ")";
+                    if (i + 1 < expr.ops.size() && !expr.ops[i + 1].empty()) {
+                        code += " + " + Quote(expr.ops[i + 1]);
+                    }
+                }
+                return code + ")";
+            }
         }
         return "";
     }
@@ -373,6 +504,15 @@ private:
         }
         if (expr.type == Type::EmptySet && type != Type::EmptySet) {
             return std::string(CppType(type)) + "{}";
+        }
+        if (type == Type::Struct && expr.type == Type::Struct && expr.type.info != type.info) {
+            // The same fields in another struct type: copy them across.
+            std::string code = "[&](const auto& s) { return " + type.info->cppName + "{";
+            for (std::size_t i = 0; i < type.info->fields.size(); ++i) {
+                const FieldInfo& field = type.info->fields[i];
+                code += std::string(i ? ", " : "") + "s." + Variable(field.ident, field.greek);
+            }
+            return code + "}; }(" + Expression(expr) + ")";
         }
         const std::string code = Expression(expr);
         if (expr.type != type &&
@@ -389,7 +529,7 @@ private:
             return "mpp::Set<std::int64_t>{}";
         }
         if (domain.kind != Expr::Kind::Range) {
-            return Expression(domain);
+            return domain.type == Type::Map ? Expression(domain) + ".keys()" : Expression(domain);
         }
         const bool real = domain.type == Type::SetReal;
         std::string code = "mpp::range(" + Loc(domain.ref);
@@ -409,6 +549,24 @@ private:
     std::string ForBound(const Expr& expr) {
         return "for (const auto " + Variable(expr.varIdent, expr.varGreek) + " : " +
                Domain(*expr.args[0]) + ")";
+    }
+
+    // ⟨name = "Bob", age = 4⟩ as the struct type the checker gave it, its
+    // fields in the type's order (left out ones take their @default).
+    std::string StructValue(const Expr& expr) {
+        const TypeInfo& info = *expr.type.info;
+        std::string code = info.cppName + "{";
+        for (std::size_t i = 0; i < info.fields.size(); ++i) {
+            const FieldInfo& field = info.fields[i];
+            std::string value;
+            for (std::size_t k = 0; k < expr.ops.size(); ++k) {
+                if (expr.ops[k] == field.name) {
+                    value = As(*expr.args[k], field.type);
+                }
+            }
+            code += (i ? ", " : "") + (value.empty() ? DefaultValue(field) : value);
+        }
+        return code + "}";
     }
 
     std::string SetLiteral(const Expr& expr) {
@@ -491,6 +649,11 @@ private:
                 test += ")";
             } else if (right.type == Type::Vector) {
                 test = "mpp::contains(" + Expression(right) + ", " + Real(left) + ")";
+            } else if (right.type == Type::Map) {
+                test = Expression(right) + ".has(" + As(left, right.type.info->key) + ")";
+            } else if (right.type == Type::List) {
+                test = "mpp::contains(" + Expression(right) + ", " +
+                       As(left, right.type.info->element) + ")";
             } else {
                 test = "mpp::contains(" + Expression(right) + ", " + Expression(left) + ")";
             }
@@ -530,6 +693,14 @@ private:
         if (expr.access == "family") {
             return Variable(base.ident, base.greek) + ".get(" + Loc(expr.ref) + ", " +
                    Expression(*expr.args[1]) + ", " + Quote(base.text) + ")";
+        }
+        if (expr.access == "map") {
+            return "(" + Expression(base) + ").get(" + Loc(expr.ref) + ", " +
+                   As(*expr.args[1], base.type.info->key) + ")";
+        }
+        if (expr.access == "list") {
+            return "(" + Expression(base) + ").at(" + Loc(expr.ref) + ", " +
+                   Expression(*expr.args[1]) + ")";
         }
         std::string code = "mpp::at(" + Loc(expr.opRef) + ", " + Expression(base);
         for (std::size_t i = 1; i < expr.args.size(); ++i) {
@@ -577,8 +748,18 @@ private:
             return "mpp::" + expr.access + "(" + As(*expr.args[0], expr.type) + ", " +
                    As(*expr.args[1], expr.type) + ")";
         }
+        if (expr.access == "repeat") {
+            const bool textFirst = expr.args[0]->type == Type::String;
+            const Expr& text = *expr.args[textFirst ? 0 : 1];
+            const Expr& times = *expr.args[textFirst ? 1 : 0];
+            return "mpp::repeat(" + Loc(expr.ref) + ", " + Expression(text) + ", " +
+                   Expression(times) + ")";
+        }
         if (!expr.access.empty()) {
             return ArrayBinary(expr);
+        }
+        if (expr.type == Type::String) {
+            return "(" + Expression(*expr.args[0]) + " + " + Expression(*expr.args[1]) + ")";
         }
         const std::string& op = expr.op;
         if (op == "∧" || op == "∨" || op == "⊕") {
@@ -626,6 +807,14 @@ private:
 
     std::string Compare(const Expr& expr) {
         const Type first = expr.args[0]->type;
+        if (expr.ops.size() == 1 && expr.ops[0] == "in") {
+            return "mpp::contains_text(" + Expression(*expr.args[1]) + ", " +
+                   Expression(*expr.args[0]) + ")";
+        }
+        if (expr.ops.size() == 1 && first == Type::Struct) {
+            return std::string(expr.ops[0] == "≠" ? "!" : "") + "(" +
+                   Expression(*expr.args[0]) + " == " + As(*expr.args[1], first) + ")";
+        }
         if (expr.ops.size() == 1) {
             const std::string& op = expr.ops[0];
             if (op == "∈" || op == "∉" || op == "⊂" || op == "⊆" || IsSetType(first) ||

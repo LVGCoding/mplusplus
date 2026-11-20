@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace mpp {
 
@@ -56,11 +57,25 @@ inline std::string to_text(const Eigen::MatrixXd& m) {
     return m.rows() == 0 ? "[]" : text;
 }
 
-// Adds one argument to the line being printed. A matrix starts on a row of
-// its own, so its columns line up.
+// A struct written by M++ (it has text()), e.g. ⟨name = Bob, age = 20⟩.
+template <class T>
+    requires requires(const T& value) {
+        { value.text() } -> std::convertible_to<std::string>;
+    }
+std::string to_text(const T& value) {
+    return value.text();
+}
+
+// Values that print on lines of their own: matrices, and tables
+// (specialized in data.hpp).
+template <class T>
+struct starts_own_line : std::is_same<T, Eigen::MatrixXd> {};
+
+// Adds one argument to the line being printed. A matrix or table starts on a
+// row of its own, so its columns line up.
 template <class T>
 void append(std::string& line, const T& value) {
-    if constexpr (std::is_same_v<T, Eigen::MatrixXd>) {
+    if constexpr (starts_own_line<T>::value) {
         if (!line.empty()) {
             while (!line.empty() && line.back() == ' ') line.pop_back();
             line += '\n';

@@ -294,6 +294,10 @@ private:
               definesOrAssigns(PeekAt(2))))) {
             return ParseDefineOrAssign();
         }
+        if (first.kind == Kind::Word && !IsKeyword(first.text) && second.IsOp(".") &&
+            PeekAt(2).kind == Kind::Word && (PeekAt(3).IsOp("←") || PeekAt(3).IsOp(":="))) {
+            return ParseFieldAssign();
+        }
         if (first.kind == Kind::Word && !IsKeyword(first.text) && second.IsOp("(") &&
             IsFunctionDefinition()) {
             return ParseFunction();
@@ -305,6 +309,24 @@ private:
         auto statement = MakeStmt(Stmt::Kind::Expr, {});
         statement->value = ParseExpression();
         statement->ref = statement->value->ref;
+        Expr& target = *statement->value;
+        if ((Peek().IsOp(":=") || Peek().IsOp("←")) && target.kind == Expr::Kind::Index &&
+            target.args.size() == 2 && target.args[0]->kind == Expr::Kind::Name) {
+            // m["key"] ← value: the same as m_{"key"} ← value.
+            const Token& op = Advance();
+            Expr& name = *target.args[0];
+            statement->kind = op.IsOp("←") ? Stmt::Kind::Assign : Stmt::Kind::Define;
+            statement->name = name.text;
+            statement->ident = name.ident;
+            statement->greek = name.greek;
+            statement->nameRef = name.ref;
+            statement->indexRef = target.opRef;
+            statement->indices.push_back(std::move(target.args[1]));
+            // (This replaces `target`, so `name` can't be used after it.)
+            statement->value = ParseExpression();
+            statement->ref = Span(statement->nameRef, statement->value->ref);
+            return statement;
+        }
         if (Peek().IsOp(":=") || Peek().IsOp("←")) {
             Fail("Only a name can go on the left of " + Peek().text + ".", statement->value->ref);
         }
@@ -392,9 +414,46 @@ private:
         std::string set;
         SourceRef ref;
         std::vector<std::shared_ptr<Expr>> dims;
+        std::string mapKey;
+        bool list = false;
+        std::shared_ptr<Expr> choices;
+
+        template <class Target>
+        void ApplyTo(Target& target) {
+            target.declaredType = std::move(set);
+            target.typeRef = ref;
+            target.dims = std::move(dims);
+            target.mapKey = std::move(mapKey);
+            target.list = list;
+            target.choices = std::move(choices);
+        }
     };
 
-    // A type after ∈ or →: a set such as ℝ, or ℝ^n, ℝ^{n×m}, ℝ^*.
+    // Σ* written as Σ followed by *, at `slot[at]`; returns the set's name.
+    static std::string SetName(const std::vector<Token>& tokens, std::size_t at) {
+        if (tokens[at].IsOp("Σ") && at + 1 < tokens.size() && tokens[at + 1].IsOp("⋅")) {
+            return "Σ*";
+        }
+        return tokens[at].text;
+    }
+
+    // The exponent of ℝ^…: sizes (n, n×m, *) or, if it is a set, the keys
+    // of a map (ℝ^{Σ*}).
+    void ParseExponentOfType(TypeSpec& type, const std::vector<Token>& slot, const Token& owner) {
+        if (!slot.empty() && IsBuiltinSet(slot[0])) {
+            type.mapKey = SetName(slot, 0);
+            const std::size_t used = type.mapKey == "Σ*" ? 2 : 1;
+            if (slot.size() != used) {
+                Fail("A map's keys are written as one set, as in ℝ^{Σ*}.", owner.ref);
+            }
+            return;
+        }
+        type.dims = ParseDims(slot, owner);
+    }
+
+    // A type after ∈ or →: a set such as ℝ or Σ*; ℝ^n, ℝ^{n×m}, ℝ^*;
+    // a map ℝ^{Σ*}; a struct type's name; choices {"a", "b"}; any of these
+    // followed by * for a list.
     TypeSpec ParseType(const char* context) {
         const Token& token = Peek();
         TypeSpec type;
@@ -402,26 +461,81 @@ private:
             Advance();
             type.set = token.text;
             type.ref = token.ref;
+            if (token.IsOp("Σ") && Peek().IsOp("⋅")) {
+                type.set = "Σ*";
+                type.ref = Span(token.ref, Advance().ref);
+            }
             // ℝ followed by a power typed after it.
             const Token& next = Peek();
             if (next.kind == Kind::Structure && next.shape == Shape::Power &&
                 next.slots[0].empty()) {
                 const Token& power = Advance();
-                type.dims = ParseDims(power.slots[1], power);
+                ParseExponentOfType(type, power.slots[1], power);
                 type.ref = Span(token.ref, power.ref);
             }
-            return type;
-        }
-        // A power whose base is the set: \exp{ℝ}{n}.
-        if (token.kind == Kind::Structure && token.shape == Shape::Power &&
-            token.slots[0].size() == 1 && IsBuiltinSet(token.slots[0][0])) {
+        } else if (token.kind == Kind::Structure && token.shape == Shape::Power &&
+                   !token.slots[0].empty() && IsBuiltinSet(token.slots[0][0])) {
+            // A power whose base is the set: \exp{ℝ}{n}.
             Advance();
-            type.set = token.slots[0][0].text;
+            type.set = SetName(token.slots[0], 0);
             type.ref = token.ref;
-            type.dims = ParseDims(token.slots[1], token);
+            ParseExponentOfType(type, token.slots[1], token);
+        } else if (token.kind == Kind::Word && !IsKeyword(token.text)) {
+            Advance();
+            type.set = token.text;  // a struct type, found by the checker
+            type.ref = token.ref;
+        } else if (token.IsOp("{")) {
+            type.choices = ParseSet();
+            type.ref = type.choices->ref;
             return type;
+        } else {
+            Unexpected(token, context);
         }
-        Unexpected(token, context);
+        if (Peek().IsOp("⋅")) {
+            type.list = true;
+            type.ref = Span(type.ref, Advance().ref);
+        }
+        return type;
+    }
+
+    // @label("Name") @align("right") …: tags after a struct field's type.
+    std::vector<Tag> ParseTags() {
+        std::vector<Tag> tags;
+        while (Peek().IsOp("@")) {
+            const Token& at = Advance();
+            const Token& name = Peek();
+            if (name.kind != Kind::Word) {
+                Unexpected(name, "Expected the name of a tag after @, as in @label(\"Name\")");
+            }
+            Advance();
+            Tag tag{.name = name.text, .ref = Span(at.ref, name.ref)};
+            if (Peek().IsOp("(")) {
+                Advance();
+                while (!Peek().IsOp(")")) {
+                    const Token& value = Peek();
+                    if (value.kind == Kind::String || value.kind == Kind::Number) {
+                        tag.args.push_back(value.text);
+                        Advance();
+                    } else if (value.IsOp("−") && PeekAt(1).kind == Kind::Number) {
+                        Advance();
+                        tag.args.push_back("-" + Advance().text);
+                    } else if (value.kind == Kind::Word) {
+                        tag.args.push_back(value.text);
+                        Advance();
+                    } else {
+                        Unexpected(value, "Expected a string or number in the tag");
+                    }
+                    if (Peek().IsOp(",")) {
+                        Advance();
+                    } else if (!Peek().IsOp(")")) {
+                        Unexpected(Peek(), "Expected ',' or ')' in the tag");
+                    }
+                }
+                tag.ref = Span(tag.ref, Advance().ref);
+            }
+            tags.push_back(std::move(tag));
+        }
+        return tags;
     }
 
     // The sizes in the exponent of ℝ^…: n, n×m, or * for any length.
@@ -462,10 +576,7 @@ private:
                             .greek = parameter.greek, .ref = parameter.ref};
                 if (Peek().IsOp("∈")) {
                     Advance();
-                    TypeSpec type = ParseType("Expected a type such as ℝ or ℤ after ∈");
-                    param.declaredType = type.set;
-                    param.typeRef = type.ref;
-                    param.dims = std::move(type.dims);
+                    ParseType("Expected a type such as ℝ or ℤ after ∈").ApplyTo(param);
                 }
                 statement->params.push_back(std::move(param));
                 if (!Peek().IsOp(",")) {
@@ -479,10 +590,7 @@ private:
         statement->ref = Span(name.ref, close.ref);
         if (Peek().IsOp("→")) {
             Advance();
-            TypeSpec type = ParseType("Expected the type of the result after →, such as ℝ");
-            statement->declaredType = type.set;
-            statement->typeRef = type.ref;
-            statement->dims = std::move(type.dims);
+            ParseType("Expected the type of the result after →, such as ℝ").ApplyTo(*statement);
         }
         if (Peek().IsOp(":=")) {
             const Token& define = Advance();
@@ -519,10 +627,7 @@ private:
         } else {
             statement->kind = Stmt::Kind::Define;
             if (op.IsOp("∈")) {
-                TypeSpec type = ParseType("Expected a type such as ℝ or ℤ after ∈");
-                statement->declaredType = type.set;
-                statement->typeRef = type.ref;
-                statement->dims = std::move(type.dims);
+                ParseType("Expected a type such as ℝ or ℤ after ∈").ApplyTo(*statement);
                 if (Peek().IsOp(":=")) {
                     Advance();
                     statement->value = ParseExpression();
@@ -533,6 +638,27 @@ private:
         }
         statement->ref = Span(name.ref, statement->value ? statement->value->ref
                                         : statement->typeRef);
+        return statement;
+    }
+
+    // p.name ← value
+    std::unique_ptr<Stmt> ParseFieldAssign() {
+        auto statement = MakeStmt(Stmt::Kind::Assign, {});
+        const Token& name = Advance();
+        statement->name = name.text;
+        statement->ident = name.ident;
+        statement->greek = name.greek;
+        statement->nameRef = name.ref;
+        Advance();  // .
+        const Token& member = Advance();
+        statement->member = member.text;
+        statement->memberRef = member.ref;
+        const Token& op = Advance();
+        if (!op.IsOp("←")) {
+            Fail("To change a field, write " + name.text + "." + member.text + " ← …", op.ref);
+        }
+        statement->value = ParseExpression();
+        statement->ref = Span(name.ref, statement->value->ref);
         return statement;
     }
 
@@ -612,6 +738,7 @@ private:
     }
 
     static bool IsComparison(const Token& token) {
+        if (token.IsWord("in")) return true;  // "lo" in "hello": a substring
         if (token.kind != Kind::Op) return false;
         for (std::string_view op : {"=", "≠", "<", "≤", ">", "≥", "≈", "∈", "∉", "⊂", "⊆"}) {
             if (token.text == op) return true;
@@ -668,7 +795,7 @@ private:
         while (IsComparison(Peek())) {
             const Token& op = Advance();
             SkipNewlines();
-            expr->ops.push_back(op.text);
+            expr->ops.push_back(op.text == "in" ? "in" : op.text);
             if (expr->ops.size() == 1) {
                 expr->opRef = op.ref;
             }
@@ -694,7 +821,7 @@ private:
             case Kind::String:
                 return true;
             case Kind::Word:
-                return token.text != "mod";
+                return token.text != "mod" && token.text != "in";
             case Kind::Op:
                 return token.text == "(" || token.text == "∞" || token.text == "∅";
             case Kind::Structure:
@@ -776,6 +903,12 @@ private:
         return expr;
     }
 
+    // Nothing can follow here: the end of a statement or of a bracket.
+    static bool EndsValue(const Token& token) {
+        return token.kind == Kind::Newline || token.kind == Kind::End || token.IsOp(";") ||
+               token.IsOp(")") || token.IsOp(",") || token.IsOp("}") || token.IsOp("]");
+    }
+
     // base^{exponent}, or base^⊤ (the transpose).
     std::unique_ptr<Expr> PowerOrTranspose(std::unique_ptr<Expr> base, const Token& power,
                                            const SourceRef& ref) {
@@ -818,6 +951,50 @@ private:
                 }
                 const SourceRef ref = Span(expr->ref, exponent->ref);
                 expr = Power(std::move(expr), std::move(exponent), ref);
+            } else if (next.IsOp(".") && PeekAt(1).kind == Kind::Word) {
+                Advance();
+                const Token& member = Advance();
+                const bool method = Peek().IsOp("(");
+                auto access = MakeExpr(method ? Expr::Kind::Method : Expr::Kind::Member,
+                                       Span(expr->ref, member.ref));
+                access->text = member.text;
+                access->opRef = member.ref;
+                access->args.push_back(std::move(expr));
+                if (method) {
+                    Advance();
+                    ++depth_;
+                    if (!Peek().IsOp(")")) {
+                        for (;;) {
+                            access->args.push_back(ParseExpression());
+                            if (!Peek().IsOp(",")) break;
+                            Advance();
+                        }
+                    }
+                    access->ref = Span(access->ref, Expect(")", "Expected ',' or ')'").ref);
+                    --depth_;
+                }
+                expr = std::move(access);
+            } else if (next.IsOp("[")) {
+                // m["key"], L[i]: the same as a subscript.
+                const Token& open = Advance();
+                ++depth_;
+                auto index = MakeExpr(Expr::Kind::Index, expr->ref);
+                index->opRef = open.ref;
+                index->args.push_back(std::move(expr));
+                index->args.push_back(ParseExpression());
+                const Token& close = Expect("]", "Expected ']'");
+                --depth_;
+                index->ref = Span(index->ref, close.ref);
+                expr = std::move(index);
+            } else if (next.IsOp("⋅") && EndsValue(PeekAt(1)) &&
+                       (expr->kind == Expr::Kind::TypeName || expr->kind == Expr::Kind::Name ||
+                        expr->kind == Expr::Kind::StructValue ||
+                        expr->kind == Expr::Kind::StructType)) {
+                // T*: a new, empty list of T.
+                const Token& star = Advance();
+                auto list = MakeExpr(Expr::Kind::ListOf, Span(expr->ref, star.ref));
+                list->args.push_back(std::move(expr));
+                expr = std::move(list);
             } else if (next.IsOp("!")) {
                 Fail("Factorials can't be used yet.", next.ref);
             } else {
@@ -847,6 +1024,16 @@ private:
             }
             case Kind::String: {
                 Advance();
+                if (!token.slots.empty()) {
+                    // "Hi ${name}!": text pieces with values between them.
+                    auto expr = MakeExpr(Expr::Kind::Template, token.ref);
+                    expr->ops = token.pieces;
+                    for (const auto& slot : token.slots) {
+                        SyntaxParser parser(slot, diagnostics_, token.ref);
+                        expr->args.push_back(parser.ParseWholeExpression("${…}"));
+                    }
+                    return expr;
+                }
                 auto expr = MakeExpr(Expr::Kind::String, token.ref);
                 expr->text = token.text;
                 return expr;
@@ -890,8 +1077,27 @@ private:
                     return MakeExpr(Expr::Kind::Infinity, token.ref);
                 }
                 if (IsBuiltinSet(token)) {
-                    Fail(token.text + " is a type; it can only be used after ∈, as in x ∈ " +
-                             token.text + " := …", token.ref);
+                    // A set as a value: only useful as T* (a new list), which
+                    // the checker sees to.
+                    Advance();
+                    auto expr = MakeExpr(Expr::Kind::TypeName, token.ref);
+                    expr->text = token.text;
+                    if (token.IsOp("Σ") && Peek().IsOp("⋅") && PeekAt(1).IsOp("⋅")) {
+                        expr->text = "Σ*";
+                        expr->ref = Span(token.ref, Advance().ref);
+                    }
+                    return expr;
+                }
+                if (token.IsOp("[")) {
+                    return ParseList();
+                }
+                if (token.IsOp("<")) {
+                    // <name = "Bob", age = 4>, the typed form of ⟨…⟩.
+                    const Token& open = Advance();
+                    auto expr = MakeExpr(Expr::Kind::StructValue, open.ref);
+                    ParseFields(*expr, true);
+                    expr->ref = Span(open.ref, Expect(">", "Expected ',' or '>' after the fields").ref);
+                    return expr;
                 }
                 break;
             default: break;
@@ -1069,9 +1275,94 @@ private:
         return expr;
     }
 
+    // [a, b, c]
+    std::unique_ptr<Expr> ParseList() {
+        const Token& open = Advance();
+        ++depth_;
+        auto list = MakeExpr(Expr::Kind::List, open.ref);
+        if (Peek().IsOp("]")) {
+            Fail("An empty list needs a type: write ℝ*, Σ** or Person*.", open.ref);
+        }
+        for (;;) {
+            list->args.push_back(ParseExpression());
+            if (!Peek().IsOp(",")) break;
+            Advance();
+        }
+        const Token& close = Expect("]", "Expected ',' or ']' in the list");
+        --depth_;
+        list->ref = Span(open.ref, close.ref);
+        return list;
+    }
+
+public:
+    // The fields of ⟨…⟩ or <…>, separated by commas: name ∈ T @tags… (a
+    // struct type) or name = value (a struct value). `typed` is the <…> form,
+    // whose values stop before a comparison (the > that closes it).
+    void ParseFields(Expr& expr, bool typed) {
+        for (;;) {
+            const Token& name = Peek();
+            if (name.kind != Kind::Word || IsKeyword(name.text)) {
+                Unexpected(name, "Expected the name of a field");
+            }
+            Advance();
+            const Token& op = Peek();
+            const bool declares = op.IsOp("∈");
+            if (!declares && !op.IsOp("=")) {
+                Unexpected(op, "Expected = (a value) or ∈ (a type) after " + name.text);
+            }
+            Advance();
+            const Expr::Kind kind = declares ? Expr::Kind::StructType : Expr::Kind::StructValue;
+            if ((!expr.fields.empty() || !expr.ops.empty()) && expr.kind != kind) {
+                Fail("Write all the fields with ∈ (a struct type) or all with = (a value).",
+                     op.ref);
+            }
+            expr.kind = kind;
+            if (declares) {
+                Param field{.name = name.text, .ident = name.ident, .greek = name.greek,
+                            .ref = name.ref};
+                ParseType("Expected a type such as ℝ or Σ* after ∈").ApplyTo(field);
+                field.tags = ParseTags();
+                expr.fields.push_back(std::move(field));
+            } else {
+                expr.ops.push_back(name.text);
+                expr.args.push_back(typed ? ParseRange() : ParseExpression());
+            }
+            if (!Peek().IsOp(",")) {
+                return;
+            }
+            Advance();
+        }
+    }
+
+private:
+    // ⟨…⟩: each row holds one or more fields.
+    std::unique_ptr<Expr> ParseAngle(const Token& token) {
+        auto expr = MakeExpr(Expr::Kind::StructValue, token.ref);
+        expr->opRef = token.ref;
+        bool any = false;
+        for (const auto& cell : token.slots) {
+            if (cell.empty()) {
+                continue;
+            }
+            any = true;
+            SyntaxParser parser(cell, diagnostics_, token.ref);
+            parser.ParseFields(*expr, false);
+            if (parser.Peek().kind != Kind::End) {
+                parser.Unexpected(parser.Peek(), "Expected ',' or the end of the row");
+            }
+        }
+        if (!any) {
+            Fail("⟨ ⟩ needs fields, as in ⟨name = \"Bob\"⟩ or ⟨name ∈ Σ*⟩.", token.ref);
+        }
+        return expr;
+    }
+
     // A matrix of numbers; a single column is a vector. A vmatrix (bars) is
     // its determinant.
     std::unique_ptr<Expr> ParseMatrix(const Token& token) {
+        if (token.text == "angle") {
+            return ParseAngle(token);
+        }
         auto expr = MakeExpr(Expr::Kind::Matrix, token.ref);
         expr->text = token.text;
         expr->opRef = token.ref;

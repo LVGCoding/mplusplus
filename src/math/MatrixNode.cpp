@@ -47,6 +47,9 @@ Delimiters DelimitersFor(const std::string& environment) {
     if (environment == "Vmatrix") {
         return {true, true, Delimiter::DOUBLE_BAR};
     }
+    if (environment == "angle") {
+        return {true, true, Delimiter::ANGLE};
+    }
     if (environment == "cases") {
         return {true, false, Delimiter::BRACE};
     }
@@ -86,7 +89,8 @@ void MatrixNode::Render(const RenderContext& context) {
     const Delimiters delimiters = DelimitersFor(environment_);
     // Cases line up on the left (value, then its condition); matrices centre.
     const Clay_LayoutAlignmentX cellAlign =
-        environment_ == "cases" ? CLAY_ALIGN_X_LEFT : CLAY_ALIGN_X_CENTER;
+        environment_ == "cases" || environment_ == "angle" ? CLAY_ALIGN_X_LEFT
+                                                           : CLAY_ALIGN_X_CENTER;
     const auto columnGap = static_cast<uint16_t>(std::round(fontSize));
     const auto rowGap = static_cast<uint16_t>(std::round(fontSize * 0.3f));
     const auto padding = static_cast<uint16_t>(std::round(fontSize * 0.15f));
@@ -433,8 +437,8 @@ const std::string& MatrixNode::GetEnvironment() const {
 }
 
 bool MatrixNode::IsMatrixEnvironment(const std::string& name) {
-    static constexpr std::array<std::string_view, 7> ENVIRONMENTS = {
-        "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "cases"};
+    static constexpr std::array<std::string_view, 8> ENVIRONMENTS = {
+        "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "cases", "angle"};
     for (const auto environment : ENVIRONMENTS) {
         if (environment == name) {
             return true;

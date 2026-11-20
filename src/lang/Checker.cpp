@@ -9,8 +9,12 @@
 
 namespace lang {
 
-const char* TypeName(Type type) {
-    switch (type) {
+std::string TypeName(const Type& type) {
+    switch (type.kind) {
+        case Type::Struct: return type.info->name;
+        case Type::List: return TypeName(type.info->element) + "*";
+        case Type::Map:
+            return TypeName(type.info->element) + "^(" + TypeName(type.info->key) + ")";
         case Type::Int: return "ℤ";
         case Type::Real: return "ℝ";
         case Type::Bool: return "𝔹";
@@ -38,7 +42,7 @@ bool IsSet(Type type) {
 
 // What a set holds (Error for ∅), and the set holding a type (Error if none).
 Type ElementOf(Type set) {
-    switch (set) {
+    switch (set.kind) {
         case Type::SetInt: return Type::Int;
         case Type::SetReal: return Type::Real;
         case Type::SetString: return Type::String;
@@ -46,7 +50,7 @@ Type ElementOf(Type set) {
     }
 }
 Type SetOf(Type element) {
-    switch (element) {
+    switch (element.kind) {
         case Type::Int: return Type::SetInt;
         case Type::Real: return Type::SetReal;
         case Type::String: return Type::SetString;
@@ -72,6 +76,7 @@ Type SetType(const std::string& set, bool& natural) {
     if (set == "ℝ") return Type::Real;
     if (set == "ℤ" || set == "ℕ") return Type::Int;
     if (set == "𝔹") return Type::Bool;
+    if (set == "Σ*") return Type::String;
     return Type::Error;
 }
 
@@ -81,7 +86,10 @@ Type Unify(Type a, Type b, bool& ok) {
     ok = true;
     if (a == Type::Error || b == Type::Error) return Type::Error;
     if (IsNumeric(a) && IsNumeric(b)) return Join(a, b);
-    if (a == b) return a;
+    if (a == b) {
+        ok = SameType(a, b);
+        return ok ? a : Type(Type::Error);
+    }
     // ∅ fits any set; a set of ℤ fits with a set of ℝ.
     if (a == Type::EmptySet && IsSet(b)) return b;
     if (b == Type::EmptySet && IsSet(a)) return a;
@@ -113,6 +121,9 @@ public:
         for (const auto& [name, family] : families_) {
             program.families.push_back(family.family);
         }
+        for (const auto& info : structs_) {
+            program.structs.push_back(info);
+        }
         // A function nobody calls is still checked, with ℝ for parameters
         // without a type, so its mistakes show up.
         for (auto& [name, function] : functions_) {
@@ -133,6 +144,8 @@ private:
         // A for loop's variable, which the loop body can't change.
         bool loop = false;
         SourceRef ref;
+        // Declared with choices (x ∈ {"a", "b"}): what it may hold.
+        std::shared_ptr<Expr> choices;
     };
     using Scope = std::map<std::string, Variable>;
 
@@ -167,6 +180,11 @@ private:
     std::vector<Scope> scopes_;
     // Families exist for the whole program, from their first element.
     std::map<std::string, FamilyInfo> families_;
+    // Struct types: those with names (Person := ⟨…⟩), and every struct type in
+    // the order made, for the code generator.
+    std::map<std::string, Type> structTypes_;
+    std::vector<std::shared_ptr<TypeInfo>> structs_;
+    std::map<std::string, Type> anonymousStructs_;
     std::map<std::string, Function> functions_;
     std::map<std::string, SourceRef> laterDefinitions_;
     // Names whose block has ended, and where they were defined.
@@ -258,9 +276,18 @@ private:
 
     // Can a value of type `value` be stored in a variable of type `target`?
     // Reports why not at `ref`.
-    bool CheckStore(Type target, Type value, const std::string& name, const char* targetName,
+    bool CheckStore(Type target, Type value, const std::string& name, const std::string& targetName,
                     const SourceRef& ref) {
-        if (target == Type::Error || value == Type::Error || target == value ||
+        if (target == value && (target == Type::Struct ? StructsFit(target, value)
+                                                       : SameType(target, value))) {
+            return true;
+        }
+        if (target == value && target != Type::Error) {
+            Error(name + " is in " + targetName + ", but this is in " + TypeName(value) + ".",
+                  ref);
+            return false;
+        }
+        if (target == Type::Error || value == Type::Error ||
             (target == Type::Real && value == Type::Int) ||
             (IsSet(target) && value == Type::EmptySet) ||
             (target == Type::SetReal && value == Type::SetInt)) {
@@ -279,11 +306,22 @@ private:
     }
 
     // Reports a declared set that can't be used (yet); returns its type.
-    Type DeclaredType(const std::string& set, const SourceRef& ref, bool& natural) {
+    Type DeclaredType(const std::string& set, const SourceRef& ref, bool& natural,
+                      bool report = true) {
+        if (auto named = structTypes_.find(set); named != structTypes_.end()) {
+            natural = false;
+            return named->second;
+        }
         const Type type = SetType(set, natural);
-        if (type == Type::Error) {
+        if (type == Type::Error && report) {
             if (set == "Σ") {
-                Error("For text, use a string: name := \"text\".", ref);
+                Error("Σ alone is a single character, which M++ doesn't have yet; for text, "
+                      "write Σ*.",
+                      ref);
+            } else if (!set.empty() && (set[0] & 0x80) == 0) {
+                Error(set + " isn't a type. Define it first, as in " + set +
+                          " := ⟨name ∈ Σ*⟩.",
+                      ref);
             } else {
                 Error(set + " can't be used yet.", ref);
             }
@@ -291,10 +329,184 @@ private:
         return type;
     }
 
-    // A parameter's declared type, sizes included (ℝ^n is a vector).
-    static Type ParamType(const Param& param) {
+    static Type MakeList(const Type& element) {
+        auto info = std::make_shared<TypeInfo>();
+        info->element = element;
+        return Type(Type::List, info);
+    }
+
+    static Type MakeMap(const Type& key, const Type& value) {
+        auto info = std::make_shared<TypeInfo>();
+        info->key = key;
+        info->element = value;
+        return Type(Type::Map, info);
+    }
+
+    // The full type of a declaration (Param or Stmt): set, sizes, map keys,
+    // choices and list. Reports problems if `report`; checks sizes if
+    // `checkSizes`.
+    template <class Spec>
+    Type ResolveType(const Spec& spec, bool& natural, bool report, bool checkSizes) {
+        natural = false;
+        Type type;
+        if (spec.choices) {
+            const Type choices = report ? CheckExpr(*spec.choices) : spec.choices->type;
+            if (!IsSet(choices) || choices == Type::EmptySet) {
+                if (report && choices != Type::Error) {
+                    Error("Choices are written as a set of values, as in {\"a\", \"b\"}.",
+                          spec.typeRef);
+                }
+                return Type::Error;
+            }
+            type = ElementOf(choices);
+        } else if (!spec.mapKey.empty()) {
+            bool ignored = false;
+            const Type key = DeclaredType(spec.mapKey, spec.typeRef, ignored, report);
+            const Type value = DeclaredType(spec.declaredType, spec.typeRef, natural, report);
+            if (key == Type::Error || value == Type::Error) return Type::Error;
+            if (key != Type::Int && key != Type::String && key != Type::Real) {
+                if (report) Error("A map's keys must be numbers or strings.", spec.typeRef);
+                return Type::Error;
+            }
+            natural = false;
+            type = MakeMap(key, value);
+        } else if (!spec.dims.empty()) {
+            type = report ? DeclaredWithDims(spec.declaredType, spec.typeRef, spec.dims, natural,
+                                             checkSizes)
+                          : WithDims(DeclaredType(spec.declaredType, spec.typeRef, natural, false),
+                                     spec.dims.size());
+        } else {
+            type = DeclaredType(spec.declaredType, spec.typeRef, natural, report);
+        }
+        if (spec.list && type != Type::Error) {
+            natural = false;
+            type = MakeList(type);
+        }
+        return type;
+    }
+
+    // A parameter's declared type, already checked by CheckFunction.
+    Type ParamType(const Param& param) {
         bool natural = false;
-        return WithDims(SetType(param.declaredType, natural), param.dims.size());
+        return ResolveType(param, natural, false, false);
+    }
+
+    // Can a struct of type `value` be stored in one of type `target`? Yes if
+    // they have the same fields, of the same types.
+    static bool StructsFit(const Type& target, const Type& value) {
+        if (target.info == value.info) return true;
+        if (target.info->fields.size() != value.info->fields.size()) return false;
+        for (const FieldInfo& field : target.info->fields) {
+            const FieldInfo* other = value.info->Field(field.name);
+            if (!other || !SameType(field.type, other->type)) return false;
+        }
+        return true;
+    }
+
+    // Can a @default(…) value written as `text` be a value of `type`?
+    static bool DefaultFits(const std::string& text, const Type& type) {
+        if (type == Type::String) return true;
+        if (type == Type::Bool) return text == "true" || text == "false";
+        if (type == Type::Int || type == Type::Real) {
+            if (text.empty()) return false;
+            bool point = false;
+            for (std::size_t i = 0; i < text.size(); ++i) {
+                const char c = text[i];
+                if (c == '-' && i == 0) continue;
+                if (c == '.' && !point && type == Type::Real) {
+                    point = true;
+                    continue;
+                }
+                if (c < '0' || c > '9') return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    // A struct type from fields declared in ⟨…⟩. `name` is empty for one
+    // without a name; those with the same fields are shared.
+    Type MakeStruct(const std::string& name, const std::string& ident, Expr& definition) {
+        auto info = std::make_shared<TypeInfo>();
+        bool ok = true;
+        for (Param& field : definition.fields) {
+            for (const FieldInfo& before : info->fields) {
+                if (before.name == field.name) {
+                    Error("There are two fields called " + field.name + ".", field.ref);
+                    ok = false;
+                }
+            }
+            bool natural = false;
+            const Type type = ResolveType(field, natural, true, true);
+            ok &= type != Type::Error;
+            FieldInfo info_field{.name = field.name, .ident = field.ident, .greek = field.greek,
+                                 .type = type, .tags = field.tags};
+            for (const Tag& tag : field.tags) {
+                static const char* KNOWN[] = {"label",  "align", "filler", "format", "prefix",
+                                              "postfix", "unit", "hidden", "default"};
+                bool known = false;
+                for (const char* k : KNOWN) known |= tag.name == k;
+                if (!known) {
+                    Error("There's no tag @" + tag.name + ". Tags are @label, @align, @filler, "
+                          "@format, @prefix, @postfix, @unit, @hidden and @default.",
+                          tag.ref);
+                    ok = false;
+                } else if (tag.name != "hidden" && tag.args.size() != 1) {
+                    Error("@" + tag.name + " takes one value, as in @" + tag.name + "(\"…\").",
+                          tag.ref);
+                    ok = false;
+                } else if (tag.name == "default" && !DefaultFits(tag.args[0], type)) {
+                    Error("@default(" + tag.args[0] + ") doesn't fit " + field.name + ", which is in " +
+                              TypeName(type) + ".",
+                          tag.ref);
+                    ok = false;
+                } else if (tag.name == "align" && tag.args[0] != "left" &&
+                           tag.args[0] != "right" && tag.args[0] != "center") {
+                    Error("@align is \"left\", \"right\" or \"center\".", tag.ref);
+                    ok = false;
+                }
+            }
+            info->fields.push_back(std::move(info_field));
+        }
+        if (!ok) {
+            return Type::Error;
+        }
+        return RegisterStruct(std::move(info), name, ident);
+    }
+
+    // Names a struct type and adds it to those the code generator writes. One
+    // without a name is shared with any other of the same fields and tags.
+    Type RegisterStruct(std::shared_ptr<TypeInfo> info, const std::string& name,
+                        const std::string& ident) {
+        std::string described = "⟨";
+        for (std::size_t i = 0; i < info->fields.size(); ++i) {
+            described += (i ? ", " : "") + info->fields[i].name + " ∈ " +
+                         TypeName(info->fields[i].type);
+        }
+        described += "⟩";
+        if (name.empty()) {
+            // Tags matter to how it prints, so they are part of what is shared.
+            std::string key = described;
+            for (const FieldInfo& field : info->fields) {
+                for (const Tag& tag : field.tags) {
+                    key += "@" + field.name + "." + tag.name;
+                    for (const auto& arg : tag.args) key += "(" + arg + ")";
+                }
+            }
+            if (auto found = anonymousStructs_.find(key); found != anonymousStructs_.end()) {
+                return found->second;
+            }
+            info->name = described;
+            info->cppName = "S" + std::to_string(structs_.size());
+            structs_.push_back(info);
+            Type type(Type::Struct, info);
+            anonymousStructs_.emplace(key, type);
+            return type;
+        }
+        info->name = name;
+        info->cppName = "S_" + ident;
+        structs_.push_back(info);
+        return Type(Type::Struct, info);
     }
 
     // A declared type with sizes: reports a set that can't have them, and
@@ -410,7 +622,13 @@ private:
         if (!statement.declaredType.empty()) {
             Error("An element of a family can't have its own type.", statement.typeRef);
         }
-        const Type value = statement.value ? CheckExpr(*statement.value) : Type::Error;
+        if (const Variable* variable = Lookup(statement.name);
+            variable && (variable->type == Type::Map || variable->type == Type::List)) {
+            // m_{key} := v is the same as m_{key} ← v.
+            CheckAssignElement(statement);
+            return;
+        }
+        const Type value = statement.value ? CheckExpr(*statement.value) : Type(Type::Error);
         if (!RequireWholeIndices(statement.indices)) {
             return;
         }
@@ -467,14 +685,20 @@ private:
             }
             ApplyLabel(statement);
         }
+        // T := ⟨field ∈ type, …⟩ names a struct type.
+        if (statement.value && statement.value->kind == Expr::Kind::StructType) {
+            CheckTypeDefinition(statement);
+            return;
+        }
+        const bool declared = !statement.declaredType.empty() || statement.choices;
         Type type = Type::Error;
-        if (!statement.declaredType.empty()) {
-            type = DeclaredWithDims(statement.declaredType, statement.typeRef, statement.dims,
-                                    statement.natural, true);
+        if (declared) {
+            type = ResolveType(statement, statement.natural, true, true);
         }
         if (statement.value) {
-            const Type value = CheckExpr(*statement.value);
-            if (statement.declaredType.empty()) {
+            const Type value =
+                declared ? CheckExprAs(*statement.value, type) : CheckExpr(*statement.value);
+            if (!declared) {
                 type = value == Type::EmptySet ? Type::SetInt : value;
                 if (value == Type::Void) {
                     Error("This doesn't give a value to store in " + statement.name + ".",
@@ -483,23 +707,176 @@ private:
                 }
             } else {
                 CheckStore(type, value, statement.name,
-                           IsArray(type) ? TypeName(type) : statement.declaredType.c_str(),
+                           statement.natural ? std::string("ℕ") : TypeName(type),
                            statement.value->ref);
             }
         }
         statement.type = type;
         if (CheckNewName(statement.name, statement.nameRef)) {
-            scopes_.back()[statement.name] = {type, statement.natural, false, statement.nameRef};
+            scopes_.back()[statement.name] = {type, statement.natural, false, statement.nameRef,
+                                              statement.choices};
+        }
+    }
+
+    // Person := ⟨name ∈ Σ*, age ∈ ℝ⟩
+    void CheckTypeDefinition(Stmt& statement) {
+        statement.access = "type";
+        if (context_ || scopes_.size() > 1) {
+            Error("Struct types are defined outside of blocks and functions.", statement.nameRef);
+            return;
+        }
+        if (structTypes_.contains(statement.name)) {
+            Error(statement.name + " is already a type.", statement.nameRef);
+            return;
+        }
+        if (!statement.declaredType.empty()) {
+            Error("A struct type has no type of its own; write " + statement.name + " := ⟨…⟩.",
+                  statement.typeRef);
+        }
+        if (!CheckNewName(statement.name, statement.nameRef)) {
+            return;
+        }
+        const Type type = MakeStruct(statement.name, statement.ident, *statement.value);
+        if (type != Type::Error) {
+            structTypes_[statement.name] = type;
+        }
+    }
+
+    // `expr` where a value of type `expected` is wanted: ⟨…⟩ and […] take
+    // their type from there.
+    Type CheckExprAs(Expr& expr, const Type& expected) {
+        if (expected == Type::Struct && expr.kind == Expr::Kind::StructValue) {
+            expr.type = CheckStructValue(expr, &expected);
+            return expr.type;
+        }
+        if (expected == Type::List && expr.kind == Expr::Kind::List) {
+            const Type& element = expected.info->element;
+            bool ok = true;
+            for (auto& item : expr.args) {
+                const Type type = CheckExprAs(*item, element);
+                ok &= CheckStore(element, type, "This list", TypeName(expected), item->ref);
+            }
+            expr.type = ok ? expected : Type(Type::Error);
+            return expr.type;
+        }
+        return CheckExpr(expr);
+    }
+
+    // ⟨name = "Bob", age = 4⟩: of the type `target`, or of a struct type made
+    // from its fields.
+    Type CheckStructValue(Expr& expr, const Type* target) {
+        bool ok = true;
+        for (std::size_t i = 0; i < expr.ops.size(); ++i) {
+            for (std::size_t j = 0; j < i; ++j) {
+                if (expr.ops[j] == expr.ops[i]) {
+                    Error("There are two fields called " + expr.ops[i] + ".", expr.args[i]->ref);
+                    ok = false;
+                }
+            }
+        }
+        if (target) {
+            const TypeInfo& info = *target->info;
+            for (std::size_t i = 0; i < expr.ops.size(); ++i) {
+                const FieldInfo* field = info.Field(expr.ops[i]);
+                if (!field) {
+                    CheckExpr(*expr.args[i]);
+                    Error(info.name + " has no field called " + expr.ops[i] + ".",
+                          expr.args[i]->ref);
+                    ok = false;
+                    continue;
+                }
+                const Type value = CheckExprAs(*expr.args[i], field->type);
+                ok &= CheckStore(field->type, value, field->name, TypeName(field->type),
+                                 expr.args[i]->ref);
+            }
+            for (const FieldInfo& field : info.fields) {
+                bool given = false;
+                for (const auto& name : expr.ops) given |= name == field.name;
+                if (!given && !field.HasTag("default")) {
+                    Error("This leaves out " + field.name + ": give it a value, or the field a "
+                          "@default(…).",
+                          expr.ref);
+                    ok = false;
+                }
+            }
+            return ok ? *target : Type(Type::Error);
+        }
+        auto info = std::make_shared<TypeInfo>();
+        for (std::size_t i = 0; i < expr.ops.size(); ++i) {
+            const Type value = CheckExpr(*expr.args[i]);
+            if (value == Type::Void) {
+                Error("This doesn't give a value.", expr.args[i]->ref);
+            }
+            if (value == Type::Error || value == Type::Void) {
+                ok = false;
+                continue;
+            }
+            info->fields.push_back(FieldInfo{.name = expr.ops[i], .ident = expr.ops[i],
+                                             .type = value == Type::EmptySet ? Type::SetInt
+                                                                             : value});
+        }
+        return ok ? RegisterStruct(std::move(info), "", "") : Type(Type::Error);
+    }
+
+    // The type a type expression stands for: ℝ, Σ*, Person, ⟨…⟩ (for T*).
+    Type TypeFromExpr(Expr& expr) {
+        switch (expr.kind) {
+            case Expr::Kind::TypeName: {
+                bool natural = false;
+                if (expr.text == "ℕ") {
+                    Error("A list of ℕ isn't possible yet; use ℤ*.", expr.ref);
+                    return Type::Error;
+                }
+                return DeclaredType(expr.text, expr.ref, natural);
+            }
+            case Expr::Kind::Name: {
+                bool natural = false;
+                return DeclaredType(expr.text, expr.ref, natural);
+            }
+            case Expr::Kind::StructType: return MakeStruct("", "", expr);
+            default:
+                Error("Expected a type before *, such as ℝ* or Person*.", expr.ref);
+                return Type::Error;
         }
     }
 
     // x_i ← value: an entry of a vector or matrix, or an element of a family.
     void CheckAssignElement(Stmt& statement) {
+        const std::string& name = statement.name;
+        if (const Variable* variable = Lookup(name);
+            variable && (variable->type == Type::Map || variable->type == Type::List)) {
+            const bool map = variable->type == Type::Map;
+            if (variable->loop) {
+                Error(name + " counts the loop, so it can't be changed inside it.",
+                      statement.nameRef);
+                return;
+            }
+            if (statement.indices.size() != 1) {
+                Error(name + " has one index, as in " + name + "_i.", statement.indexRef);
+                return;
+            }
+            const Type wanted = map ? variable->type.info->key : Type(Type::Int);
+            const Type index = CheckExpr(*statement.indices[0]);
+            if (index != Type::Error && !(index == wanted || (wanted == Type::Real &&
+                                                              index == Type::Int))) {
+                Error(map ? "The keys of " + name + " are in " + TypeName(wanted) +
+                                ", but this is in " + TypeName(index) + "."
+                          : "An index must be a whole number (ℤ), but this is in " +
+                                TypeName(index) + ".",
+                      statement.indices[0]->ref);
+                return;
+            }
+            statement.access = map ? "map" : "list";
+            statement.type = variable->type.info->element;
+            const Type value = CheckExprAs(*statement.value, statement.type);
+            CheckStore(statement.type, value, name + "_…", TypeName(statement.type),
+                       statement.value->ref);
+            return;
+        }
         const Type value = CheckExpr(*statement.value);
         if (!RequireWholeIndices(statement.indices)) {
             return;
         }
-        const std::string& name = statement.name;
         std::size_t wanted = 1;
         if (auto family = families_.find(name); family != families_.end()) {
             statement.access = "family";
@@ -539,7 +916,41 @@ private:
                    statement.value->ref);
     }
 
+    // p.name ← value
+    void CheckAssignMember(Stmt& statement) {
+        const Variable* variable = Lookup(statement.name);
+        if (!variable) {
+            CheckExpr(*statement.value);
+            Error(statement.name + " isn't defined.", statement.nameRef);
+            return;
+        }
+        if (variable->type != Type::Struct) {
+            CheckExpr(*statement.value);
+            if (variable->type != Type::Error) {
+                Error(statement.name + " is in " + TypeName(variable->type) +
+                          ", which has no fields.",
+                      statement.nameRef);
+            }
+            return;
+        }
+        const FieldInfo* field = variable->type.info->Field(statement.member);
+        if (!field) {
+            CheckExpr(*statement.value);
+            Error(TypeName(variable->type) + " has no field called " + statement.member + ".",
+                  statement.memberRef);
+            return;
+        }
+        statement.type = field->type;
+        const Type value = CheckExprAs(*statement.value, field->type);
+        CheckStore(field->type, value, statement.member, TypeName(field->type),
+                   statement.value->ref);
+    }
+
     void CheckAssign(Stmt& statement) {
+        if (!statement.member.empty()) {
+            CheckAssignMember(statement);
+            return;
+        }
         if (!statement.indices.empty()) {
             if (!IsLabel(statement.name, statement.indices)) {
                 CheckAssignElement(statement);
@@ -547,7 +958,9 @@ private:
             }
             ApplyLabel(statement);
         }
-        const Type value = CheckExpr(*statement.value);
+        const Variable* found = Lookup(statement.name);
+        const Type value = found ? CheckExprAs(*statement.value, found->type)
+                                 : CheckExpr(*statement.value);
         const Variable* variable = Lookup(statement.name);
         if (!variable) {
             if (statement.name == "π" || statement.name == "e") {
@@ -568,8 +981,9 @@ private:
         }
         statement.type = variable->type;
         statement.natural = variable->natural;
+        statement.choices = variable->choices;
         CheckStore(statement.type, value, statement.name,
-                   statement.natural ? "ℕ" : TypeName(statement.type), statement.value->ref);
+                   statement.natural ? std::string("ℕ") : TypeName(statement.type), statement.value->ref);
     }
 
     void CheckExpressionStatement(Stmt& statement) {
@@ -643,6 +1057,12 @@ private:
         }
         if (type == Type::Vector) {
             return Type::Real;
+        }
+        if (type == Type::List) {
+            return type.info->element;
+        }
+        if (type == Type::Map) {
+            return type.info->key;  // a map is gone through by its keys
         }
         Error(std::string(what) + " needs a range (1..n), a set or a vector to go through, but "
                                   "this is in " + TypeName(type) + ".",
@@ -726,9 +1146,8 @@ private:
         bool natural = false;
         bool ok = true;
         for (const Param& param : statement.params) {
-            if (!param.declaredType.empty()) {
-                ok &= DeclaredWithDims(param.declaredType, param.typeRef, param.dims, natural,
-                                       false) != Type::Error;
+            if (!param.declaredType.empty() || param.choices) {
+                ok &= ResolveType(param, natural, true, false) != Type::Error;
             }
             if (FindBuiltinFunction(param.name)) {
                 Error(param.name + " is a built-in function; choose another name.", param.ref);
@@ -743,8 +1162,7 @@ private:
             }
         }
         if (!statement.declaredType.empty()) {
-            ok &= DeclaredWithDims(statement.declaredType, statement.typeRef, statement.dims,
-                                   natural, false) != Type::Error;
+            ok &= ResolveType(statement, natural, true, false) != Type::Error;
         }
         if (!CheckNewName(statement.name, statement.nameRef) || !ok) {
             return;
@@ -771,7 +1189,11 @@ private:
     FunctionInstance& Instantiate(Function& function, const std::vector<Type>& types) {
         Stmt& definition = *function.definition;
         for (auto& existing : definition.instances) {
-            if (existing->params == types) {
+            bool same = existing->params.size() == types.size();
+            for (std::size_t i = 0; same && i < types.size(); ++i) {
+                same = SameType(existing->params[i], types[i]);
+            }
+            if (same) {
                 return *existing;
             }
         }
@@ -791,8 +1213,7 @@ private:
         FunctionContext context{.instance = &instance, .function = &function};
         if (!definition.declaredType.empty()) {
             context.declared = true;
-            instance.result = WithDims(SetType(definition.declaredType, instance.naturalResult),
-                                       definition.dims.size());
+            instance.result = ResolveType(definition, instance.naturalResult, false, false);
         }
         if (definition.value) {
             instance.value = Clone(*definition.value);
@@ -951,6 +1372,61 @@ private:
                 return type;
             }
             case Expr::Kind::BigOp: return CheckBigOp(expr);
+            case Expr::Kind::TypeName:
+                Error(expr.text + " is a type; it can be used after ∈ (x ∈ " + expr.text +
+                          " := …), or as " + expr.text + "* for a new list.",
+                      expr.ref);
+                return Type::Error;
+            case Expr::Kind::StructType:
+                Error("⟨… ∈ …⟩ describes a struct type: name it (Person := ⟨…⟩), or make a list "
+                      "of them with ⟨…⟩*.",
+                      expr.ref);
+                return Type::Error;
+            case Expr::Kind::StructValue: return CheckStructValue(expr, nullptr);
+            case Expr::Kind::ListOf: {
+                const Type element = TypeFromExpr(*expr.args[0]);
+                return element == Type::Error ? Type(Type::Error) : MakeList(element);
+            }
+            case Expr::Kind::List: {
+                Type element;
+                bool first = true;
+                for (auto& item : expr.args) {
+                    const Type type = CheckExpr(*item);
+                    if (type == Type::Error) return Type::Error;
+                    if (type == Type::Void) {
+                        Error("This doesn't give a value.", item->ref);
+                        return Type::Error;
+                    }
+                    bool ok = true;
+                    element = first ? type : Unify(element, type, ok);
+                    first = false;
+                    if (!ok) {
+                        Error("A list's elements must all be of one type.", item->ref);
+                        return Type::Error;
+                    }
+                }
+                return MakeList(element == Type::EmptySet ? Type(Type::SetInt) : element);
+            }
+            case Expr::Kind::Member: {
+                const Type object = CheckExpr(*expr.args[0]);
+                if (object == Type::Error) return Type::Error;
+                if (object != Type::Struct) {
+                    Error("This is in " + TypeName(object) + ", which has no fields.",
+                          expr.args[0]->ref);
+                    return Type::Error;
+                }
+                const FieldInfo* field = object.info->Field(expr.text);
+                if (!field) {
+                    Error(TypeName(object) + " has no field called " + expr.text + ".",
+                          expr.opRef);
+                    return Type::Error;
+                }
+                return field->type;
+            }
+            case Expr::Kind::Method: return CheckMethod(expr, statement);
+            case Expr::Kind::Template:
+                if (CheckArgs(expr) == Type::Error) return Type::Error;
+                return Type::String;
             default: break;
         }
 
@@ -1123,10 +1599,21 @@ private:
         if (IsArray(left) || IsArray(right) || op == "⊙" || op == "∖") {
             return CheckArrayBinary(expr);
         }
-        if (op == "+" && left == Type::String && right == Type::String) {
-            Error("Strings can't be joined with + yet. To print several things, write "
-                  "print(a, b).",
-                  expr.opRef);
+        if ((left == Type::String || right == Type::String) &&
+            (op == "+" || op == "⋅" || op == "×")) {
+            if (op == "+" && left == Type::String && right == Type::String) {
+                return Type::String;  // joined
+            }
+            const bool repeat = op == "⋅" || op == "×";
+            if (repeat && ((left == Type::String && right == Type::Int) ||
+                           (left == Type::Int && right == Type::String))) {
+                expr.access = "repeat";
+                return Type::String;
+            }
+            Error(op == "+" ? "+ joins two strings. To join other values, use a template: "
+                              "\"x = ${x}\"."
+                  : "A string can be repeated a whole number of times: \"ab\"⋅3.",
+                  expr.opRef.Empty() ? expr.ref : expr.opRef);
             return Type::Error;
         }
         const std::string what = op == "mod" ? "mod" : op;
@@ -1207,6 +1694,46 @@ private:
         return failed ? Type::Error : SetOf(element);
     }
 
+    // list.push(value): the only method so far.
+    Type CheckMethod(Expr& expr, bool statement) {
+        Expr& object = *expr.args[0];
+        const Type type = CheckExpr(object);
+        if (type == Type::Error) {
+            for (std::size_t i = 1; i < expr.args.size(); ++i) CheckExpr(*expr.args[i]);
+            return Type::Error;
+        }
+        if (expr.text != "push" || type != Type::List) {
+            Error(type == Type::List ? "Lists have one method: .push(x) adds x at the end."
+                                     : "This is in " + TypeName(type) +
+                                           ", which has no ." + expr.text + "(…).",
+                  expr.opRef);
+            return Type::Error;
+        }
+        if (object.kind != Expr::Kind::Name) {
+            Error("push changes a list, so it needs the list's name, as in L.push(x).",
+                  object.ref);
+            return Type::Error;
+        }
+        if (Lookup(object.text) && Lookup(object.text)->loop) {
+            Error(object.text + " counts the loop, so it can't be changed inside it.", object.ref);
+            return Type::Error;
+        }
+        if (expr.args.size() != 2) {
+            Error("push takes one value.", expr.ref);
+            return Type::Error;
+        }
+        const Type& element = type.info->element;
+        const Type value = CheckExprAs(*expr.args[1], element);
+        if (!CheckStore(element, value, object.text, TypeName(type), expr.args[1]->ref)) {
+            return Type::Error;
+        }
+        if (!statement) {
+            Error("push doesn't give a value.", expr.ref);
+            return Type::Error;
+        }
+        return Type::Void;
+    }
+
     // Σ and ∏ of numbers, ⋃ and ⋂ of sets.
     Type CheckBigOp(Expr& expr) {
         const bool numbers = expr.text == "sum" || expr.text == "prod";
@@ -1242,7 +1769,7 @@ private:
             return Type::Error;
         };
         auto describe = [](Type type) -> std::string {
-            switch (type) {
+            switch (type.kind) {
                 case Type::Vector: return "a vector";
                 case Type::Matrix: return "a matrix";
                 case Type::Int:
@@ -1396,6 +1923,26 @@ private:
         if (type == Type::Error) {
             return Type::Error;
         }
+        if (type == Type::List || type == Type::Map) {
+            const bool map = type == Type::Map;
+            if (expr.args.size() != 2) {
+                Error("A list or map has one index.", expr.opRef);
+                return Type::Error;
+            }
+            const Type wanted = map ? type.info->key : Type(Type::Int);
+            const Type index = CheckExpr(*expr.args[1]);
+            if (index == Type::Error) return Type::Error;
+            if (!(index == wanted || (wanted == Type::Real && index == Type::Int))) {
+                Error(map ? "The keys here are in " + TypeName(wanted) + ", but this is in " +
+                                TypeName(index) + "."
+                          : "An index must be a whole number (ℤ), but this is in " +
+                                TypeName(index) + ".",
+                      expr.args[1]->ref);
+                return Type::Error;
+            }
+            expr.access = map ? "map" : "list";
+            return type.info->element;
+        }
         if (!IsArray(type)) {
             Error((base.kind == Expr::Kind::Name ? base.text : std::string("This")) +
                       " is a single value (" + TypeName(type) + "), so it has no entries.",
@@ -1458,6 +2005,17 @@ private:
             const std::string& op = expr.ops[i];
             const Type a = expr.args[i]->type;
             const Type b = expr.args[i + 1]->type;
+            if (op == "in") {
+                if (a != Type::String || b != Type::String) {
+                    if (a != Type::Error && b != Type::Error) {
+                        Error("in looks for text in a string (\"lo\" in \"hello\"); for sets "
+                              "and lists, write ∈.",
+                              Span(expr.args[i]->ref, expr.args[i + 1]->ref));
+                    }
+                    ok = false;
+                }
+                continue;
+            }
             if (op == "∈" || op == "∉") {
                 if (expr.ops.size() > 1) {
                     Error(op + " can't be chained with other comparisons; use ∧.", expr.opRef);
@@ -1542,7 +2100,7 @@ private:
             }
             const Type declared = ParamType(param);
             ok &= CheckStore(declared, argument, param.name,
-                             IsArray(declared) ? TypeName(declared) : param.declaredType.c_str(),
+                             IsArray(declared) ? TypeName(declared) : param.declaredType,
                              expr.args[i]->ref);
             types.push_back(declared);
         }
@@ -1730,7 +2288,9 @@ private:
         if (function->result == BuiltinFunction::Result::Special) {
             return CheckSpecialCall(expr);
         }
-        if (expr.text == "abs" && expr.args.size() == 1 && IsSet(expr.args[0]->type)) {
+        if (expr.text == "abs" && expr.args.size() == 1 &&
+            (IsSet(expr.args[0]->type) || expr.args[0]->type == Type::String ||
+             expr.args[0]->type == Type::List || expr.args[0]->type == Type::Map)) {
             expr.access = "size";
             return Type::Int;
         }

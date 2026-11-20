@@ -4,24 +4,101 @@
 
 #include "Source.h"
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace lang {
 
+struct TypeInfo;
+
 // Types of values. Error marks an expression that already has a reported
 // problem, so one mistake doesn't cause a cascade of messages.
 // Vector is a column of reals (ℝⁿ), Matrix a grid of reals (ℝ^{n×m}); their
 // sizes are checked when the program runs. Sets hold whole numbers, reals or
 // strings; EmptySet is ∅ (or {}) before it is known what it will hold.
-enum class Type {
-    Error, Void, Int, Real, Bool, String, Vector, Matrix,
-    SetInt, SetReal, SetString, EmptySet,
+// Struct, List and Map have details in `info` (see TypeInfo).
+//
+// == compares kinds only (`type == Type::Int`); SameType compares the
+// details too.
+struct Type {
+    enum Kind {
+        Error, Void, Int, Real, Bool, String, Vector, Matrix,
+        SetInt, SetReal, SetString, EmptySet,
+        Struct, List, Map,
+    };
+    Kind kind = Error;
+    std::shared_ptr<const TypeInfo> info;
+
+    Type(Kind kind = Error) : kind(kind) {}
+    Type(Kind kind, std::shared_ptr<const TypeInfo> info) : kind(kind), info(std::move(info)) {}
+    bool operator==(Kind other) const { return kind == other; }
+    bool operator==(const Type& other) const { return kind == other.kind; }
 };
 
-// How a type is written in messages: ℤ, ℝ, 𝔹, Σ*.
-const char* TypeName(Type type);
+// A @tag(…) on a struct field, such as @label("Name"): its arguments as text.
+struct Tag {
+    std::string name;
+    std::vector<std::string> args;
+    SourceRef ref;
+};
+
+struct Expr;
+
+struct FieldInfo {
+    std::string name;
+    std::string ident;
+    bool greek = false;
+    Type type;
+    std::vector<Tag> tags;
+    // @default(…): the value of a field a struct value leaves out.
+    std::shared_ptr<Expr> defaultValue;
+
+    // The tag's first argument, or "" without it.
+    std::string TagValue(const std::string& tag) const;
+    bool HasTag(const std::string& tag) const;
+};
+
+struct TypeInfo {
+    // Struct: its name ("Person", or ⟨name, age⟩ for one without), the C++
+    // struct for it, and its fields.
+    std::string name;
+    std::string cppName;
+    std::vector<FieldInfo> fields;
+    // List: the elements' type. Map: the values' type, and the keys'.
+    Type element;
+    Type key;
+
+    const FieldInfo* Field(const std::string& name) const;
+};
+
+// Types are the same, details included (structs by their fields).
+bool SameType(const Type& a, const Type& b);
+
+// How a type is written in messages: ℤ, ℝ, 𝔹, Σ*, ℝ*, Person.
+std::string TypeName(const Type& type);
+
+// A parameter of a function definition: f(x ∈ ℝ, n).
+struct Param {
+    std::string name;
+    std::string ident;
+    bool greek = false;
+    SourceRef ref;
+    // The declared set ("ℝ"), or empty to take the argument's type.
+    std::string declaredType;
+    SourceRef typeRef;
+    // Sizes after the set: ℝ^n has one, ℝ^{n×m} two; null for *.
+    std::vector<std::shared_ptr<Expr>> dims;
+    // ℝ^{Σ*}: a map from the key set to the declared set.
+    std::string mapKey;
+    // T*: a list of the declared type.
+    bool list = false;
+    // {"a", "b"}: one of these values (the declared set is then empty).
+    std::shared_ptr<Expr> choices;
+    // Struct fields only: @tags after the type.
+    std::vector<Tag> tags;
+};
 
 struct Expr {
     enum class Kind {
@@ -52,6 +129,14 @@ struct Expr {
                   // {x ∈ S : P} has args[1] = x
         BigOp,    // text "sum", "prod", "bigcup", "bigcap": Σ_{var ∈ args[0]} args[1]
         Quantifier, // text "∀" or "∃": ∀ var ∈ args[0] : args[1]
+        TypeName, // a built-in set used as a value: text "ℝ", "Σ*", ... (for T*)
+        StructType, // ⟨name ∈ Σ*, age ∈ ℝ⟩: fields
+        StructValue, // ⟨name = "Bob", age = 4⟩: ops are the field names, args the values
+        ListOf,   // args {type}: T*, a new empty list (ℝ*, Person*, ⟨…⟩*)
+        List,     // args: the elements: [1, 2, 3]
+        Member,   // args {object}: object.text
+        Method,   // args {object, arguments...}: object.text(arguments), e.g. L.push(x)
+        Template, // "Hi ${name}!": ops are the text parts, args the values between them
     };
 
     Kind kind;
@@ -70,12 +155,14 @@ struct Expr {
     std::string varIdent;
     bool varGreek = false;
     SourceRef varRef;
+    // StructType: the fields, declared like parameters.
+    std::vector<Param> fields;
     // Matrix: its size. A single column is a vector.
     std::size_t rows = 0;
     std::size_t columns = 0;
 
     // Set by the checker.
-    Type type = Type::Error;
+    Type type;
     // For names: the variable must stay ≥ 0 (declared in ℕ).
     bool natural = false;
     // For calls of functions defined in the document: the C++ function for
@@ -90,19 +177,6 @@ struct Expr {
 
 struct Stmt;
 using Block = std::vector<std::unique_ptr<Stmt>>;
-
-// A parameter of a function definition: f(x ∈ ℝ, n).
-struct Param {
-    std::string name;
-    std::string ident;
-    bool greek = false;
-    SourceRef ref;
-    // The declared set ("ℝ"), or empty to take the argument's type.
-    std::string declaredType;
-    SourceRef typeRef;
-    // Sizes after the set: ℝ^n has one, ℝ^{n×m} two; null for *.
-    std::vector<std::shared_ptr<Expr>> dims;
-};
 
 // A function is checked once for each combination of argument types it is
 // called with, so f(x) := x² gives ℤ for f(2) and ℝ for f(2.5). Each
@@ -147,6 +221,14 @@ struct Stmt {
     std::string declaredType;
     SourceRef typeRef;
     std::vector<std::shared_ptr<Expr>> dims;
+    // As in Param: ℝ^{Σ*} maps, T* lists, {"a", "b"} choices.
+    std::string mapKey;
+    bool list = false;
+    std::shared_ptr<Expr> choices;
+
+    // Assign: a field of the variable (p.name ← …).
+    std::string member;
+    SourceRef memberRef;
 
     // Define, Assign: a subscript on the name (x_i := …, A_{i,j} ← …).
     // The checker decides what it is (`access`): "family", "vector",
@@ -185,6 +267,8 @@ struct Program {
     Block statements;
     // Set by the checker; they exist for the whole program.
     std::vector<Family> families;
+    // Every struct type, in an order where each comes after those it uses.
+    std::vector<std::shared_ptr<const TypeInfo>> structs;
 };
 
 // Deep copies, without anything the checker set.

@@ -86,6 +86,17 @@ inline std::function<std::unique_ptr<EditorNode>()> MakeMathBigOp(BigOpNode::Kin
     };
 }
 
+// ⟨ ⟩ with two empty rows: a struct's fields, one per row.
+inline std::unique_ptr<EditorNode> MakeMathStruct() {
+    std::vector<MatrixNode::Row> rows;
+    for (int row = 0; row < 2; ++row) {
+        MatrixNode::Row cells;
+        cells.push_back(std::make_unique<LineNode>());
+        rows.push_back(std::move(cells));
+    }
+    return std::make_unique<MatrixNode>("angle", std::move(rows));
+}
+
 // A graph with axis labels "x" and "y" and one empty function.
 inline std::unique_ptr<EditorNode> MakeMathGraph() {
     return std::make_unique<GraphNode>();
@@ -126,6 +137,7 @@ inline const std::vector<MathMenuItem>& MathMenuItems() {
             {"\\bmatrix", MakeMathMatrix("bmatrix")},
             {"\\vmatrix", MakeMathMatrix("vmatrix")},
             {"\\cases", MakeMathMatrix("cases")},
+            {"\\struct", MakeMathStruct},
             {"\\sum", MakeMathBigOp(BigOpNode::Kind::SUM)},
             {"\\prod", MakeMathBigOp(BigOpNode::Kind::PRODUCT)},
             {"\\bigcup", MakeMathBigOp(BigOpNode::Kind::UNION)},

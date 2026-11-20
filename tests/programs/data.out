@@ -1,0 +1,16 @@
+Ada is 36 years old, next year 37.
+Ada Lovelace ababab 3 true false
+⟨x = 11, y = 2, label = none⟩ 11 none
+[3, 1, 4, 1] 4 4 3 true
+[3, 9, 4, 1] 17
+{Ada: 36, Alan: 41} 41 true 2
+Ada 36
+Alan 41
+[hi]
+Cart:
+Item       price
+Tea        $3.50
+Biscuits  $12.00
+linear
+log true
+! Row 33: scale must be one of linear, log, not cubic

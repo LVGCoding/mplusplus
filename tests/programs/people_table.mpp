@@ -1,0 +1,4 @@
+People := \begin{angle}name \in \Sigma * @label("Name") @align("right") @filler("*")\\age \in \mathbb{R} @label("Age") @format(".2f")\end{angle}*
+People.push(\begin{angle}name = "Bob", age = 20.444\end{angle})
+People.push(<name = "Johnathon", age = 18.3>)
+print(People)

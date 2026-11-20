@@ -1,0 +1,33 @@
+name := "Ada"
+age := 36
+print("$\{name\} is $\{age\} years old, next year $\{age + 1\}.")
+print(name + " Lovelace", "ab" \cdot 3, |name|, "da" in name, "x" in name)
+Point := \begin{angle}x \in \mathbb{R}, y \in \mathbb{R}\\label \in \Sigma * @default("none")\end{angle}
+p \in Point := <x = 1, y = 2>
+p.x \leftarrow p.x + 10
+print(p, p.x, p.label)
+xs := [3, 1, 4]
+xs.push(1)
+print(xs, |xs|, xs_{3}, xs[1], 4 \in xs)
+xs_{2} \leftarrow 9
+total := 0
+for v \in xs \{ total \leftarrow total + v \}
+print(xs, total)
+ages \in \mathbb{Z}\exp{}{\Sigma *}
+ages["Ada"] \leftarrow 36
+ages_{"Alan"} := 41
+print(ages, ages["Alan"], "Ada" \in ages, |ages|)
+for who \in ages \{ print(who, ages[who]) \}
+words := \Sigma * *
+words.push("hi")
+print(words)
+Item := \begin{angle}name \in \Sigma * @label("Item")\\price \in \mathbb{R} @prefix("$") @format(".2f") @align("right")\\code \in \mathbb{Z} @hidden\end{angle}
+cart := Item*
+cart.push(<name = "Tea", price = 3.5, code = 1>)
+cart.push(<name = "Biscuits", price = 12, code = 2>)
+print("Cart:", cart)
+scale \in \{"linear", "log"\}
+print(scale)
+scale \leftarrow "log"
+print(scale, p = <x = 11, y = 2, label = "none">)
+scale \leftarrow "cubic"

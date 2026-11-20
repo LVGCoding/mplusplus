@@ -66,6 +66,9 @@ void DrawDelimiter(Clay_BoundingBox bounds) {
         drawLine(pointAt(0.5f, 0.94f), pointAt(0.85f, 1.0f));
     } else if constexpr (KIND == Delimiter::BAR) {
         drawLine(pointAt(0.5f, 0.0f), pointAt(0.5f, 1.0f));
+    } else if constexpr (KIND == Delimiter::ANGLE) {
+        drawLine(pointAt(0.8f, 0.0f), pointAt(0.2f, 0.5f));
+        drawLine(pointAt(0.2f, 0.5f), pointAt(0.8f, 1.0f));
     } else if constexpr (KIND == Delimiter::FLOOR) {
         drawLine(pointAt(0.3f, 0.0f), pointAt(0.3f, 1.0f));
         drawLine(pointAt(0.3f, 1.0f), pointAt(0.8f, 1.0f));
@@ -146,6 +149,9 @@ void DelimiterSymbol(Delimiter kind,
         break;
     case Delimiter::FLOOR:
         draw = DelimiterDraw<Delimiter::FLOOR>(right);
+        break;
+    case Delimiter::ANGLE:
+        draw = DelimiterDraw<Delimiter::ANGLE>(right);
         break;
     case Delimiter::CEIL:
         draw = DelimiterDraw<Delimiter::CEIL>(right);

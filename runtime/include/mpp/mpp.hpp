@@ -13,6 +13,7 @@
 
 #include "control.hpp"
 #include "core.hpp"
+#include "data.hpp"
 #include "linalg.hpp"
 #include "print.hpp"
 #include "scalar.hpp"

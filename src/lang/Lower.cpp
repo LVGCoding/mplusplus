@@ -45,9 +45,9 @@ struct Spelling {
     std::string_view typed;
     std::string_view canonical;
 };
-constexpr std::array<Spelling, 41> OPERATORS = {{
+constexpr std::array<Spelling, 43> OPERATORS = {{
     {":=", ":="}, {"<-", "←"}, {"->", "→"}, {"<=", "≤"}, {">=", "≥"}, {"!=", "≠"},
-    {"..", ".."},
+    {"..", ".."}, {".", "."},  {"@", "@"},
     {"+", "+"},   {"-", "−"},  {"*", "⋅"},  {"/", "/"},  {"^", "^"},  {"(", "("},
     {")", ")"},   {"[", "["},  {"]", "]"},  {",", ","},  {";", ";"},  {":", ":"},
     {"=", "="},   {"<", "<"},  {">", ">"},  {"!", "!"},  {"|", "|"},  {"{", "{"},
@@ -164,18 +164,57 @@ private:
         out_.push_back(std::move(token));
     }
 
-    void LowerText(std::size_t child, const std::string& text) {
-        std::size_t i = 0;
-        const std::size_t n = text.size();
+    // Lowers text[begin, end) of the TextNode at `child`.
+    void LowerText(std::size_t child, const std::string& text, std::size_t begin = 0,
+                   std::size_t end = std::string::npos) {
+        std::size_t i = begin;
+        const std::size_t n = std::min(end, text.size());
         while (i < n) {
             if (string_) {
-                const std::size_t quote = text.find('"', i);
-                if (quote == std::string::npos) {
-                    string_->text += text.substr(i);
+                const std::size_t quote = std::min(text.find('"', i), n);
+                const std::size_t hole = text.find("${", i);
+                if (hole < quote) {
+                    // A template string: "Hi ${name}!" — the part in ${…} is
+                    // lowered as tokens of its own.
+                    string_->text += text.substr(i, hole - i);
+                    std::size_t close = hole + 2;
+                    int depth = 1;
+                    for (; close < n; ++close) {
+                        if (text[close] == '{') ++depth;
+                        if (text[close] == '}' && --depth == 0) break;
+                    }
+                    if (close >= n) {
+                        diagnostics_.push_back({"This ${ is never closed with }.",
+                                                {At(child, hole), At(child, hole + 2)}});
+                        string_->text += text.substr(hole, n - hole);
+                        return;
+                    }
+                    string_->pieces.push_back(std::move(string_->text));
+                    string_->text.clear();
+                    std::vector<Token> tokens;
+                    LineLowerer inner(path_, tokens, diagnostics_);
+                    inner.line_ = line_;
+                    inner.LowerText(child, text, hole + 2, close);
+                    if (tokens.empty()) {
+                        diagnostics_.push_back({"Put a value inside ${ }.",
+                                                {At(child, hole), At(child, close + 1)}});
+                    }
+                    Token endToken{.kind = Kind::End, .ref = {At(child, close), At(child, close)}};
+                    tokens.push_back(std::move(endToken));
+                    string_->slots.push_back(std::move(tokens));
+                    i = close + 1;
+                    continue;
+                }
+                if (quote >= n) {
+                    string_->text += text.substr(i, n - i);
                     return;
                 }
                 string_->text += text.substr(i, quote - i);
                 string_->ref.end = At(child, quote + 1);
+                if (!string_->slots.empty()) {
+                    string_->pieces.push_back(std::move(string_->text));
+                    string_->text.clear();
+                }
                 out_.push_back(std::move(*string_));
                 string_.reset();
                 i = quote + 1;

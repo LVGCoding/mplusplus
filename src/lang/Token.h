@@ -54,7 +54,10 @@ struct Token {
     SourceRef ref;
 
     Shape shape = Shape::None;
+    // Structures: the tokens of each slot. A template string ("Hi ${name}")
+    // has the tokens of each ${…} here, and its text parts in `pieces`.
     std::vector<std::vector<Token>> slots;
+    std::vector<std::string> pieces;
     std::vector<std::size_t> rowLengths;
 
     bool Is(Kind k, std::string_view t) const { return kind == k && text == t; }

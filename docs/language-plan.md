@@ -322,6 +322,32 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 - Editor: angle-bracket struct node; TableNode connected to run results.
 - Done when: `people_table.mpp` reproduces the table from `lang_ideas.pdf`.
 
+**Status: done**, except connecting TableNode to run results (it belongs
+with the results protocol in phase 6). Notes:
+- `Type` is now a struct: a kind plus details (struct fields, list
+  element, map key/value). `==` compares kinds; `SameType` compares fully.
+- Strings: `Σ*` (Σ alone, a character, isn't supported); `+` joins, `s⋅3`
+  repeats, `"lo" in s`, `|s|` counts characters; templates `"Hi ${name}"`
+  (typed braces, saved as `$\{name\}`).
+- Structs: `Person := ⟨name ∈ Σ*, age ∈ ℝ⟩` names a type; `⟨…⟩` is a new
+  `angle` matrix environment (one or more fields per row); `<…>` can be typed
+  instead. Values `⟨name = "Bob", age = 4⟩` take the type wanted where they
+  are used (a declared variable, push, a field), or else a nameless struct
+  type shared by values with the same fields. `p.name`, `p.name ← …`; structs
+  with the same fields and types convert into each other.
+- Tags on fields: @label @align @filler @format @prefix @postfix @unit
+  @hidden @default (the default fills a field a value leaves out).
+- Lists: `T*` makes an empty one (`ℝ*`, `Σ**`, `Person*`, `⟨…⟩*`); `[1, 2]`;
+  `L.push(x)`; `L_i`/`L[i]` (1-based, assignable); `|L|`; `x ∈ L`; for. A
+  list of structs prints as a table (columns from the tags, two spaces apart,
+  trailing padding trimmed).
+- Maps: `m ∈ ℝ^{Σ*}`; `m["k"]`/`m_{"k"}` read (missing key is a runtime
+  error) and `← / :=` write; `k ∈ m` and for go through the keys; `|m|`.
+- Choices: `scale ∈ {"linear", "log"}` starts as the first choice; every
+  value stored is checked to be one of them.
+- `people_table.mpp` prints `******Bob` (6 stars): the PDF shows 7, but
+  "Bob" padded to "Johnathon"'s 9 characters takes 6.
+
 ### Phase 6: graphs
 - Lang: GraphNode lowering, sampling, data series, results protocol;
   Figure with Line/Scatter/Histogram/Bar.

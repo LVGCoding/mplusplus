@@ -100,6 +100,37 @@ std::string DescribeExpr(const lang::Expr& expr) {
             return "(set " + DescribeExpr(*expr.args[1]) + " : " + expr.var + " ∈ " +
                    DescribeExpr(*expr.args[0]) +
                    (expr.conditions[0] ? ", " + DescribeExpr(*expr.conditions[0]) : "") + ")";
+        case K::TypeName: return expr.text;
+        case K::StructType: {
+            std::string text = "⟨";
+            for (std::size_t i = 0; i < expr.fields.size(); ++i) {
+                const lang::Param& field = expr.fields[i];
+                text += (i ? ", " : "") + field.name + " ∈ " + field.declaredType +
+                        (field.list ? "*" : "");
+                for (const auto& tag : field.tags) {
+                    text += " @" + tag.name;
+                }
+            }
+            return text + "⟩";
+        }
+        case K::StructValue: {
+            std::string text = "⟨";
+            for (std::size_t i = 0; i < expr.ops.size(); ++i) {
+                text += (i ? ", " : "") + expr.ops[i] + " = " + DescribeExpr(*expr.args[i]);
+            }
+            return text + "⟩";
+        }
+        case K::ListOf: return "(" + DescribeExpr(*expr.args[0]) + ")*";
+        case K::List: return list("list");
+        case K::Member: return "(. " + DescribeExpr(*expr.args[0]) + " " + expr.text + ")";
+        case K::Method: return list("." + expr.text);
+        case K::Template: {
+            std::string text = "(template \"" + expr.ops[0] + "\"";
+            for (std::size_t i = 0; i < expr.args.size(); ++i) {
+                text += " " + DescribeExpr(*expr.args[i]) + " \"" + expr.ops[i + 1] + "\"";
+            }
+            return text + ")";
+        }
         case K::BigOp:
         case K::Quantifier:
             return "(" + expr.text + " " + expr.var + " ∈ " + DescribeExpr(*expr.args[0]) + " " +
@@ -465,6 +496,51 @@ TEST(Check, Sets) {
     // Bound variables may reuse names from outside, and don't leak out.
     EXPECT_EQ(FirstError("k := 5\nprint(\\sum_{k=1}^{3} k, k)"), "");
     EXPECT_EQ(FirstError("E := \\emptyset\nE \\leftarrow E \\cup \\{1\\}"), "");
+}
+
+TEST(Parse, Data) {
+    EXPECT_EQ(ParseExpression("\"Hi $\\{name\\}, $\\{n + 1\\}!\""),
+              "(print (template \"Hi \" name \", \" (+ n 1) \"!\"))");
+    EXPECT_EQ(ParseExpression("p.name + q.f(1, 2)"), "(print (+ (. p name) (.f q 1 2)))");
+    EXPECT_EQ(ParseExpression("<name = \"Bob\", age = 4>"), "(print ⟨name = \"Bob\", age = 4⟩)");
+    EXPECT_EQ(ParseExpression("\\begin{angle}x = 1\\\\y = 2\\end{angle}"),
+              "(print ⟨x = 1, y = 2⟩)");
+    EXPECT_EQ(ParseStatements("P := \\begin{angle}name \\in \\Sigma * @label(\"N\")\\end{angle}*"),
+              "P := (⟨name ∈ Σ* @label⟩)*");
+    EXPECT_EQ(ParseStatements("L := \\mathbb{R}*"), "L := (ℝ)*");
+    EXPECT_EQ(ParseExpression("[1, 2] + m[\"k\"]"), "(print (+ (list 1 2) (_ m \"k\")))");
+    EXPECT_EQ(ParseExpression("\"lo\" in s"), "(print (cmp \"lo\" in s))");
+    EXPECT_EQ(ParseExpression("\\begin{angle}x = 1, y \\in \\mathbb{R}\\end{angle}"),
+              "error: Write all the fields with ∈ (a struct type) or all with = (a value).");
+}
+
+TEST(Check, Data) {
+    const std::string point = "Point := \\begin{angle}x \\in \\mathbb{R}, y \\in \\mathbb{R}"
+                              "\\end{angle}\n";
+    EXPECT_EQ(FirstError(point + "p \\in Point := <x = 1, y = 2>\np.x \\leftarrow 3\n"
+                                 "print(p.x + p.y)"),
+              "");
+    EXPECT_EQ(FirstError(point + "p \\in Point := <x = 1>"),
+              "This leaves out y: give it a value, or the field a @default(…).");
+    EXPECT_EQ(FirstError(point + "p \\in Point := <x = 1, y = 2, z = 3>"),
+              "Point has no field called z.");
+    EXPECT_EQ(FirstError(point + "p \\in Point := <x = 1, y = 2>\nprint(p.z)"),
+              "Point has no field called z.");
+    EXPECT_EQ(FirstError("L := \\mathbb{Z}*\nL.push(\"a\")"), "L is in ℤ*, but this is in Σ*.");
+    EXPECT_EQ(FirstError("L := \\mathbb{Z}*\nx := L.push(1)"), "push doesn't give a value.");
+    EXPECT_EQ(FirstError("m \\in \\mathbb{R}\\exp{}{\\Sigma *}\nm[1] \\leftarrow 2"),
+              "The keys of m are in Σ*, but this is in ℤ.");
+    EXPECT_EQ(FirstError("print(\"a\" + 1)"),
+              "+ joins two strings. To join other values, use a template: \"x = ${x}\".");
+    EXPECT_EQ(FirstError("print(1 in \"a\")"),
+              "in looks for text in a string (\"lo\" in \"hello\"); for sets and lists, write ∈.");
+    EXPECT_EQ(FirstError("x \\in Thing"), "Thing isn't a type. Define it first, as in Thing := ⟨name ∈ Σ*⟩.");
+    EXPECT_EQ(FirstError("T := \\begin{angle}x \\in \\mathbb{R} @colour(\"red\")\\end{angle}"),
+              "There's no tag @colour. Tags are @label, @align, @filler, @format, @prefix, "
+              "@postfix, @unit, @hidden and @default.");
+    EXPECT_EQ(FirstError("T := \\begin{angle}x \\in \\mathbb{R} @default(\"a\")\\end{angle}"),
+              "@default(a) doesn't fit x, which is in ℝ.");
+    EXPECT_EQ(FirstError("s \\in \\{\"a\", \"b\"\\} := 3"), "s is in Σ*, but this is in ℤ.");
 }
 
 TEST(Check, SubscriptsAreLabelsOrIndices) {
