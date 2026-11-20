@@ -66,11 +66,11 @@ TEST(EditText,
 }
 
 TEST(EditText,
-     BracesAreNotTyped) {
+     BracesAreTypedAsEscapedText) {
     auto file = MakeDocument("a", {0, 0, 1});
-    EXPECT_FALSE(file.TypeCharacter(U'{'));
-    EXPECT_FALSE(file.TypeCharacter(U'}'));
-    EXPECT_EQ(file.ContentText(), "a");
+    EXPECT_TRUE(file.TypeCharacter(U'{'));
+    EXPECT_TRUE(file.TypeCharacter(U'}'));
+    EXPECT_EQ(file.ContentText(), "a\\{\\}");
 }
 
 TEST(EditText,
@@ -93,6 +93,33 @@ TEST(EditRows,
     ASSERT_TRUE(PressKey(file, KEY_BACKSPACE));
     EXPECT_EQ(file.ContentText(), "ab\\alpha+cd");
     EXPECT_EQ(file.cursorPos, (CursorPath{0, 2, 1}));
+}
+
+TEST(EditRows,
+     EnterKeepsTheIndentationAndIndentsAfterABrace) {
+    auto file = MakeDocument("    a", {0, 0, 5});
+    ASSERT_TRUE(PressKey(file, KEY_ENTER));
+    EXPECT_EQ(file.ContentText(), "    a\n    ");
+    EXPECT_EQ(file.cursorPos, (CursorPath{1, 0, 4}));
+
+    file = MakeDocument("if x \\{", {0, 0, 6});
+    ASSERT_TRUE(PressKey(file, KEY_ENTER));
+    EXPECT_EQ(file.ContentText(), "if x \\{\n    ");
+    EXPECT_EQ(file.cursorPos, (CursorPath{1, 0, 4}));
+    // Typing } at the start of the indented row closes the block.
+    ASSERT_TRUE(file.TypeCharacter(U'}'));
+    EXPECT_EQ(file.ContentText(), "if x \\{\n\\}");
+}
+
+TEST(EditRows,
+     EnterBetweenBracesOpensAnIndentedRow) {
+    auto file = MakeDocument("  f() \\{\\}", {0, 0, 7});
+    ASSERT_TRUE(PressKey(file, KEY_ENTER));
+    EXPECT_EQ(file.ContentText(), "  f() \\{\n      \n  \\}");
+    EXPECT_EQ(file.cursorPos, (CursorPath{1, 0, 6}));
+    // One undo step puts it back.
+    ASSERT_TRUE(file.Undo());
+    EXPECT_EQ(file.ContentText(), "  f() \\{\\}");
 }
 
 TEST(EditRows,

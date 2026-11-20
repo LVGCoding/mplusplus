@@ -69,7 +69,7 @@ void Slot(bool outlined,
 }
 
 // Custom elements that stretch to their laid-out height.
-enum class Delimiter { PAREN, BRACKET, BRACE, BAR, DOUBLE_BAR };
+enum class Delimiter { PAREN, BRACKET, BRACE, BAR, DOUBLE_BAR, FLOOR, CEIL };
 void Radical(float fontSize);
 void DelimiterSymbol(Delimiter kind,
                      bool right,

@@ -1,5 +1,6 @@
 #include "Lower.h"
 
+#include "math/DelimNode.h"
 #include "math/ExpoNode.h"
 #include "math/FracNode.h"
 #include "math/GraphNode.h"
@@ -42,12 +43,13 @@ struct Spelling {
     std::string_view typed;
     std::string_view canonical;
 };
-constexpr std::array<Spelling, 39> OPERATORS = {{
+constexpr std::array<Spelling, 41> OPERATORS = {{
     {":=", ":="}, {"<-", "←"}, {"->", "→"}, {"<=", "≤"}, {">=", "≥"}, {"!=", "≠"},
     {"..", ".."},
     {"+", "+"},   {"-", "−"},  {"*", "⋅"},  {"/", "/"},  {"^", "^"},  {"(", "("},
     {")", ")"},   {"[", "["},  {"]", "]"},  {",", ","},  {";", ";"},  {":", ":"},
-    {"=", "="},   {"<", "<"},  {">", ">"},  {"!", "!"},  {"|", "|"},
+    {"=", "="},   {"<", "<"},  {">", ">"},  {"!", "!"},  {"|", "|"},  {"{", "{"},
+    {"}", "}"},
     // Unicode typed directly.
     {"−", "−"},   {"·", "⋅"},  {"⋅", "⋅"},  {"×", "×"},  {"÷", "/"},  {"≤", "≤"},
     {"≥", "≥"},   {"≠", "≠"},  {"≈", "≈"},  {"←", "←"},  {"→", "→"},  {"∈", "∈"},
@@ -261,9 +263,15 @@ private:
             token.shape = Token::Shape::Graph;
         } else if (dynamic_cast<const TableNode*>(&node)) {
             token.shape = Token::Shape::Table;
+        } else if (const auto* delimited = dynamic_cast<const DelimNode*>(&node)) {
+            token.shape = Token::Shape::Delimited;
+            token.text = std::string(DelimNode::CommandName(delimited->GetKind()));
+            token.slots.push_back(Slot(delimited->GetArgument(), {index, 0}));
         } else if (const auto* matrix = dynamic_cast<const MatrixNode*>(&node)) {
-            token.shape = Token::Shape::Matrix;
+            token.shape = matrix->GetEnvironment() == "cases" ? Token::Shape::Cases
+                                                             : Token::Shape::Matrix;
             for (std::size_t row = 0; row < matrix->RowCount(); ++row) {
+                token.rowLengths.push_back(matrix->ColumnCount(row));
                 for (std::size_t column = 0; column < matrix->ColumnCount(row); ++column) {
                     token.slots.push_back(Slot(matrix->GetCell(row, column), {index, row, column}));
                 }

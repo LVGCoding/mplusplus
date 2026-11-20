@@ -9,7 +9,8 @@
 #include <vector>
 
 // \begin{matrix} a & b \\ c & d \end{matrix}
-// Also used for the pmatrix/bmatrix/Bmatrix/vmatrix/Vmatrix variants.
+// Also used for the pmatrix/bmatrix/Bmatrix/vmatrix/Vmatrix variants, and for
+// cases (a left brace, rows of "value & condition").
 class MatrixNode : public EditorNode {
 public:
     using Row = std::vector<std::unique_ptr<EditorNode>>;

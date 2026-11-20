@@ -12,12 +12,14 @@
 //   \frac{a}{b}                        -> FracNode (children are LineNodes)
 //   \sqrt{x}, \sqrt[n]{x}              -> SqrtNode (children are LineNodes; root may be null)
 //   \exp{base}{exponent}               -> ExpoNode (children are LineNodes)
+//   \abs{x}, \floor{x}, \ceil{x}       -> DelimNode (|x|, ⌊x⌋, ⌈x⌉)
 //   \alpha ... \omega                  -> GreekNode
 //   \in, \leftarrow, \mathbb{R}, ...   -> SymbolNode (see its table)
 //   \begin{matrix} a & b \\ c & d \end{matrix}
 //                                      -> MatrixNode (cells are LineNodes); also
-//                                         pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix
+//                                         pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix, cases
 //   {...}                              -> LineNode with IsBraced() == true
+//   \{ \}                              -> the text "{" / "}" (typed braces)
 //   anything else                      -> TextNode (adjacent text is merged)
 //
 // Parsing never fails: malformed input (e.g. "\frac{a}" or an unclosed "{") is

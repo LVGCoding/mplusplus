@@ -1,0 +1,16 @@
+steps(n \in \mathbb{N}) \{
+    count := 0
+    while n \neq 1 \{
+        if n mod 2 = 0 \{
+            n \leftarrow \floor{\frac{n}{2}}
+        \} else \{
+            n \leftarrow 3n + 1
+        \}
+        count \leftarrow count + 1
+    \}
+    return count
+\}
+for i \in 1..10 \{
+    print(i, steps(i))
+\}
+print("27 takes", steps(27), "steps")

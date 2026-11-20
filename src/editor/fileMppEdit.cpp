@@ -181,6 +181,60 @@ bool FileMpp::PasteText(std::string text) {
     return true;
 }
 
+namespace {
+// The spaces a row starts with.
+std::string Indentation(const LineNode& row) {
+    const auto* text = dynamic_cast<const TextNode*>(row.GetChild(0));
+    if (!text) {
+        return {};
+    }
+    const std::string& value = text->GetText();
+    return value.substr(0, value.find_first_not_of(' ') == std::string::npos
+                               ? value.size()
+                               : value.find_first_not_of(' '));
+}
+
+constexpr std::size_t INDENT = 4;
+}  // namespace
+
+// Enter at row level: the new row keeps the indentation, one level more
+// after a "{". Between "{" and "}" the "}" goes on a row of its own.
+void FileMpp::SplitRow(std::size_t row) {
+    const std::string indentation = Indentation(*content[row]);
+    bool opens = false;
+    if (const auto* text = dynamic_cast<const TextNode*>(content[row]->GetChild(cursorPos[1]))) {
+        const std::string before = text->GetText().substr(0, cursorPos[2]);
+        const std::size_t last = before.find_last_not_of(' ');
+        opens = last != std::string::npos && before[last] == '{';
+    }
+    auto rest = content[row]->SplitAt(cursorPos[1], cursorPos[2]);
+    std::string restText;
+    auto* restStart = dynamic_cast<TextNode*>(rest->GetChild(0));
+    if (restStart) {
+        restText = restStart->GetText();
+        restText.erase(0, std::min(restText.find_first_not_of(' '), restText.size()));
+    }
+    const std::string inner = indentation + (opens ? std::string(INDENT, ' ') : "");
+    const bool closes = opens && restText.starts_with('}');
+    auto at = content.begin() + static_cast<std::ptrdiff_t>(row) + 1;
+    if (closes) {
+        restStart->SetText(indentation + restText);
+        at = content.insert(at, std::move(rest));
+        auto middle = std::make_unique<LineNode>();
+        middle->AddChild(std::make_unique<TextNode>(inner));
+        middle->Normalize();
+        content.insert(at, std::move(middle));
+    } else {
+        if (restStart) {
+            restStart->SetText(inner + restText);
+        }
+        content.insert(at, std::move(rest));
+    }
+    cursorPos = {row + 1, 0, inner.size()};
+    selectionStart = cursorPos;
+    MarkEdited();
+}
+
 bool FileMpp::PressKey(int key,
                        bool shift,
                        const TextMeasure* measure) {
@@ -337,11 +391,7 @@ bool FileMpp::PressKey(int key,
     case KeyResult::Kind::IGNORED:
         // Enter directly on a row (not inside an object) splits the row.
         if (key == KEY_ENTER && cursorPos.size() == 3) {
-            auto rest = content[row]->SplitAt(cursorPos[1], cursorPos[2]);
-            content.insert(content.begin() + static_cast<std::ptrdiff_t>(row) + 1, std::move(rest));
-            cursorPos = JoinPath({row + 1}, content[row + 1]->FirstPosition());
-            selectionStart = cursorPos;
-            MarkEdited();
+            SplitRow(row);
             return true;
         }
         return false;
@@ -379,14 +429,22 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
         return InsertNode(std::make_unique<ExpoNode>(
             std::make_unique<LineNode>(), std::make_unique<LineNode>()));
     }
-    // Braces would unbalance the LaTeX when saved; objects are inserted from
-    // the math popup instead.
-    if (codepoint == U'{' || codepoint == U'}') {
-        return false;
-    }
     // A space ends the word, so each word (with its space) undoes in one go.
     EditScope scope(*this, EditKind::TYPING, codepoint == U' ');
     DeleteSelection();  // typing replaces the selection
+    // A "}" typed after only spaces closes a block: undo one level of indentation.
+    if (codepoint == U'}' && cursorPos.size() == 3 && cursorPos[1] == 0) {
+        if (auto* text = dynamic_cast<TextNode*>(content[cursorPos[0]]->GetChild(0))) {
+            const std::string& value = text->GetText();
+            const std::size_t offset = cursorPos[2];
+            if (offset > 0 && value.find_first_not_of(' ') >= offset) {
+                const std::size_t remove = std::min(offset, INDENT);
+                text->SetText(value.substr(0, offset - remove) + value.substr(offset));
+                cursorPos[2] -= remove;
+                selectionStart = cursorPos;
+            }
+        }
+    }
     KeyEvent event;
     event.codepoint = codepoint;
     event.path = PathView(cursorPos).subspan(1);

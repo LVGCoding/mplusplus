@@ -86,7 +86,17 @@ TextNode::GetSize() {
 }
 
 std::string TextNode::ToText() const {
-    return text_;
+    // Typed braces (blocks in M++ programs) are saved as \{ and \} so they
+    // don't open or close a LaTeX group; the parser reads them back as text.
+    std::string text;
+    text.reserve(text_.size());
+    for (char c : text_) {
+        if (c == '{' || c == '}') {
+            text += '\\';
+        }
+        text += c;
+    }
+    return text;
 }
 
 bool TextNode::HasChild() {

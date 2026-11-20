@@ -92,6 +92,7 @@ add_library(mplusplus_core STATIC
   src/editor/fileMppEdit.cpp
   src/editor/fileMppSelection.cpp
   src/editor/fileMppHistory.cpp
+  src/math/DelimNode.cpp
   src/math/ExpoNode.cpp
   src/math/FracNode.cpp
   src/math/GraphNode.cpp
@@ -105,6 +106,7 @@ add_library(mplusplus_core STATIC
   src/math/SymbolNode.cpp
   src/math/TableNode.cpp
   src/math/TextNode.cpp
+  src/lang/Ast.cpp
   src/lang/Builtins.cpp
   src/lang/Checker.cpp
   src/lang/CodeGen.cpp

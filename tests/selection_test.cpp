@@ -221,7 +221,7 @@ TEST(SelectEdit,
      BlockedCharactersKeepTheSelection) {
     auto file = MakeDocument("abc", {0, 0, 0});
     PressShiftKey(file, KEY_RIGHT);
-    EXPECT_FALSE(file.TypeCharacter(U'{'));
+    EXPECT_FALSE(file.TypeCharacter(U'\t'));
     EXPECT_EQ(file.ContentText(), "abc");
     EXPECT_TRUE(file.GetSelection());
 }

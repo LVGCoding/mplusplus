@@ -37,9 +37,12 @@ std::string DescribeTokens(const std::vector<Token>& tokens) {
             case Token::Kind::Newline: text += "⏎"; break;
             case Token::Kind::End: break;
             case Token::Kind::Structure: {
-                static const char* SHAPES[] = {"?", "frac", "root", "pow", "group",
-                                               "matrix", "graph", "table"};
+                static const char* SHAPES[] = {"?",      "frac",  "root",  "pow",   "group",
+                                               "matrix", "cases", "delim", "graph", "table"};
                 text += SHAPES[static_cast<int>(token.shape)];
+                if (token.shape == Token::Shape::Delimited) {
+                    text += ":" + token.text;
+                }
                 text += '[';
                 for (std::size_t i = 0; i < token.slots.size(); ++i) {
                     text += (i ? " | " : "") + DescribeTokens(token.slots[i]);
@@ -84,6 +87,15 @@ std::string DescribeExpr(const lang::Expr& expr) {
         case K::Power: return list("^");
         case K::Root: return list("√");
         case K::Call: return list(expr.text);
+        case K::Range: return list("..");
+        case K::Cases: {
+            std::string text = "(cases";
+            for (std::size_t i = 0; i < expr.args.size(); ++i) {
+                text += " " + DescribeExpr(*expr.args[i]) + " if " +
+                        (expr.conditions[i] ? DescribeExpr(*expr.conditions[i]) : "otherwise");
+            }
+            return text + ")";
+        }
         case K::Compare: {
             std::string text = "(cmp " + DescribeExpr(*expr.args[0]);
             for (std::size_t i = 0; i < expr.ops.size(); ++i) {
@@ -93,6 +105,67 @@ std::string DescribeExpr(const lang::Expr& expr) {
         }
     }
     return "?";
+}
+
+std::string DescribeBlock(const lang::Block& block);
+
+std::string DescribeStatement(const lang::Stmt& statement) {
+    using K = lang::Stmt::Kind;
+    switch (statement.kind) {
+        case K::Define: {
+            std::string text =
+                statement.name +
+                (statement.declaredType.empty() ? "" : " ∈ " + statement.declaredType);
+            if (statement.value) {
+                text += " := " + DescribeExpr(*statement.value);
+            }
+            return text;
+        }
+        case K::Assign: return statement.name + " ← " + DescribeExpr(*statement.value);
+        case K::Expr: return DescribeExpr(*statement.value);
+        case K::If: {
+            std::string text =
+                "if " + DescribeExpr(*statement.value) + " " + DescribeBlock(statement.body);
+            if (statement.hasElse) {
+                text += " else " + DescribeBlock(statement.elseBody);
+            }
+            return text;
+        }
+        case K::While:
+            return "while " + DescribeExpr(*statement.value) + " " + DescribeBlock(statement.body);
+        case K::For:
+            return "for " + statement.name + " ∈ " + DescribeExpr(*statement.value) + " " +
+                   DescribeBlock(statement.body);
+        case K::Break: return "break";
+        case K::Continue: return "continue";
+        case K::Return:
+            return statement.value ? "return " + DescribeExpr(*statement.value) : "return";
+        case K::Function: {
+            std::string text = statement.name + "(";
+            for (std::size_t i = 0; i < statement.params.size(); ++i) {
+                const lang::Param& param = statement.params[i];
+                text += (i ? ", " : "") + param.name +
+                        (param.declaredType.empty() ? "" : " ∈ " + param.declaredType);
+            }
+            text += ")";
+            if (!statement.declaredType.empty()) {
+                text += " → " + statement.declaredType;
+            }
+            if (statement.value) {
+                return text + " := " + DescribeExpr(*statement.value);
+            }
+            return text + " " + DescribeBlock(statement.body);
+        }
+    }
+    return "?";
+}
+
+std::string DescribeBlock(const lang::Block& block) {
+    std::string text = "{";
+    for (std::size_t i = 0; i < block.size(); ++i) {
+        text += (i ? "; " : " ") + DescribeStatement(*block[i]);
+    }
+    return text + " }";
 }
 
 // Parse a document and describe its statements, or its first syntax error.
@@ -109,19 +182,7 @@ std::string ParseStatements(const std::string& source) {
         if (!text.empty()) {
             text += "; ";
         }
-        switch (statement->kind) {
-            case lang::Stmt::Kind::Define:
-                text += statement->name +
-                        (statement->declaredType.empty() ? "" : " ∈ " + statement->declaredType);
-                if (statement->value) {
-                    text += " := " + DescribeExpr(*statement->value);
-                }
-                break;
-            case lang::Stmt::Kind::Assign:
-                text += statement->name + " ← " + DescribeExpr(*statement->value);
-                break;
-            case lang::Stmt::Kind::Expr: text += DescribeExpr(*statement->value); break;
-        }
+        text += DescribeStatement(*statement);
     }
     return text;
 }
@@ -298,9 +359,72 @@ TEST(Parse, EmptySlotsAreErrors) {
 }
 
 TEST(Parse, NotYetSupported) {
-    EXPECT_NE(ParseStatements("if x").find("control flow"), std::string::npos);
     EXPECT_NE(ParseStatements("A := \\begin{pmatrix}1&2\\end{pmatrix}").find("Matrices"),
               std::string::npos);
+}
+
+TEST(Lower, BracesDelimitersAndCases) {
+    EXPECT_EQ(Lower("if x \\{ y \\}"), "if x { y } ⏎");
+    EXPECT_EQ(Lower("\\abs{x} \\floor{y}"), "delim:abs[x] delim:floor[y] ⏎");
+    EXPECT_EQ(Lower("\\begin{cases}1 & x > 0\\\\0 & otherwise\\end{cases}"),
+              "cases[1 | x > 0 | 0 | otherwise] ⏎");
+}
+
+TEST(Parse, Blocks) {
+    EXPECT_EQ(ParseStatements("if x > 0 \\{\nprint(x)\n\\} else \\{\nprint(0)\n\\}"),
+              "if (cmp x > 0) { (print x) } else { (print 0) }");
+    // else may start the row after the }, and else-if chains.
+    EXPECT_EQ(ParseStatements("if a \\{ b() \\}\nelse if c \\{ d() \\}\nelse \\{ e() \\}"),
+              "if a { (b) } else { if c { (d) } else { (e) } }");
+    EXPECT_EQ(ParseStatements("while x < 3 \\{ x <- x + 1; print(x) \\}"),
+              "while (cmp x < 3) { x ← (+ x 1); (print x) }");
+}
+
+TEST(Parse, ForLoopsOverRanges) {
+    EXPECT_EQ(ParseStatements("for i \\in 1..n \\{ print(i) \\}"),
+              "for i ∈ (.. 1 n) { (print i) }");
+    EXPECT_EQ(ParseStatements("for i in 10..-2..0 \\{ break \\}"),
+              "for i ∈ (.. 10 (− 2) 0) { break }");
+    EXPECT_EQ(ParseStatements("for i \\in x \\{ \\}"), "error: for needs a range, such as 1..n.");
+}
+
+TEST(Parse, Functions) {
+    EXPECT_EQ(ParseStatements("f(x) := x + 1"), "f(x) := (+ x 1)");
+    EXPECT_EQ(ParseStatements("f(n \\in \\mathbb{N}, x) -> \\mathbb{R} := n \\cdot x"),
+              "f(n ∈ ℕ, x) → ℝ := (⋅ n x)");
+    EXPECT_EQ(ParseStatements("f(x) \\{\nreturn x\n\\}"), "f(x) { return x }");
+    EXPECT_EQ(ParseStatements("g() \\{ return \\}"), "g() { return }");
+    // Calls are still calls.
+    EXPECT_EQ(ParseStatements("f(x)"), "(f x)");
+    EXPECT_EQ(ParseStatements("f(x) := \\{"),
+              "error: For a function written over several rows, leave out :=, as in f(…) { … }");
+}
+
+TEST(Parse, CasesAndDelimiters) {
+    EXPECT_EQ(ParseExpression("\\begin{cases}1 & x > 0\\\\0 & otherwise\\end{cases}"),
+              "(print (cases 1 if (cmp x > 0) 0 if otherwise))");
+    EXPECT_EQ(ParseExpression("\\begin{cases}1 & if x > 0\\\\0 & else\\end{cases}"),
+              "(print (cases 1 if (cmp x > 0) 0 if otherwise))");
+    EXPECT_EQ(ParseExpression("\\abs{x} + \\floor{\\frac{a}{b}} + |y - 1|"),
+              "(print (+ (+ (abs x) (floor (frac a b))) (abs (− y 1))))");
+}
+
+TEST(Parse, UnbalancedBraces) {
+    EXPECT_EQ(ParseStatements("if x \\{\nprint(1)"),
+              "error: This { is never closed: put a } at the end of the block.");
+    EXPECT_EQ(ParseStatements("print(1)\n\\}"), "error: This } has no { before it to close.");
+    EXPECT_EQ(ParseStatements("else \\{ \\}"), "error: else goes right after the } of an if.");
+}
+
+TEST(Parse, AnErrorInsideABlockKeepsTheBlock) {
+    FileMpp file = Document("while true \\{\nx := \nbreak\n\\}\ny := 1");
+    std::vector<lang::Diagnostic> diagnostics;
+    auto tokens = lang::LowerDocument(file.content, diagnostics);
+    lang::Program program = lang::Parse(tokens, diagnostics);
+    ASSERT_EQ(diagnostics.size(), 1u);
+    EXPECT_EQ(diagnostics[0].ref.Row(), 1u);
+    ASSERT_EQ(program.statements.size(), 2u);
+    EXPECT_EQ(program.statements[0]->body.size(), 1u);
 }
 
 // --- Checking ----------------------------------------------------------------------
@@ -375,6 +499,81 @@ TEST(Check, ErrorsPointAtTheProblem) {
 }
 
 // --- Runtime error lines ---------------------------------------------------------------
+
+TEST(Check, ControlFlow) {
+    EXPECT_EQ(FirstError("x := 1\nif x \\{ \\}"),
+              "The condition after if must be true or false (𝔹), but this is in ℤ.");
+    EXPECT_EQ(FirstError("break"), "break can only be used inside a loop (while or for).");
+    EXPECT_EQ(FirstError("return 1"), "return can only be used inside a function.");
+    EXPECT_EQ(FirstError("for i \\in 1..3 \\{ i <- 2 \\}"),
+              "i counts the loop, so it can't be changed inside it.");
+    EXPECT_EQ(FirstError("for i \\in 1..\"a\" \\{ \\}"),
+              "A range needs numbers, but this is in Σ*.");
+    EXPECT_EQ(FirstError("r := 1..3"), "A range (a..b) can only be used in a for loop, for now.");
+}
+
+TEST(Check, BlocksHaveTheirOwnNames) {
+    EXPECT_EQ(FirstError("if true \\{ y := 1 \\}\nprint(y)"),
+              "y isn't defined here: it is defined inside a block (row 1) and only exists there.");
+    EXPECT_EQ(FirstError("if true \\{ y := 1 \\}\nif true \\{ y := 2 \\}"), "");
+    EXPECT_EQ(FirstError("x := 1\nif true \\{ x := 2 \\}"),
+              "x is already defined (row 1). To change it, write x ← …");
+}
+
+TEST(Check, UserFunctions) {
+    EXPECT_EQ(FirstError("f(x) := x\nprint(f(1), f(2.5))"), "");
+    EXPECT_EQ(FirstError("print(f(1))\nf(x) := x"), "f is used before it is defined (row 2).");
+    EXPECT_EQ(FirstError("f(x) := x\nprint(f(1, 2))"), "f takes 1 argument, not 2.");
+    EXPECT_EQ(FirstError("f(n \\in \\mathbb{Z}) := n\nprint(f(1.5))"),
+              "n is in ℤ, but this is a real number (ℝ). Use floor(…), ceil(…) or round(…) to "
+              "make it whole.");
+    EXPECT_EQ(FirstError("g() \\{ print(1) \\}\nx := g()"), "g(…) doesn't give a value.");
+    EXPECT_EQ(FirstError("f(x) := x\nf := 2"),
+              "f is already a function (row 1); choose another name.");
+    EXPECT_EQ(FirstError("if true \\{\nf(x) := x\n\\}"),
+              "Functions are defined outside of blocks and other functions.");
+    EXPECT_EQ(FirstError("f(x) \\{\nif x > 0 \\{ return 1 \\}\nreturn \"no\"\n\\}\nprint(f(1))"),
+              "This returns Σ*, but f returns ℤ before (row 2).");
+    // A function sees the globals defined before it, and its parameters.
+    EXPECT_EQ(FirstError("a := 2\nf(x) := a \\cdot x\nprint(f(3))"), "");
+    EXPECT_EQ(FirstError("f(x) := a \\cdot x\na := 2\nprint(f(3))"),
+              "a is used before it is defined (row 2).");
+    // Parameters may reuse a global's name.
+    EXPECT_EQ(FirstError("x := 1\nf(x) := 2x\nprint(f(3))"), "");
+}
+
+TEST(Check, AProblemInAFunctionAlsoMarksTheCall) {
+    const auto diagnostics = Diagnose("f(x) := x mod 2\nprint(f(\"a\"))\nprint(f(\"b\"))");
+    ASSERT_EQ(diagnostics.size(), 2u);
+    EXPECT_EQ(diagnostics[0].message, "mod needs numbers, but this is in Σ*.");
+    EXPECT_EQ(diagnostics[0].ref.Row(), 0u);
+    EXPECT_EQ(diagnostics[1].message, "f doesn't work with a value in Σ*: see row 1.");
+    EXPECT_EQ(diagnostics[1].ref.Row(), 1u);
+}
+
+TEST(Check, RecursiveFunctions) {
+    // The first case (or return) gives the type of the calls in later ones.
+    EXPECT_EQ(FirstError("fact(n) \\{\nif n = 0 \\{ return 1 \\}\nreturn n \\cdot fact(n - 1)\n\\}\n"
+                         "print(fact(5))"),
+              "");
+    EXPECT_EQ(FirstError("f(n) := f(n - 1)\nprint(f(1))"),
+              "f uses itself before it gives a value, so write the type of its result, as in "
+              "f(…) → ℤ := …");
+    EXPECT_EQ(FirstError("f(n) -> \\mathbb{Z} := f(n - 1)\nprint(f(1))"), "");
+}
+
+TEST(Check, Cases) {
+    EXPECT_EQ(FirstError("x := 1\ny := \\begin{cases}1 & x > 0\\\\2.5 & otherwise\\end{cases}"
+                         "\nprint(y)"),
+              "");
+    EXPECT_EQ(FirstError("x := 1\ny := \\begin{cases}1 & otherwise\\\\2 & x > 0\\end{cases}"),
+              "'otherwise' must be the last case.");
+    EXPECT_EQ(FirstError("x := 1\ny := \\begin{cases}1 & x > 0\\\\\"a\" & otherwise"
+                         "\\end{cases}"),
+              "This case gives Σ*, but the ones before give ℤ.");
+    EXPECT_EQ(FirstError("x := 1\ny := \\begin{cases}1 & x\\\\2 & otherwise\\end{cases}"),
+              "The condition after a case must be true or false (𝔹), but this is in ℤ.");
+}
 
 TEST(RuntimeErrorLine, Parses) {
     auto error = ParseRuntimeError("error:12: division by zero");

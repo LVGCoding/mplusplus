@@ -66,6 +66,12 @@ void DrawDelimiter(Clay_BoundingBox bounds) {
         drawLine(pointAt(0.5f, 0.94f), pointAt(0.85f, 1.0f));
     } else if constexpr (KIND == Delimiter::BAR) {
         drawLine(pointAt(0.5f, 0.0f), pointAt(0.5f, 1.0f));
+    } else if constexpr (KIND == Delimiter::FLOOR) {
+        drawLine(pointAt(0.3f, 0.0f), pointAt(0.3f, 1.0f));
+        drawLine(pointAt(0.3f, 1.0f), pointAt(0.8f, 1.0f));
+    } else if constexpr (KIND == Delimiter::CEIL) {
+        drawLine(pointAt(0.8f, 0.0f), pointAt(0.3f, 0.0f));
+        drawLine(pointAt(0.3f, 0.0f), pointAt(0.3f, 1.0f));
     } else if constexpr (KIND == Delimiter::DOUBLE_BAR) {
         drawLine(pointAt(0.35f, 0.0f), pointAt(0.35f, 1.0f));
         drawLine(pointAt(0.65f, 0.0f), pointAt(0.65f, 1.0f));
@@ -137,6 +143,12 @@ void DelimiterSymbol(Delimiter kind,
         break;
     case Delimiter::DOUBLE_BAR:
         draw = DelimiterDraw<Delimiter::DOUBLE_BAR>(right);
+        break;
+    case Delimiter::FLOOR:
+        draw = DelimiterDraw<Delimiter::FLOOR>(right);
+        break;
+    case Delimiter::CEIL:
+        draw = DelimiterDraw<Delimiter::CEIL>(right);
         break;
     }
     StretchedSymbol(draw, std::round(fontSize * DELIMITER_WIDTH_SCALE));

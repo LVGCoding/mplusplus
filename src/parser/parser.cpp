@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include "math/DelimNode.h"
 #include "math/ExpoNode.h"
 #include "math/FracNode.h"
 #include "math/GraphNode.h"
@@ -129,6 +130,9 @@ private:
                 if (!node) {
                     node = ParseMatrix();
                 }
+            } else if (token.size() > 1 && token[0] == '\\' &&
+                       DelimNode::KindFromCommand(std::string_view(token).substr(1))) {
+                node = ParseDelimited();
             } else if (token == "\\mathbb") {
                 node = ParseBlackboard();
             } else if (token.size() > 1 && token[0] == '\\') {
@@ -153,6 +157,10 @@ private:
 
             if (node) {
                 push(std::move(node));
+            } else if (token == "\\{" || token == "\\}") {
+                // A brace typed as text (see TextNode::ToText).
+                pendingText += token[1];
+                ++position_;
             } else {
                 // Plain text, an unknown command, or a construct that failed to parse.
                 pendingText += token;
@@ -228,6 +236,19 @@ private:
             return nullptr;
         }
         return std::make_unique<FracNode>(std::move(numerator), std::move(denominator));
+    }
+
+    // \abs{x}, \floor{x}, \ceil{x}
+    std::unique_ptr<EditorNode> ParseDelimited() {
+        const std::size_t start = position_;
+        const auto kind = DelimNode::KindFromCommand(std::string_view(Peek()).substr(1));
+        ++position_;
+        auto argument = ParseArgument();
+        if (!argument) {
+            position_ = start;
+            return nullptr;
+        }
+        return std::make_unique<DelimNode>(*kind, std::move(argument));
     }
 
     std::unique_ptr<EditorNode> ParseExpo() {

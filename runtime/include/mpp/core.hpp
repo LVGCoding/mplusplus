@@ -3,6 +3,7 @@
 // Errors and the entry point of a compiled M++ program.
 
 #include <cstdio>
+#include <pthread.h>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
@@ -38,7 +39,7 @@ struct Error : std::runtime_error {
 //   error:LOCATION: message
 // which the editor reads to underline where the program stopped.
 template <class Body>
-int run(Body body) {
+int run_here(Body& body) {
     // Output goes to a pipe; flush each line so the editor shows it as it comes.
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
     try {
@@ -54,5 +55,48 @@ int run(Body body) {
     }
     return 1;
 }
+
+// Like run_here, on a thread with a big stack, so functions that use
+// themselves can go deep (see Call).
+template <class Body>
+int run(Body body) {
+    struct Task {
+        Body* body;
+        int result;
+    } task{&body, 1};
+    pthread_attr_t attributes;
+    pthread_attr_init(&attributes);
+    pthread_attr_setstacksize(&attributes, std::size_t{1} << 30);
+    pthread_t thread;
+    auto start = [](void* data) -> void* {
+        auto* task = static_cast<Task*>(data);
+        task->result = run_here(*task->body);
+        return nullptr;
+    };
+    if (pthread_create(&thread, &attributes, start, &task) != 0) {
+        return run_here(body);
+    }
+    pthread_join(thread, nullptr);
+    return task.result;
+}
+
+// Counts calls of the document's functions inside each other, to stop with
+// an error instead of crashing when a function uses itself without end.
+inline int depth = 0;
+inline constexpr int MAX_DEPTH = 100000;
+
+struct Call {
+    Call(int at, const char* name) {
+        if (++depth > MAX_DEPTH) {
+            --depth;
+            fail_at(at, std::string(name) + " uses itself more than " +
+                            std::to_string(MAX_DEPTH) +
+                            " times inside each other; does it ever stop?");
+        }
+    }
+    ~Call() { --depth; }
+    Call(const Call&) = delete;
+    Call& operator=(const Call&) = delete;
+};
 
 }  // namespace mpp

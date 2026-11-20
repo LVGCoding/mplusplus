@@ -25,28 +25,32 @@ MatrixNode::MatrixNode(std::string environment,
 
 namespace {
 struct Delimiters {
-    bool present;
+    bool left;
+    bool right;
     node_style::Delimiter kind;
 };
 
 Delimiters DelimitersFor(const std::string& environment) {
     using node_style::Delimiter;
     if (environment == "pmatrix") {
-        return {true, Delimiter::PAREN};
+        return {true, true, Delimiter::PAREN};
     }
     if (environment == "bmatrix") {
-        return {true, Delimiter::BRACKET};
+        return {true, true, Delimiter::BRACKET};
     }
     if (environment == "Bmatrix") {
-        return {true, Delimiter::BRACE};
+        return {true, true, Delimiter::BRACE};
     }
     if (environment == "vmatrix") {
-        return {true, Delimiter::BAR};
+        return {true, true, Delimiter::BAR};
     }
     if (environment == "Vmatrix") {
-        return {true, Delimiter::DOUBLE_BAR};
+        return {true, true, Delimiter::DOUBLE_BAR};
     }
-    return {false, Delimiter::PAREN};
+    if (environment == "cases") {
+        return {true, false, Delimiter::BRACE};
+    }
+    return {false, false, Delimiter::PAREN};
 }
 }  // namespace
 
@@ -80,6 +84,9 @@ void MatrixNode::Render(const RenderContext& context) {
     }
 
     const Delimiters delimiters = DelimitersFor(environment_);
+    // Cases line up on the left (value, then its condition); matrices centre.
+    const Clay_LayoutAlignmentX cellAlign =
+        environment_ == "cases" ? CLAY_ALIGN_X_LEFT : CLAY_ALIGN_X_CENTER;
     const auto columnGap = static_cast<uint16_t>(std::round(fontSize));
     const auto rowGap = static_cast<uint16_t>(std::round(fontSize * 0.3f));
     const auto padding = static_cast<uint16_t>(std::round(fontSize * 0.15f));
@@ -106,7 +113,7 @@ void MatrixNode::Render(const RenderContext& context) {
                      .childGap = padding,
                      .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
                      .layoutDirection = CLAY_LEFT_TO_RIGHT}}) {
-        if (delimiters.present) {
+        if (delimiters.left) {
             node_style::DelimiterSymbol(delimiters.kind, false, fontSize);
         }
         CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
@@ -116,13 +123,13 @@ void MatrixNode::Render(const RenderContext& context) {
             for (std::size_t column = 0; column < columns; ++column) {
                 CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)},
                                          .childGap = rowGap,
-                                         .childAlignment = {.x = CLAY_ALIGN_X_CENTER},
+                                         .childAlignment = {.x = cellAlign},
                                          .layoutDirection = CLAY_TOP_TO_BOTTOM}}) {
                     for (std::size_t row = 0; row < cells_.size(); ++row) {
                         // Row slot: at least as tall as the row's tallest cell.
                         CLAY_AUTO_ID({.layout = {.sizing = {CLAY_SIZING_FIT(0),
                                                             CLAY_SIZING_FIT(rowHeights[row])},
-                                                 .childAlignment = {.x = CLAY_ALIGN_X_CENTER,
+                                                 .childAlignment = {.x = cellAlign,
                                                                     .y = CLAY_ALIGN_Y_CENTER}}}) {
                             // A ragged row leaves the slot empty.
                             if (column < cells_[row].size()) {
@@ -150,7 +157,7 @@ void MatrixNode::Render(const RenderContext& context) {
                 }
             }
         }
-        if (delimiters.present) {
+        if (delimiters.right) {
             node_style::DelimiterSymbol(delimiters.kind, true, fontSize);
         }
     }
@@ -426,8 +433,8 @@ const std::string& MatrixNode::GetEnvironment() const {
 }
 
 bool MatrixNode::IsMatrixEnvironment(const std::string& name) {
-    static constexpr std::array<std::string_view, 6> ENVIRONMENTS = {
-        "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"};
+    static constexpr std::array<std::string_view, 7> ENVIRONMENTS = {
+        "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "cases"};
     for (const auto environment : ENVIRONMENTS) {
         if (environment == name) {
             return true;

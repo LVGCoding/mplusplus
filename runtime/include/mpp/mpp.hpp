@@ -11,6 +11,7 @@
 #include <Eigen/Dense>
 #include <boost/math/distributions/normal.hpp>
 
+#include "control.hpp"
 #include "core.hpp"
 #include "print.hpp"
 #include "scalar.hpp"

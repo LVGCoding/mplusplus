@@ -1,0 +1,2 @@
+50000
+! Row 1: f uses itself more than 100000 times inside each other; does it ever stop?

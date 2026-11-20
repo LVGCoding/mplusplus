@@ -29,7 +29,9 @@ struct Token {
         Root,      // slots: {argument} or {argument, index}
         Power,     // slots: {base, exponent}; an empty base raises what comes before
         Group,     // slots: {contents}, a bare {...} group from the source
-        Matrix,    // slots: the cells, row by row
+        Matrix,    // slots: the cells, row by row (rowLengths: cells per row)
+        Cases,     // slots: value, condition, value, condition, ... (rowLengths)
+        Delimited, // text "abs", "floor" or "ceil"; slots: {contents}
         Graph,
         Table,
     };
@@ -38,7 +40,7 @@ struct Token {
 
     // Number text, Word as written ("α" for a Greek letter), String contents,
     // or the Op. Ops are canonical, whichever way they were typed:
-    //   + − ⋅ × ⊙ / ^ ( ) [ ] , ; : := ← → = ≠ < ≤ > ≥ ≈ ∧ ∨ ¬ ⊕ ∈ ∉ ...
+    //   + − ⋅ × ⊙ / ^ ( ) [ ] { } , ; : := ← → = ≠ < ≤ > ≥ ≈ ∧ ∨ ¬ ⊕ ∈ ∉ ...
     //   and the built-in sets ℕ ℤ ℚ ℝ ℂ 𝔹 Σ and ∞ ∅ ∀ ∃ ⊤.
     std::string text;
 
@@ -50,6 +52,7 @@ struct Token {
 
     Shape shape = Shape::None;
     std::vector<std::vector<Token>> slots;
+    std::vector<std::size_t> rowLengths;
 
     bool Is(Kind k, std::string_view t) const { return kind == k && text == t; }
     bool IsOp(std::string_view t) const { return Is(Kind::Op, t); }

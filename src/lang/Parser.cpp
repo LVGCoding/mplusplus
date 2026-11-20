@@ -77,29 +77,7 @@ public:
 
     Program ParseProgram() {
         Program program;
-        for (;;) {
-            while (Peek().kind == Kind::Newline || Peek().IsOp(";")) {
-                Advance();
-            }
-            if (Peek().kind == Kind::End) {
-                break;
-            }
-            try {
-                auto statement = ParseStatement();
-                const Token& next = Peek();
-                if (next.kind != Kind::Newline && next.kind != Kind::End && !next.IsOp(";")) {
-                    Unexpected(next, "Expected the end of the statement");
-                }
-                program.statements.push_back(std::move(statement));
-            } catch (const SyntaxError&) {
-                // Skip the rest of the statement.
-                depth_ = 0;
-                while (Peek().kind != Kind::Newline && Peek().kind != Kind::End &&
-                       !Peek().IsOp(";")) {
-                    Advance();
-                }
-            }
-        }
+        program.statements = ParseStatements(nullptr);
         return program;
     }
 
@@ -110,6 +88,22 @@ public:
             Unexpected(Peek(), std::string("Expected the end of the ") + what);
         }
         return expr;
+    }
+
+    // A cell of a cases structure that holds a condition: "x > 0", "if x > 0",
+    // or "otherwise" (null).
+    std::unique_ptr<Expr> ParseCondition() {
+        if (Peek().IsWord("otherwise") || Peek().IsWord("else")) {
+            Advance();
+            if (Peek().kind != Kind::End) {
+                Unexpected(Peek(), "Expected nothing after 'otherwise'");
+            }
+            return nullptr;
+        }
+        if (Peek().IsWord("if")) {
+            Advance();
+        }
+        return ParseWholeExpression("condition");
     }
 
 private:
@@ -132,8 +126,8 @@ private:
         return pos_ < tokens_.size() ? tokens_[pos_] : end_;
     }
 
-    const Token& PeekAfter() const {
-        return pos_ + 1 < tokens_.size() ? tokens_[pos_ + 1] : end_;
+    const Token& PeekAt(std::size_t offset) const {
+        return pos_ + offset < tokens_.size() ? tokens_[pos_ + offset] : end_;
     }
 
     const Token& Advance() {
@@ -152,6 +146,15 @@ private:
         }
     }
 
+    // The first token after any newlines, without consuming anything.
+    const Token& PeekPastNewlines() const {
+        std::size_t at = pos_;
+        while (at < tokens_.size() && tokens_[at].kind == Kind::Newline) {
+            ++at;
+        }
+        return at < tokens_.size() ? tokens_[at] : end_;
+    }
+
     [[noreturn]] void Fail(std::string message, const SourceRef& ref) {
         diagnostics_.push_back({std::move(message), ref});
         throw SyntaxError{};
@@ -168,30 +171,277 @@ private:
         return Advance();
     }
 
+    bool AtStatementEnd() {
+        const Token& next = Peek();
+        return next.kind == Kind::Newline || next.kind == Kind::End || next.IsOp(";") ||
+               next.IsOp("}");
+    }
+
     // --- Statements -------------------------------------------------------------
+
+    // Statements up to the end, or up to the "}" closing the block opened by
+    // `open` (which is left for the caller).
+    Block ParseStatements(const Token* open) {
+        Block statements;
+        for (;;) {
+            while (Peek().kind == Kind::Newline || Peek().IsOp(";")) {
+                Advance();
+            }
+            const Token& next = Peek();
+            if (next.kind == Kind::End) {
+                if (open) {
+                    diagnostics_.push_back(
+                        {"This { is never closed: put a } at the end of the block.", open->ref});
+                }
+                return statements;
+            }
+            if (next.IsOp("}")) {
+                if (open) {
+                    return statements;
+                }
+                diagnostics_.push_back({"This } has no { before it to close.", next.ref});
+                Advance();
+                continue;
+            }
+            try {
+                auto statement = ParseStatement();
+                if (!AtStatementEnd()) {
+                    Unexpected(Peek(), "Expected the end of the statement");
+                }
+                statements.push_back(std::move(statement));
+            } catch (const SyntaxError&) {
+                SkipStatement();
+            }
+        }
+    }
+
+    // After a syntax error: skip to the end of the statement, including any
+    // block it opened, but not past the "}" of the block it is in.
+    void SkipStatement() {
+        depth_ = 0;
+        int braces = 0;
+        for (;;) {
+            const Token& next = Peek();
+            if (next.kind == Kind::End) {
+                return;
+            }
+            if (braces == 0 &&
+                (next.kind == Kind::Newline || next.IsOp(";") || next.IsOp("}"))) {
+                return;
+            }
+            if (next.IsOp("{")) {
+                ++braces;
+            } else if (next.IsOp("}")) {
+                --braces;
+            }
+            Advance();
+        }
+    }
+
+    // { statements }, starting at the "{".
+    Block ParseBlock(const char* after) {
+        if (!Peek().IsOp("{")) {
+            Unexpected(Peek(), std::string("Expected { to start the block after ") + after);
+        }
+        const Token& open = Advance();
+        Block body = ParseStatements(&open);
+        if (Peek().IsOp("}")) {
+            Advance();
+        }
+        return body;
+    }
+
+    std::unique_ptr<Stmt> MakeStmt(Stmt::Kind kind, const SourceRef& ref) {
+        auto statement = std::make_unique<Stmt>();
+        statement->kind = kind;
+        statement->ref = ref;
+        return statement;
+    }
 
     std::unique_ptr<Stmt> ParseStatement() {
         const Token& first = Peek();
-        if (first.kind == Kind::Word && IsKeyword(first.text) && first.text != "true" &&
-            first.text != "false") {
-            Fail("'" + first.text + "' can't be used yet: control flow is coming in the next "
-                 "version of M++.", first.ref);
+        if (first.kind == Kind::Word) {
+            if (first.text == "if") return ParseIf();
+            if (first.text == "while") return ParseWhile();
+            if (first.text == "for") return ParseFor();
+            if (first.text == "break" || first.text == "continue") {
+                Advance();
+                return MakeStmt(first.text == "break" ? Stmt::Kind::Break : Stmt::Kind::Continue,
+                                first.ref);
+            }
+            if (first.text == "return") {
+                Advance();
+                auto statement = MakeStmt(Stmt::Kind::Return, first.ref);
+                if (!AtStatementEnd()) {
+                    statement->value = ParseExpression();
+                    statement->ref = Span(first.ref, statement->value->ref);
+                }
+                return statement;
+            }
+            if (first.text == "else") {
+                Fail("else goes right after the } of an if.", first.ref);
+            }
         }
-        const Token& second = PeekAfter();
+        const Token& second = PeekAt(1);
         if (first.kind == Kind::Word && !IsKeyword(first.text) &&
             (second.IsOp(":=") || second.IsOp("∈") || second.IsOp("←"))) {
             return ParseDefineOrAssign();
         }
+        if (first.kind == Kind::Word && !IsKeyword(first.text) && second.IsOp("(") &&
+            IsFunctionDefinition()) {
+            return ParseFunction();
+        }
+        if (first.IsOp("{")) {
+            Fail("A block ({ … }) goes after if, while, for or a function.", first.ref);
+        }
 
-        auto statement = std::make_unique<Stmt>();
-        statement->kind = Stmt::Kind::Expr;
+        auto statement = MakeStmt(Stmt::Kind::Expr, {});
         statement->value = ParseExpression();
         statement->ref = statement->value->ref;
         if (Peek().IsOp(":=") || Peek().IsOp("←")) {
-            const bool call = statement->value->kind == Expr::Kind::Call;
-            Fail(call ? "Functions can't be defined yet: they're coming in the next version of M++."
-                      : "Only a name can go on the left of " + Peek().text + ".",
-                 statement->value->ref);
+            Fail("Only a name can go on the left of " + Peek().text + ".", statement->value->ref);
+        }
+        return statement;
+    }
+
+    std::unique_ptr<Stmt> ParseIf() {
+        const Token& keyword = Advance();
+        auto statement = MakeStmt(Stmt::Kind::If, keyword.ref);
+        statement->value = ParseExpression();
+        statement->ref = Span(keyword.ref, statement->value->ref);
+        statement->body = ParseBlock("the condition");
+        // "else" may start the next row: } \n else {
+        if (PeekPastNewlines().IsWord("else")) {
+            SkipNewlines();
+            const Token& elseWord = Advance();
+            statement->hasElse = true;
+            if (Peek().IsWord("if")) {
+                statement->elseBody.push_back(ParseIf());
+            } else {
+                if (!Peek().IsOp("{")) {
+                    Unexpected(Peek(), "Expected { or 'if' after else");
+                }
+                statement->elseBody = ParseBlock("else");
+            }
+            (void)elseWord;
+        }
+        return statement;
+    }
+
+    std::unique_ptr<Stmt> ParseWhile() {
+        const Token& keyword = Advance();
+        auto statement = MakeStmt(Stmt::Kind::While, keyword.ref);
+        statement->value = ParseExpression();
+        statement->ref = Span(keyword.ref, statement->value->ref);
+        statement->body = ParseBlock("the condition");
+        return statement;
+    }
+
+    std::unique_ptr<Stmt> ParseFor() {
+        const Token& keyword = Advance();
+        auto statement = MakeStmt(Stmt::Kind::For, keyword.ref);
+        const Token& name = Peek();
+        if (name.kind != Kind::Word || IsKeyword(name.text)) {
+            Unexpected(name, "Expected the name of the loop variable after for");
+        }
+        Advance();
+        statement->name = name.text;
+        statement->ident = name.ident;
+        statement->greek = name.greek;
+        statement->nameRef = name.ref;
+        if (!Peek().IsOp("∈") && !Peek().IsWord("in")) {
+            Unexpected(Peek(), "Expected ∈ after the loop variable, as in for i ∈ 1..n");
+        }
+        Advance();
+        statement->value = ParseExpression();
+        if (statement->value->kind != Expr::Kind::Range) {
+            Fail("for needs a range, such as 1..n.", statement->value->ref);
+        }
+        statement->ref = Span(keyword.ref, statement->value->ref);
+        statement->body = ParseBlock("the range");
+        return statement;
+    }
+
+    // At "name(": is this f(…) := …, f(…) → T …, or f(…) { … }? Looks past
+    // the matching ")" without consuming anything.
+    bool IsFunctionDefinition() const {
+        int depth = 0;
+        for (std::size_t at = pos_ + 1; at < tokens_.size(); ++at) {
+            const Token& token = tokens_[at];
+            if (token.IsOp("(")) {
+                ++depth;
+            } else if (token.IsOp(")")) {
+                if (--depth == 0) {
+                    const Token& after = at + 1 < tokens_.size() ? tokens_[at + 1] : end_;
+                    return after.IsOp(":=") || after.IsOp("→") || after.IsOp("{");
+                }
+            } else if (token.kind == Kind::End) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // A set name after ∈ or →, such as ℝ.
+    const Token& ExpectType(const char* context) {
+        const Token& type = Peek();
+        if (!IsBuiltinSet(type)) {
+            Unexpected(type, context);
+        }
+        return Advance();
+    }
+
+    std::unique_ptr<Stmt> ParseFunction() {
+        const Token& name = Advance();
+        auto statement = MakeStmt(Stmt::Kind::Function, name.ref);
+        statement->name = name.text;
+        statement->ident = name.ident;
+        statement->greek = name.greek;
+        statement->nameRef = name.ref;
+        Advance();  // (
+        ++depth_;
+        if (!Peek().IsOp(")")) {
+            for (;;) {
+                const Token& parameter = Peek();
+                if (parameter.kind != Kind::Word || IsKeyword(parameter.text)) {
+                    Unexpected(parameter, "Expected the name of a parameter");
+                }
+                Advance();
+                Param param{.name = parameter.text, .ident = parameter.ident,
+                            .greek = parameter.greek, .ref = parameter.ref};
+                if (Peek().IsOp("∈")) {
+                    Advance();
+                    const Token& type = ExpectType("Expected a type such as ℝ or ℤ after ∈");
+                    param.declaredType = type.text;
+                    param.typeRef = type.ref;
+                }
+                statement->params.push_back(std::move(param));
+                if (!Peek().IsOp(",")) {
+                    break;
+                }
+                Advance();
+            }
+        }
+        const Token& close = Expect(")", "Expected ',' or ')' after the parameters");
+        --depth_;
+        statement->ref = Span(name.ref, close.ref);
+        if (Peek().IsOp("→")) {
+            Advance();
+            const Token& type = ExpectType("Expected the type of the result after →, such as ℝ");
+            statement->declaredType = type.text;
+            statement->typeRef = type.ref;
+        }
+        if (Peek().IsOp(":=")) {
+            const Token& define = Advance();
+            if (Peek().IsOp("{")) {
+                Fail("For a function written over several rows, leave out :=, as in " +
+                         name.text + "(…) { … }",
+                     define.ref);
+            }
+            statement->value = ParseExpression();
+            statement->ref = Span(name.ref, statement->value->ref);
+        } else {
+            statement->body = ParseBlock("the parameters");
         }
         return statement;
     }
@@ -211,11 +461,7 @@ private:
         } else {
             statement->kind = Stmt::Kind::Define;
             if (op.IsOp("∈")) {
-                const Token& type = Peek();
-                if (!IsBuiltinSet(type)) {
-                    Unexpected(type, "Expected a type such as ℝ or ℤ after ∈");
-                }
-                Advance();
+                const Token& type = ExpectType("Expected a type such as ℝ or ℤ after ∈");
                 statement->declaredType = type.text;
                 statement->typeRef = type.ref;
                 if (Peek().IsOp(":=")) {
@@ -286,8 +532,26 @@ private:
         return false;
     }
 
-    std::unique_ptr<Expr> ParseComparison() {
+    // a..b, or a..s..b with a step.
+    std::unique_ptr<Expr> ParseRange() {
         auto first = ParseAdditive();
+        if (!Peek().IsOp("..")) {
+            return first;
+        }
+        auto range = MakeExpr(Expr::Kind::Range, first->ref);
+        range->opRef = Advance().ref;
+        range->args.push_back(std::move(first));
+        range->args.push_back(ParseAdditive());
+        if (Peek().IsOp("..")) {
+            Advance();
+            range->args.push_back(ParseAdditive());
+        }
+        range->ref = Span(range->args.front()->ref, range->args.back()->ref);
+        return range;
+    }
+
+    std::unique_ptr<Expr> ParseComparison() {
+        auto first = ParseRange();
         if (!IsComparison(Peek())) {
             if (Peek().IsOp("∈") || Peek().IsOp("∉")) {
                 Fail("Sets can't be used yet: they're coming in a later version of M++.",
@@ -304,7 +568,7 @@ private:
             if (expr->ops.size() == 1) {
                 expr->opRef = op.ref;
             }
-            expr->args.push_back(ParseAdditive());
+            expr->args.push_back(ParseRange());
         }
         expr->ref = Span(expr->args.front()->ref, expr->args.back()->ref);
         return expr;
@@ -473,6 +737,21 @@ private:
                     inner->ref = Span(open.ref, close.ref);
                     return inner;
                 }
+                if (token.IsOp("|")) {
+                    const Token& open = Advance();
+                    ++depth_;
+                    auto inner = ParseExpression();
+                    const Token& close = Expect("|", "Expected '|' to close the '|'");
+                    --depth_;
+                    auto call = MakeExpr(Expr::Kind::Call, Span(open.ref, close.ref));
+                    call->text = "abs";
+                    call->opRef = open.ref;
+                    call->args.push_back(std::move(inner));
+                    return call;
+                }
+                if (token.IsOp("{")) {
+                    Fail("A block ({ … }) goes after if, while, for or a function.", token.ref);
+                }
                 if (token.IsOp("∞")) {
                     Advance();
                     return MakeExpr(Expr::Kind::Infinity, token.ref);
@@ -528,6 +807,28 @@ private:
         return call;
     }
 
+    // Rows of "value & condition"; the last condition may be "otherwise".
+    std::unique_ptr<Expr> ParseCases(const Token& token) {
+        auto expr = MakeExpr(Expr::Kind::Cases, token.ref);
+        expr->opRef = token.ref;
+        std::size_t slot = 0;
+        for (std::size_t length : token.rowLengths) {
+            if (length != 2) {
+                Fail("Each row of cases needs a value and a condition (or 'otherwise').",
+                     token.ref);
+            }
+            expr->args.push_back(ParseSlot(token.slots[slot], token, "value"));
+            const std::vector<Token>& condition = token.slots[slot + 1];
+            if (condition.empty()) {
+                Fail("A case needs a condition, or 'otherwise'.", token.ref);
+            }
+            SyntaxParser parser(condition, diagnostics_, token.ref);
+            expr->conditions.push_back(parser.ParseCondition());
+            slot += length;
+        }
+        return expr;
+    }
+
     std::unique_ptr<Expr> ParseStructure() {
         const Token& token = Advance();
         switch (token.shape) {
@@ -561,6 +862,16 @@ private:
                 inner->ref = token.ref;
                 return inner;
             }
+            case Shape::Delimited: {
+                auto call = MakeExpr(Expr::Kind::Call, token.ref);
+                call->text = token.text;
+                call->opRef = token.ref;
+                call->args.push_back(ParseSlot(token.slots[0], token,
+                                               token.text == "abs" ? "absolute value"
+                                                                   : "brackets"));
+                return call;
+            }
+            case Shape::Cases: return ParseCases(token);
             case Shape::Matrix:
                 Fail("Matrices can't be run yet: they're coming in a later version of M++.",
                      token.ref);

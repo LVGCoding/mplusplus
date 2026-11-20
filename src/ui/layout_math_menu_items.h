@@ -2,6 +2,7 @@
 
 #include "layout_common.h"
 #include "layout_state.h"
+#include "math/DelimNode.h"
 #include "math/ExpoNode.h"
 #include "math/FracNode.h"
 #include "math/GraphNode.h"
@@ -70,6 +71,12 @@ inline std::function<std::unique_ptr<EditorNode>()> MakeMathMatrix(const char* e
     };
 }
 
+inline std::function<std::unique_ptr<EditorNode>()> MakeMathDelim(DelimNode::Kind kind) {
+    return [kind]() -> std::unique_ptr<EditorNode> {
+        return std::make_unique<DelimNode>(kind, std::make_unique<LineNode>());
+    };
+}
+
 // A graph with axis labels "x" and "y" and one empty function.
 inline std::unique_ptr<EditorNode> MakeMathGraph() {
     return std::make_unique<GraphNode>();
@@ -109,6 +116,10 @@ inline const std::vector<MathMenuItem>& MathMenuItems() {
             {"\\pmatrix", MakeMathMatrix("pmatrix")},
             {"\\bmatrix", MakeMathMatrix("bmatrix")},
             {"\\vmatrix", MakeMathMatrix("vmatrix")},
+            {"\\cases", MakeMathMatrix("cases")},
+            {"\\abs", MakeMathDelim(DelimNode::Kind::ABS)},
+            {"\\floor", MakeMathDelim(DelimNode::Kind::FLOOR)},
+            {"\\ceil", MakeMathDelim(DelimNode::Kind::CEIL)},
             {"\\graph", MakeMathGraph, MakeMathGraphPreview},
             {"\\table", MakeMathTable, MakeMathTablePreview},
         };

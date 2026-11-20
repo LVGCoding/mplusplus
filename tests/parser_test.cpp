@@ -266,6 +266,15 @@ TEST_P(ParserRoundTrip,
     EXPECT_EQ(RoundTrip(GetParam()), GetParam());
 }
 
+// A brace that doesn't pair up is kept as text, and text braces are saved
+// escaped, so the saved form reads back as the same text.
+TEST(Parser,
+     UnpairedBracesBecomeEscapedText) {
+    EXPECT_EQ(RoundTrip("{unclosed"), "\\{unclosed");
+    EXPECT_EQ(RoundTrip("stray }"), "stray \\}");
+    EXPECT_EQ(RoundTrip("\\{unclosed"), "\\{unclosed");
+}
+
 INSTANTIATE_TEST_SUITE_P(
     Sources,
     ParserRoundTrip,
@@ -276,7 +285,7 @@ INSTANTIATE_TEST_SUITE_P(
                       "e^{i\\pi} + 1 = 0",
                       "\\begin{pmatrix} 1 & \\frac{1}{2} \\\\ \\theta & 0 \\end{pmatrix}",
                       "\\frac{a}",
-                      "{unclosed",
-                      "stray } and ] and &",
+                      "stray ] and &",
+                      "\\{typed braces\\}",
                       "\\begin{matrix}a\\end{pmatrix}",
                       "trailing backslash \\"));

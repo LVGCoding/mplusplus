@@ -224,8 +224,6 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
   error lines link to their range. Messages are drawn with
   `ui/rich_text.h`, which sends symbols the body font lacks (ℝ, ⋅, ←) to the
   math font.
-- Phase 2 note: the editor refuses typed `{` `}` (they'd unbalance the LaTeX),
-  so blocks need a brace node or another way to type them.
 - Golden programs: `tests/programs/*.mpp` + `.out`, run by `programs_test.cpp`.
 
 ### Phase 2: control flow and functions
@@ -233,6 +231,31 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
   functions (one-line, block, recursive), piecewise.
 - Editor: Cases node; delimiters `|x|`, `⌊x⌋`, `⌈x⌉`.
 - Done when: `collatz.mpp`, `piecewise.mpp` pass.
+
+**Status: done.** Notes:
+- Braces are typed as text and saved escaped (`\{`, `\}`), so they never
+  open a LaTeX group. Enter keeps a row's indentation (one level more after
+  `{`, and `{|}` splits into three rows); typing `}` on a blank indented row
+  dedents it.
+- `if c { … } else if d { … } else { … }`; `else` may start the row after
+  the `}`. `while c { … }`. `for i ∈ a..b { … }` or `for i in a..s..b`
+  (step s, may be negative; ℝ steps are computed as a + k·s). The loop
+  variable can't be changed in the loop. Blocks have their own names.
+- Functions: `f(x) := expr`, `f(x ∈ ℝ, n ∈ ℕ) → ℝ := expr`, or
+  `f(x) { … return … }`. Defined only at top level; a function sees the
+  globals defined before it, its parameters, and functions defined before
+  it. Parameters without a type take the argument's type: each combination
+  of argument types is checked separately and becomes its own C++
+  `std::function` (so `f(2)` is ℤ and `f(2.5)` is ℝ). A function nobody calls
+  is still checked, with ℝ for untyped parameters.
+- Recursion needs no `→ T` when an earlier case or return already gives the
+  type (`fib`, `fact`); otherwise the error asks for one. Calls nest at most
+  100000 deep (runtime error, not a crash); programs run on a 1 GiB stack.
+- Piecewise: the `cases` matrix environment (left brace), rows of
+  `value & condition`; the condition may start with `if`, and the last may be
+  `otherwise`/`else`. No matching case is a runtime error at the cases.
+- Delimiters: `DelimNode` (`\abs{}`, `\floor{}`, `\ceil{}`), in the math popup;
+  `|x|` typed with bars also works.
 
 ### Phase 3: vectors, matrices, families
 - Lang: ℝⁿ, ℝ^{n×m}, ℝ^*; matrix literals; subscripts and slices; implicit
