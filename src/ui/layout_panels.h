@@ -12,13 +12,14 @@
 
 namespace layout_internal {
 // Green title bar from the mockup
-inline void LayoutTitleBar(const FileBase* activeFile) {
+inline void LayoutTitleBar(const Tab* activeFile) {
     // Clay borrows the title until rendering finishes.
     static std::string title;
     title = "M++ Editor";
     if (activeFile) {
         title += " - [";
-        title += activeFile->path.empty() ? activeFile->TabName() : activeFile->path.string();
+        const auto* file = dynamic_cast<const FileBase*>(activeFile);
+        title += !file || file->path.empty() ? activeFile->TabName() : file->path.string();
         title += "]";
     }
     CLAY(CLAY_ID("TitleBar"),
@@ -43,7 +44,7 @@ inline void LayoutTitleBar(const FileBase* activeFile) {
     }
 }
 
-inline void LayoutWorkspace(const FileBase* activeFile) {
+inline void LayoutWorkspace(const Tab* activeFile) {
     const bool variableLineHeight = activeFile && activeFile->LineElementId(0) != 0;
     CLAY(CLAY_ID("Workspace"),
          {.layout = {.sizing = {CLAY_SIZING_GROW(0), CLAY_SIZING_GROW(0)}},

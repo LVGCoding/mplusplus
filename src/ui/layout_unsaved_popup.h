@@ -28,10 +28,11 @@ inline void ClosePopupButton(Clay_ElementId id,
     }
 }
 
-inline void UnsavedChangesPopup(const FileBase& file) {
+inline void UnsavedChangesPopup(const Tab& file) {
     // Clay uses this message until rendering finishes.
     static std::string message;
-    message = file.path.filename().string();
+    const auto* document = dynamic_cast<const FileBase*>(&file);
+    message = document ? document->path.filename().string() : std::string();
     if (message.empty()) {
         message = "untitled.mpp";
     }

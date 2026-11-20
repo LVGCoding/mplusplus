@@ -355,6 +355,32 @@ with the results protocol in phase 6). Notes:
   fields in the graph menu.
 - Done when: running a document with a graph opens a Graph tab.
 
+**Status: done.** Notes:
+- Results protocol: the program appends one JSON line per plot to
+  `MPP_RESULTS` (runtime/include/mpp/figure.hpp), again on every change;
+  `run::Job::TakeResults` reads the file after the run, and
+  `run::LatestPlots` (src/run/Results) keeps the last line per plot id.
+- A GraphNode is a statement run in document order. Each line is a function
+  of the x variable (`y = x²`, `f(x) = …`, or just `x²`), sampled at 400
+  points over xmin..xmax (by ratio on a log x axis); points where it fails
+  (√ of a negative) are gaps. The x axis's label names the variable when it
+  is a plain name (xlabel=t plots functions of t). A line `(xs, ys)` plots
+  data as points (vectors or lists of numbers) — typed in the graph rather
+  than in the menu, like everything else in it. Legends are the lines as
+  plain text (`y=x^2`).
+- `fig := Figure⟨title, xlabel, ylabel, scaleX, scaleY⟩` (or `Figure()`);
+  `fig.Line⟨x, y, legend, color⟩`, `.Scatter⟨…, shape⟩`,
+  `.Histogram⟨values, bins = 10⟩`, `.Bar⟨values, labels⟩`. `<…>` works as in
+  structs. Colours: names (red, blue, …) or #rrggbb, else the palette.
+- Editor: `Tab` is the base of every tab; `FileBase : Tab` adds the path and
+  Load/Save; `Editor::ActiveFile()` is null for other tabs. `GraphTab` draws
+  axes (through 0 when in view), 1-2-5 or power-of-ten ticks, grid, title,
+  axis labels, legend, lines (broken at gaps and asymptotes), points and
+  bars; buttons switch each axis between linear and log. After a run, each
+  plot refreshes its tab (same document, same id) or opens a new one, and the
+  first new one is shown. Run from a Graph tab reruns its document.
+- The graph menu gained the x/y scales (stored as `xscale=log`).
+
 ### Phase 7: probability
 - Lang: `X ~ Normal(μ, σ²)` and other Boost distributions, `𝔼[X]`, `Var(X)`,
   `P(X ≤ a)`, sampling with `<random>`.

@@ -543,6 +543,32 @@ TEST(Check, Data) {
     EXPECT_EQ(FirstError("s \\in \\{\"a\", \"b\"\\} := 3"), "s is in Σ*, but this is in ℤ.");
 }
 
+TEST(Check, Graphs) {
+    EXPECT_EQ(FirstError("\\begin{graph} y=x\\exp{}{2} \\\\ sin(x) \\end{graph}"), "");
+    // The x axis's label names the variable.
+    EXPECT_EQ(FirstError("\\begin{graph}[xlabel=t] y=t + 1 \\end{graph}"), "");
+    EXPECT_EQ(FirstError("\\begin{graph} y=\"a\" \\end{graph}"),
+              "A graph's line is a function of x, like y = x², or data, like (xs, ys); this is "
+              "in Σ*.");
+    EXPECT_EQ(FirstError("s := [\"a\"]\n\\begin{graph} (s, s) \\end{graph}"),
+              "Data in a graph is a vector or a list of numbers, but this is in Σ**.");
+    EXPECT_EQ(FirstError("x := 1 + \\begin{graph} y=x \\end{graph}"),
+              "A graph goes on a row of its own.");
+}
+
+TEST(Check, Figures) {
+    EXPECT_EQ(FirstError("f := Figure()\nf.Line<x = [1], y = [2]>\nf.Scatter<x = [1], y = [2], "
+                         "shape = \"square\">"),
+              "");
+    EXPECT_EQ(FirstError("f := Figure<colour = \"red\">"),
+              "Figure has no setting colour; it has title, xlabel, ylabel, scaleX, scaleY.");
+    EXPECT_EQ(FirstError("f := Figure()\nf.Line<x = [1]>"), "Line needs y = ….");
+    EXPECT_EQ(FirstError("f := Figure()\nf.Bar<values = [\"a\"]>"),
+              "values is a vector or a list of numbers, but this is in Σ**.");
+    EXPECT_EQ(FirstError("f := Figure()\nf.Pie<values = [1]>"),
+              "A Figure has Line, Scatter, Histogram and Bar.");
+}
+
 TEST(Check, SubscriptsAreLabelsOrIndices) {
     // An undefined name in the subscript is part of the name.
     EXPECT_EQ(FirstError("v_{max} := 3\nprint(v_{max})"), "");

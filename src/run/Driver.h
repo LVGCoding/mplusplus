@@ -56,12 +56,17 @@ public:
     // The lines produced since the last call.
     std::vector<OutputLine> TakeOutput();
 
+    // The results file's lines (see Results.h), once the run has ended; each
+    // run's results are taken once.
+    std::vector<std::string> TakeResults();
+
 private:
     std::thread thread_;
     std::atomic<bool> running_ = false;
     std::atomic<bool> stopRequested_ = false;
     std::mutex mutex_;
     std::vector<OutputLine> output_;
+    std::vector<std::string> results_;
 
     void Work(std::string cppSource, Options options);
     void Emit(OutputLine::Kind kind, std::string text);

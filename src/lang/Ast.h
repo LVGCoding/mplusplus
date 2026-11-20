@@ -26,7 +26,7 @@ struct Type {
     enum Kind {
         Error, Void, Int, Real, Bool, String, Vector, Matrix,
         SetInt, SetReal, SetString, EmptySet,
-        Struct, List, Map,
+        Struct, List, Map, Figure,
     };
     Kind kind = Error;
     std::shared_ptr<const TypeInfo> info;
@@ -204,6 +204,7 @@ struct Stmt {
         Continue,
         Return,    // return [value]
         Function,  // name(params) [→ declaredType] := value, or name(params) { body }
+        Graph,     // a graph in the document: plots, graph; name is the x variable
     };
 
     Kind kind;
@@ -244,6 +245,13 @@ struct Stmt {
     Block body;
     Block elseBody;
     bool hasElse = false;
+
+    // Graph: one plot per function line: a function of `name` (y = x²) or
+    // data, a Call "points"(xs, ys); null for an empty line. `graph` holds,
+    // as text, the node's id, title, x and y labels, xmin, xmax, ymin, ymax,
+    // xscale, yscale, then each line's legend.
+    std::vector<std::unique_ptr<Expr>> plots;
+    std::vector<std::string> graph;
 
     // Function.
     std::vector<Param> params;

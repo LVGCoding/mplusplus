@@ -36,7 +36,7 @@ struct MathMenuItem {
 // Insert `node` at the cursor of the active M++ file (no-op for other files).
 inline void InsertIntoActiveFile(Editor& editor,
                                  std::unique_ptr<EditorNode> node) {
-    auto* file = dynamic_cast<FileMpp*>(editor.ActiveFile());
+    auto* file = dynamic_cast<FileMpp*>(editor.ActiveTab());
     if (file && file->InsertNode(std::move(node))) {
         ResetEditorCursorBlink();
     }

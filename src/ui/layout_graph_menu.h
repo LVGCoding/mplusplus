@@ -32,6 +32,10 @@ struct GraphMenuState {
     FormField yMin{"GraphMenuYMin", FormField::Kind::NUMBER};
     FormField yMax{"GraphMenuYMax", FormField::Kind::NUMBER};
 
+    // Log scales, switched by their buttons.
+    bool xLog = false;
+    bool yLog = false;
+
     FormField* focused = &xMin;
     // Why the last Apply was refused; shown above the buttons.
     std::string error;
@@ -65,6 +69,8 @@ inline void OpenGraphMenu(Editor& editor,
     m.xMax.SetText(options::FormatNumber(s.xMax));
     m.yMin.SetText(options::FormatNumber(s.yMin));
     m.yMax.SetText(options::FormatNumber(s.yMax));
+    m.xLog = s.xScale == "log";
+    m.yLog = s.yScale == "log";
     for (FormField* field : GraphMenuFields()) {
         field->invalid = false;
     }
@@ -111,6 +117,14 @@ inline std::optional<GraphSettings> ReadGraphMenu() {
     };
     range(m.xMin, m.xMax, s.xMin, s.xMax, "The x axis must go from a smaller to a larger number.");
     range(m.yMin, m.yMax, s.yMin, s.yMax, "The y axis must go from a smaller to a larger number.");
+    s.xScale = m.xLog ? "log" : "linear";
+    s.yScale = m.yLog ? "log" : "linear";
+    if (m.error.empty() && m.xLog && s.xMin <= 0) {
+        fail(m.xMin, "A log scale needs an axis of positive numbers.");
+    }
+    if (m.error.empty() && m.yLog && s.yMin <= 0) {
+        fail(m.yMin, "A log scale needs an axis of positive numbers.");
+    }
     if (!m.error.empty()) {
         return std::nullopt;
     }
@@ -156,6 +170,23 @@ inline void UpdateGraphMenuPlacement() {
     }
 }
 
+// A button showing an axis's scale ("x: linear"); clicking switches it.
+inline void ScaleToggle(Clay_ElementId id, const char* axis, bool& log) {
+    static std::string labels[2];
+    std::string& label = labels[axis[0] == 'x' ? 0 : 1];
+    label = std::string(axis) + ": " + (log ? "log" : "linear");
+    CLAY(id, {.layout = {.padding = {8, 8, 3, 3}},
+              .backgroundColor = Clay_Hovered() ? Clay_Color{215, 215, 215, 255}
+                                                : Clay_Color{236, 236, 236, 255},
+              .cornerRadius = CLAY_CORNER_RADIUS(4)}) {
+        if (Clay_Hovered() && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            log = !log;
+        }
+        CLAY_TEXT(FormString(label), {.textColor = MENU_TEXT, .fontId = FONT_BODY, .fontSize = 15,
+                                      .wrapMode = CLAY_TEXT_WRAP_NONE});
+    }
+}
+
 inline void LayoutGraphMenu() {
     GraphMenuState& m = graphMenu;
     if (!m.placement) {
@@ -181,7 +212,10 @@ inline void LayoutGraphMenu() {
                       FormJoiner("to");
                       input(m.yMax);
                   });
-                  FormHint("Add settings here");
+                  FormRow("Scale", [&] {
+                      ScaleToggle(CLAY_ID("GraphMenuXScale"), "x", m.xLog);
+                      ScaleToggle(CLAY_ID("GraphMenuYScale"), "y", m.yLog);
+                  });
                   if (!m.error.empty()) {
                       FormError(m.error);
                   }
@@ -209,7 +243,7 @@ inline void ProcessGraphMenu(Editor& editor) {
     if (!settings) {
         return;
     }
-    if (auto* file = dynamic_cast<FileMpp*>(editor.ActiveFile())) {
+    if (auto* file = dynamic_cast<FileMpp*>(editor.ActiveTab())) {
         file->EditNode(graphMenu.nodeId, [&](EditorNode& node) {
             auto* graph = dynamic_cast<GraphNode*>(&node);
             if (!graph || graph->Settings() == *settings) {

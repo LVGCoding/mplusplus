@@ -65,7 +65,7 @@ inline void ProcessNodeMenus(Editor& editor) {
         return;
     }
     if (action) {
-        if (auto* file = dynamic_cast<FileMpp*>(editor.ActiveFile());
+        if (auto* file = dynamic_cast<FileMpp*>(editor.ActiveTab());
             file && file->EditNode(action->nodeId, [&](EditorNode& node) {
                 return node.RunAction(action->action);
             })) {

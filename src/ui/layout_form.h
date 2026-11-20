@@ -243,7 +243,7 @@ inline void FormDialogButtons(uint32_t prefix,
 template <typename Node>
 Node* FindActiveNode(Editor& editor,
                      std::uint32_t id) {
-    auto* file = dynamic_cast<FileMpp*>(editor.ActiveFile());
+    auto* file = dynamic_cast<FileMpp*>(editor.ActiveTab());
     if (!file) {
         return nullptr;
     }

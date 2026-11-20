@@ -8,12 +8,14 @@
 #include "layout_state.h"
 #include "layout_tabs.h"
 #include "editor/FileMpp.h"
+#include "editor/GraphTab.h"
+#include "run/Results.h"
 #include "lang/Compile.h"
 #include "run/Run.h"
 
 namespace layout_internal {
 inline void ProcessHistoryRequests(Editor& editor) {
-    FileBase* file = editor.ActiveFile();
+    Tab* file = editor.ActiveTab();
     if (undoRequested) {
         undoRequested = false;
         if (file && file->CanUndo()) {
@@ -30,7 +32,7 @@ inline void ProcessHistoryRequests(Editor& editor) {
 
 // Edit -> Cut / Copy / Paste.
 inline void ProcessClipboardRequests(Editor& editor) {
-    FileBase* file = editor.ActiveFile();
+    Tab* file = editor.ActiveTab();
     if (cutRequested) {
         cutRequested = false;
         if (file) {
@@ -62,7 +64,7 @@ inline FileMpp* TerminalDocument(Editor& editor, bool requireSameVersion) {
     if (FileIndex(editor.Files(), terminalFile) == SIZE_MAX) {
         return nullptr;
     }
-    auto* document = dynamic_cast<FileMpp*>(const_cast<FileBase*>(terminalFile));
+    auto* document = dynamic_cast<FileMpp*>(const_cast<Tab*>(terminalFile));
     if (document && requireSameVersion && document->ContentVersion() != terminalFileVersion) {
         return nullptr;
     }
@@ -112,7 +114,7 @@ inline void ProcessTerminalJump(Editor& editor) {
 // Once a document has been run, check it again a moment after each edit,
 // so its underlines stay up to date while it is fixed.
 inline void CheckWhileEditing(Editor& editor) {
-    auto* document = dynamic_cast<FileMpp*>(editor.ActiveFile());
+    auto* document = dynamic_cast<FileMpp*>(editor.ActiveTab());
     if (!document || !document->checkWhileEditing) {
         return;
     }
@@ -137,6 +139,40 @@ inline void CheckWhileEditing(Editor& editor) {
 // Run -> Run: translate the active file (src/run/Run.cpp) and start compiling
 // and running it in the background. Run -> Stop kills it. Every frame, the
 // output that arrived is added to the terminal.
+// After a run: each plot it made opens a Graph tab, or refreshes the one the
+// same document's plot already has. The first new tab is shown.
+inline void ShowRunResults(Editor& editor) {
+    const auto plots = run::LatestPlots(runJob.TakeResults());
+    if (plots.empty()) {
+        return;
+    }
+    const Tab* source = FileIndex(editor.Files(), terminalFile) != SIZE_MAX ? terminalFile
+                                                                          : nullptr;
+    const Tab* first = nullptr;
+    for (const run::PlotData& plot : plots) {
+        GraphTab* existing = nullptr;
+        for (const auto& tab : editor.Files()) {
+            auto* graph = dynamic_cast<GraphTab*>(tab.get());
+            if (graph && graph->Source() == source && graph->PlotId() == plot.id) {
+                existing = graph;
+            }
+        }
+        if (existing) {
+            existing->SetPlot(plot);
+            continue;
+        }
+        const Tab* active = editor.ActiveTab();
+        const Tab* opened = editor.OpenTab(std::make_unique<GraphTab>(plot, source));
+        editor.ActivateTab(active);
+        if (!first) {
+            first = opened;
+        }
+    }
+    if (first) {
+        SwitchTab(editor, FileIndex(editor.Files(), first));
+    }
+}
+
 inline void ProcessRunRequest(Editor& editor) {
     if (stopRequested) {
         stopRequested = false;
@@ -144,12 +180,17 @@ inline void ProcessRunRequest(Editor& editor) {
     }
     if (runRequested) {
         runRequested = false;
+        // From a Graph tab, Run runs the document that made it.
+        if (const auto* graph = dynamic_cast<const GraphTab*>(editor.ActiveTab());
+            graph && FileIndex(editor.Files(), graph->Source()) != SIZE_MAX) {
+            SwitchTab(editor, FileIndex(editor.Files(), graph->Source()));
+        }
         if (const FileBase* file = editor.ActiveFile()) {
             terminalOutput.clear();
             terminalOutput.push_back({run::OutputLine::Kind::Info, "Running " + file->TabName()});
             Translation translation = TranslateFile(*file);
             terminalFile = file;
-            if (auto* document = dynamic_cast<FileMpp*>(editor.ActiveFile())) {
+            if (auto* document = dynamic_cast<FileMpp*>(editor.ActiveTab())) {
                 document->checkWhileEditing = true;
                 document->diagnostics = translation.diagnostics;
                 terminalFileVersion = document->ContentVersion();
@@ -189,6 +230,9 @@ inline void ProcessRunRequest(Editor& editor) {
         terminalOutput.insert(terminalOutput.end(), std::make_move_iterator(output.begin()),
                               std::make_move_iterator(output.end()));
         terminalScrollToEnd = 2;
+    }
+    if (!runJob.Running()) {
+        ShowRunResults(editor);
     }
     if (terminalJumpRequested != SIZE_MAX) {
         ProcessTerminalJump(editor);
@@ -247,7 +291,7 @@ inline void ProcessTabRequests(Editor& editor) {
 // Close the active tab, or ask first if it has unsaved changes.
 inline void ProcessCloseRequest(Editor& editor) {
     closeRequested = false;
-    if (FileBase* file = editor.ActiveFile()) {
+    if (Tab* file = editor.ActiveTab()) {
         if (file->modified) {
             unsavedChangesOpen = true;
             CloseAllMenus();

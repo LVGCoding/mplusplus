@@ -12,9 +12,9 @@
 //   \begin{graph}[title=Growth, xlabel=t, xmax=5] y=x^2 \\ y=2x \end{graph}
 // Everything you type is edited in place, like matrix cells: the title, the
 // two axis labels, and the functions (Enter adds a function below, Backspace
-// in an empty one removes it). Only the axis ranges are in the settings menu.
-// Plotting is not implemented yet: the plot area is an empty frame of a
-// fixed size.
+// in an empty one removes it). The axis ranges and scales are in the settings
+// menu. The plot itself is drawn in a Graph tab when the document runs
+// (src/editor/GraphTab.h); here the plot area is an empty frame.
 //
 // Cursor path inside the graph: [slot, ...path in that slot's LineNode], with
 // slots in Up/Down order: TITLE_SLOT, Y_LABEL_SLOT, X_LABEL_SLOT, then the

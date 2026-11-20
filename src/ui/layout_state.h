@@ -29,14 +29,14 @@ inline bool closeRequested = false;
 inline std::size_t selectTabRequested = SIZE_MAX;
 inline std::size_t closeTabRequested = SIZE_MAX;
 // Remember each open file's editor scroll position so switching tabs restores it.
-inline std::unordered_map<const FileBase*, Clay_Vector2> tabScroll;
+inline std::unordered_map<const Tab*, Clay_Vector2> tabScroll;
 
 // Order of the tabs as shown in the tab bar. The Editor keeps its own
 // order; this one only changes when the user drags a tab.
-inline std::vector<const FileBase*> tabOrder;
+inline std::vector<const Tab*> tabOrder;
 // Tab being dragged (pressed and still held), and whether it has moved far
 // enough to count as a drag rather than a click.
-inline const FileBase* draggedTab = nullptr;
+inline const Tab* draggedTab = nullptr;
 inline float tabDragStartX = 0;
 inline bool tabDragMoved = false;
 // Where along the tab the mouse grabbed it, so the drag preview keeps that spot under the mouse.
@@ -70,7 +70,7 @@ inline run::Job runJob;
 inline std::vector<run::OutputLine> terminalOutput;
 // The document the terminal's errors are about (the one last run), and its
 // version then. Check it is still open (FileIndex) before using it.
-inline const FileBase* terminalFile = nullptr;
+inline const Tab* terminalFile = nullptr;
 inline std::uint64_t terminalFileVersion = 0;
 // Where the running program can stop with an error (Translation::locations).
 inline std::vector<lang::SourceRef> runLocations;
@@ -78,8 +78,8 @@ inline std::vector<lang::SourceRef> runLocations;
 inline std::size_t terminalJumpRequested = SIZE_MAX;
 // Checking documents while they are edited (FileMpp::checkWhileEditing):
 // the content version each was last checked at, and the edit waited on.
-inline std::unordered_map<const FileBase*, std::uint64_t> checkedVersions;
-inline const FileBase* uncheckedFile = nullptr;
+inline std::unordered_map<const Tab*, std::uint64_t> checkedVersions;
+inline const Tab* uncheckedFile = nullptr;
 inline std::uint64_t uncheckedVersion = 0;
 inline double uncheckedSince = 0;
 // Frames left in which the terminal scrolls to its last line (new output

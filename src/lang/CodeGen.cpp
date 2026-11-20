@@ -11,6 +11,7 @@ namespace {
 std::string CppType(const Type& type) {
     switch (type.kind) {
         case Type::Struct: return type.info->cppName;
+        case Type::Figure: return "mpp::Figure";
         case Type::List: return "mpp::List<" + CppType(type.info->element) + ">";
         case Type::Map:
             return "mpp::Map<" + CppType(type.info->key) + ", " + CppType(type.info->element) +
@@ -225,7 +226,44 @@ private:
                 }
                 break;
             case Stmt::Kind::Function: break;
+            case Stmt::Kind::Graph: Graph(statement); break;
         }
+    }
+
+    // A graph in the document: sample its functions, collect its data, and
+    // send it to the editor.
+    void Graph(const Stmt& statement) {
+        const std::vector<std::string>& g = statement.graph;
+        Line("{");
+        ++indent_;
+        Line("mpp::Plot plot;");
+        Line("plot.id = " + Quote("node:" + g[0]) + ";");
+        Line("plot.title = " + Quote(g[1]) + ";");
+        Line("plot.xlabel = " + Quote(g[2]) + ";");
+        Line("plot.ylabel = " + Quote(g[3]) + ";");
+        Line("plot.xmin = " + g[4] + "; plot.xmax = " + g[5] + ";");
+        Line("plot.ymin = " + g[6] + "; plot.ymax = " + g[7] + ";");
+        Line("plot.xscale = " + Quote(g[8]) + "; plot.yscale = " + Quote(g[9]) + ";");
+        for (std::size_t i = 0; i < statement.plots.size(); ++i) {
+            const Expr* plot = statement.plots[i].get();
+            if (!plot) {
+                continue;
+            }
+            const std::string legend = Quote(10 + i < g.size() ? g[10 + i] : "");
+            if (plot->kind == Expr::Kind::Call && plot->text == "points") {
+                Line("plot.series.push_back(mpp::points(" + Loc(plot->ref) + ", mpp::data_of(" +
+                     Expression(*plot->args[0]) + "), mpp::data_of(" +
+                     Expression(*plot->args[1]) + "), " + legend + "));");
+                continue;
+            }
+            Line("plot.series.push_back(mpp::sample([&](double " +
+                 Variable(statement.ident, statement.greek) + ") -> double { mpp::where = " +
+                 Loc(plot->ref) + "; return " + Real(*plot) + "; }, " + g[4] + ", " + g[5] +
+                 ", " + (g[8] == "log" ? "true" : "false") + ", " + legend + "));");
+        }
+        Line("mpp::publish(plot);");
+        --indent_;
+        Line("}");
     }
 
     // A struct type: its fields, how it prints (text()), and for a list of
@@ -478,6 +516,9 @@ private:
             case Expr::Kind::Member:
                 return "(" + Expression(*expr.args[0]) + ")." + Variable(expr.text, false);
             case Expr::Kind::Method: {
+                if (expr.args[0]->type == Type::Figure) {
+                    return FigureMethod(expr);
+                }
                 const Expr& list = *expr.args[0];
                 return Expression(list) + ".push(" +
                        As(*expr.args[1], list.type.info->element) + ")";
@@ -878,7 +919,58 @@ private:
         return code + ")";
     }
 
+    // A setting given to Figure or a method, as C++, or `fallback` if left out.
+    std::string Option(const Expr* options, const std::string& name, const std::string& fallback) {
+        if (options) {
+            for (std::size_t i = 0; i < options->ops.size(); ++i) {
+                if (options->ops[i] == name) {
+                    const Expr& value = *options->args[i];
+                    if (value.type == Type::Vector || value.type == Type::List) {
+                        return name == "labels" ? "mpp::labels_of(" + Expression(value) + ")"
+                                                : "mpp::data_of(" + Expression(value) + ")";
+                    }
+                    return Expression(value);
+                }
+            }
+        }
+        return fallback;
+    }
+
+    std::string FigureMethod(const Expr& expr) {
+        const Expr* options = expr.args[1].get();
+        const std::string at = Loc(expr.ref);
+        const std::string figure = Expression(*expr.args[0]);
+        const std::string text = "std::string()";
+        const std::string legend = Option(options, "legend", text);
+        const std::string color = Option(options, "color", text);
+        if (expr.text == "Line") {
+            return figure + ".line(" + at + ", " + Option(options, "x", "") + ", " +
+                   Option(options, "y", "") + ", " + legend + ", " + color + ")";
+        }
+        if (expr.text == "Scatter") {
+            return figure + ".scatter(" + at + ", " + Option(options, "x", "") + ", " +
+                   Option(options, "y", "") + ", " + legend + ", " + color + ", " +
+                   Option(options, "shape", text) + ")";
+        }
+        if (expr.text == "Histogram") {
+            return figure + ".histogram(" + at + ", " + Option(options, "values", "") + ", " +
+                   Option(options, "bins", "std::int64_t(10)") + ", " + legend + ", " + color +
+                   ")";
+        }
+        return figure + ".bar(" + at + ", " +
+               Option(options, "labels", "std::vector<std::string>{}") + ", " +
+               Option(options, "values", "") + ", " + legend + ", " + color + ")";
+    }
+
     std::string Call(const Expr& expr) {
+        if (expr.text == "Figure" && expr.function.empty()) {
+            const Expr* options = expr.args.empty() ? nullptr : expr.args[0].get();
+            const std::string text = "std::string()";
+            return "mpp::Figure(" + Loc(expr.ref) + ", " + Option(options, "title", text) + ", " +
+                   Option(options, "xlabel", text) + ", " + Option(options, "ylabel", text) +
+                   ", " + Option(options, "scaleX", text) + ", " +
+                   Option(options, "scaleY", text) + ")";
+        }
         if (!expr.function.empty()) {
             std::string code = expr.function + "(";
             for (std::size_t i = 0; i < expr.args.size(); ++i) {

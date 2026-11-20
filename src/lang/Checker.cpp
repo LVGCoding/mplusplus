@@ -2,6 +2,7 @@
 
 #include "Builtins.h"
 
+#include <cctype>
 #include <charconv>
 #include <cstdint>
 #include <map>
@@ -12,6 +13,7 @@ namespace lang {
 std::string TypeName(const Type& type) {
     switch (type.kind) {
         case Type::Struct: return type.info->name;
+        case Type::Figure: return "Figure";
         case Type::List: return TypeName(type.info->element) + "*";
         case Type::Map:
             return TypeName(type.info->element) + "^(" + TypeName(type.info->key) + ")";
@@ -247,6 +249,7 @@ private:
                 break;
             case Stmt::Kind::Return: CheckReturn(statement); break;
             case Stmt::Kind::Function: CheckFunction(statement); break;
+            case Stmt::Kind::Graph: CheckGraph(statement); break;
         }
     }
 
@@ -1694,13 +1697,177 @@ private:
         return failed ? Type::Error : SetOf(element);
     }
 
-    // list.push(value): the only method so far.
+    // Is `type` numbers to plot: a vector, or a list of ℤ or ℝ?
+    static bool IsData(const Type& type) {
+        return type == Type::Vector ||
+               (type == Type::List && IsNumeric(type.info->element));
+    }
+
+    // A graph in the document: each line is checked as a function of its x
+    // variable, or as data.
+    void CheckGraph(Stmt& statement) {
+        for (auto& plot : statement.plots) {
+            if (!plot) {
+                continue;
+            }
+            if (plot->kind == Expr::Kind::Call && plot->text == "points") {
+                for (auto& data : plot->args) {
+                    const Type type = CheckExpr(*data);
+                    if (type != Type::Error && !IsData(type)) {
+                        Error("Data in a graph is a vector or a list of numbers, but this is in " +
+                                  TypeName(type) + ".",
+                              data->ref);
+                    }
+                }
+                continue;
+            }
+            scopes_.emplace_back();
+            scopes_.back()[statement.name] = {Type::Real, false, true, statement.nameRef};
+            const Type type = CheckExpr(*plot);
+            scopes_.pop_back();
+            if (type != Type::Error && !IsNumeric(type)) {
+                Error("A graph's line is a function of " + statement.name + ", like y = " +
+                          statement.name + "², or data, like (xs, ys); this is in " +
+                          TypeName(type) + ".",
+                      plot->ref);
+            }
+        }
+    }
+
+    // The fields of a struct value given to Figure or one of its methods:
+    // each must be one of `allowed` (field → what it must be), and those
+    // in `required` must be there.
+    enum class FieldKind { Text, Whole, Data, Labels };
+    bool CheckOptions(Expr& options, const std::string& what,
+                      const std::vector<std::pair<std::string, FieldKind>>& allowed,
+                      const std::vector<std::string>& required) {
+        if (options.kind != Expr::Kind::StructValue) {
+            CheckExpr(options);
+            Error(what + " takes its settings as ⟨name = value, …⟩.", options.ref);
+            return false;
+        }
+        bool ok = true;
+        for (std::size_t i = 0; i < options.ops.size(); ++i) {
+            const std::string& name = options.ops[i];
+            Expr& value = *options.args[i];
+            const Type type = CheckExpr(value);
+            const FieldKind* kind = nullptr;
+            std::string names;
+            for (const auto& [field, k] : allowed) {
+                if (field == name) kind = &k;
+                names += (names.empty() ? "" : ", ") + field;
+            }
+            if (!kind) {
+                Error(what + " has no setting " + name + "; it has " + names + ".", value.ref);
+                ok = false;
+                continue;
+            }
+            if (type == Type::Error) {
+                ok = false;
+                continue;
+            }
+            const bool fits = *kind == FieldKind::Text   ? type == Type::String
+                            : *kind == FieldKind::Whole  ? type == Type::Int
+                            : *kind == FieldKind::Labels ? type == Type::List &&
+                                                               type.info->element == Type::String
+                                                         : IsData(type);
+            if (!fits) {
+                const char* wanted = *kind == FieldKind::Text    ? "a string"
+                                     : *kind == FieldKind::Whole ? "a whole number (ℤ)"
+                                     : *kind == FieldKind::Labels
+                                         ? "a list of strings (Σ**)"
+                                         : "a vector or a list of numbers";
+                Error(name + " is " + wanted + ", but this is in " + TypeName(type) + ".",
+                      value.ref);
+                ok = false;
+            }
+        }
+        for (const std::string& name : required) {
+            bool given = false;
+            for (const auto& field : options.ops) given |= field == name;
+            if (!given) {
+                Error(what + " needs " + name + " = ….", options.ref);
+                ok = false;
+            }
+        }
+        return ok;
+    }
+
+    // Figure() or Figure⟨title = …, xlabel, ylabel, scaleX, scaleY⟩
+    Type CheckFigure(Expr& expr) {
+        if (expr.args.size() > 1) {
+            Error("Figure takes its settings as ⟨title = \"…\", scaleY = \"log\"⟩.", expr.ref);
+            return Type::Error;
+        }
+        if (expr.args.size() == 1 &&
+            !CheckOptions(*expr.args[0], "Figure",
+                          {{"title", FieldKind::Text}, {"xlabel", FieldKind::Text},
+                           {"ylabel", FieldKind::Text}, {"scaleX", FieldKind::Text},
+                           {"scaleY", FieldKind::Text}},
+                          {})) {
+            return Type::Error;
+        }
+        return Type::Figure;
+    }
+
+    // fig.Line⟨…⟩, fig.Scatter⟨…⟩, fig.Histogram⟨…⟩, fig.Bar⟨…⟩
+    Type CheckFigureMethod(Expr& expr, bool statement) {
+        std::string name = expr.text;
+        if (!name.empty()) name[0] = static_cast<char>(std::toupper(name[0]));
+        using K = FieldKind;
+        const std::pair<std::string, K> legend{"legend", K::Text}, color{"color", K::Text};
+        bool ok = true;
+        if (expr.args.size() != 2) {
+            Error("fig." + name + " takes its data as ⟨…⟩, as in fig.Line⟨x = xs, y = ys⟩.",
+                  expr.ref);
+            return Type::Error;
+        }
+        Expr& options = *expr.args[1];
+        if (name == "Line") {
+            ok = CheckOptions(options, "Line", {{"x", K::Data}, {"y", K::Data}, legend, color},
+                              {"x", "y"});
+        } else if (name == "Scatter") {
+            ok = CheckOptions(options, "Scatter",
+                              {{"x", K::Data}, {"y", K::Data}, legend, color, {"shape", K::Text}},
+                              {"x", "y"});
+        } else if (name == "Histogram") {
+            ok = CheckOptions(options, "Histogram",
+                              {{"values", K::Data}, {"bins", K::Whole}, legend, color},
+                              {"values"});
+        } else if (name == "Bar") {
+            ok = CheckOptions(options, "Bar",
+                              {{"values", K::Data}, {"labels", K::Labels}, legend, color},
+                              {"values"});
+        } else {
+            CheckExpr(options);
+            Error("A Figure has Line, Scatter, Histogram and Bar.", expr.opRef);
+            return Type::Error;
+        }
+        expr.text = name;
+        if (!ok) return Type::Error;
+        if (expr.args[0]->kind != Expr::Kind::Name) {
+            Error("This changes the figure, so it needs the figure's name, as in fig." + name +
+                      "⟨…⟩.",
+                  expr.args[0]->ref);
+            return Type::Error;
+        }
+        if (!statement) {
+            Error(name + " doesn't give a value.", expr.ref);
+            return Type::Error;
+        }
+        return Type::Void;
+    }
+
+    // list.push(value), and a figure's Line, Scatter, Histogram and Bar.
     Type CheckMethod(Expr& expr, bool statement) {
         Expr& object = *expr.args[0];
         const Type type = CheckExpr(object);
         if (type == Type::Error) {
             for (std::size_t i = 1; i < expr.args.size(); ++i) CheckExpr(*expr.args[i]);
             return Type::Error;
+        }
+        if (type == Type::Figure) {
+            return CheckFigureMethod(expr, statement);
         }
         if (expr.text != "push" || type != Type::List) {
             Error(type == Type::List ? "Lists have one method: .push(x) adds x at the end."
@@ -2243,6 +2410,9 @@ private:
     Type CheckCall(Expr& expr, bool statement) {
         if (Function* user = LookupFunction(expr.text)) {
             return CheckUserCall(*user, expr, statement);
+        }
+        if (expr.text == "Figure") {
+            return CheckFigure(expr);
         }
         const BuiltinFunction* function = FindBuiltinFunction(expr.text);
         if (!function) {

@@ -87,6 +87,7 @@ add_library(mplusplus_core STATIC
   src/editor/fileText.cpp
   src/editor/fileTextView.cpp
   src/editor/TextBuffer.cpp
+  src/editor/GraphTab.cpp
   src/editor/fileMpp.cpp
   src/editor/fileMppView.cpp
   src/editor/fileMppEdit.cpp
@@ -118,6 +119,7 @@ add_library(mplusplus_core STATIC
   src/parser/parser.cpp
   src/run/Run.cpp
   src/run/Process.cpp
+  src/run/Results.cpp
   src/run/Toolchain.cpp
   src/run/Driver.cpp
   src/ui/clay_impl.cpp

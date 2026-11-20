@@ -3,6 +3,7 @@
 #include "Builtins.h"
 
 #include <array>
+#include <cctype>
 #include <utility>
 
 namespace lang {
@@ -301,6 +302,9 @@ private:
         if (first.kind == Kind::Word && !IsKeyword(first.text) && second.IsOp("(") &&
             IsFunctionDefinition()) {
             return ParseFunction();
+        }
+        if (first.kind == Kind::Structure && first.shape == Shape::Graph) {
+            return ParseGraph(Advance());
         }
         if (first.IsOp("{") && PeekAt(1).kind == Kind::Newline) {
             Fail("A block ({ … }) goes after if, while, for or a function.", first.ref);
@@ -641,6 +645,66 @@ private:
         return statement;
     }
 
+    // A graph: each line is a function of the x variable (y = x², or just x²)
+    // or data, (xs, ys). A line with a mistake is reported and left out.
+    std::unique_ptr<Stmt> ParseGraph(const Token& token) {
+        auto statement = MakeStmt(Stmt::Kind::Graph, token.ref);
+        statement->graph = token.pieces;
+        // The x axis's label names the variable, if it is a plain name.
+        const std::string& label = token.pieces[2];
+        bool name = !label.empty() && std::isalpha(static_cast<unsigned char>(label[0]));
+        for (char c : label) name &= std::isalnum(static_cast<unsigned char>(c)) != 0;
+        statement->name = name && !IsKeyword(label) ? label : "x";
+        statement->ident = statement->name;
+        statement->nameRef = token.ref;
+        for (const auto& slot : token.slots) {
+            if (slot.empty()) {
+                statement->plots.push_back(nullptr);
+                continue;
+            }
+            SyntaxParser parser(slot, diagnostics_, token.ref);
+            try {
+                statement->plots.push_back(parser.ParseGraphLine());
+            } catch (const SyntaxError&) {
+                statement->plots.push_back(nullptr);
+            }
+        }
+        return statement;
+    }
+
+public:
+    std::unique_ptr<Expr> ParseGraphLine() {
+        if (Peek().IsOp("(")) {
+            // (xs, ys): points.
+            const Token& open = Advance();
+            auto first = ParseExpression();
+            if (Peek().IsOp(",")) {
+                Advance();
+                auto points = MakeExpr(Expr::Kind::Call, open.ref);
+                points->text = "points";
+                points->opRef = open.ref;
+                points->args.push_back(std::move(first));
+                points->args.push_back(ParseExpression());
+                points->ref = Span(open.ref, Expect(")", "Expected ')' after the y values").ref);
+                if (Peek().kind != Kind::End) {
+                    Unexpected(Peek(), "Expected the end of the line");
+                }
+                return points;
+            }
+            // Just a bracketed expression: start again.
+            pos_ = 0;
+            depth_ = 0;
+        }
+        auto expr = ParseWholeExpression("graph's line");
+        // y = x², f(x) = x²: the function is the right side.
+        if (expr->kind == Expr::Kind::Compare && expr->ops.size() == 1 && expr->ops[0] == "=" &&
+            (expr->args[0]->kind == Expr::Kind::Name || expr->args[0]->kind == Expr::Kind::Call)) {
+            return std::move(expr->args[1]);
+        }
+        return expr;
+    }
+
+private:
     // p.name ← value
     std::unique_ptr<Stmt> ParseFieldAssign() {
         auto statement = MakeStmt(Stmt::Kind::Assign, {});
@@ -954,6 +1018,17 @@ private:
             } else if (next.IsOp(".") && PeekAt(1).kind == Kind::Word) {
                 Advance();
                 const Token& member = Advance();
+                if (StartsStructArgument(true)) {
+                    // fig.Line⟨x = xs, y = ys⟩
+                    auto access = MakeExpr(Expr::Kind::Method, Span(expr->ref, member.ref));
+                    access->text = member.text;
+                    access->opRef = member.ref;
+                    access->args.push_back(std::move(expr));
+                    access->args.push_back(ParseStructArgument());
+                    access->ref = Span(access->ref, access->args.back()->ref);
+                    expr = std::move(access);
+                    continue;
+                }
                 const bool method = Peek().IsOp("(");
                 auto access = MakeExpr(method ? Expr::Kind::Method : Expr::Kind::Member,
                                        Span(expr->ref, member.ref));
@@ -1118,11 +1193,43 @@ private:
         if (Peek().IsOp("(")) {
             return ParseCall(word);
         }
+        // Figure⟨title = "…"⟩: a struct value in place of (…).
+        if (StartsStructArgument(word.text == "Figure")) {
+            auto call = MakeExpr(Expr::Kind::Call, word.ref);
+            call->text = word.text;
+            call->opRef = word.ref;
+            call->args.push_back(ParseStructArgument());
+            call->ref = Span(word.ref, call->args.back()->ref);
+            return call;
+        }
         auto expr = MakeExpr(Expr::Kind::Name, word.ref);
         expr->text = word.text;
         expr->ident = word.ident;
         expr->greek = word.greek;
         return expr;
+    }
+
+    // Is a struct value next, given as the argument of a call or method
+    // (fig.Line⟨x = xs⟩)? A ⟨…⟩ always is; <…> only where `angleOk` (else
+    // x < y would be taken for one) and when it starts with "name =".
+    bool StartsStructArgument(bool angleOk) {
+        const Token& next = Peek();
+        if (next.kind == Kind::Structure && next.shape == Shape::Matrix && next.text == "angle") {
+            return true;
+        }
+        return angleOk && next.IsOp("<") && PeekAt(1).kind == Kind::Word && PeekAt(2).IsOp("=");
+    }
+
+    std::unique_ptr<Expr> ParseStructArgument() {
+        if (Peek().IsOp("<")) {
+            const Token& open = Advance();
+            auto expr = MakeExpr(Expr::Kind::StructValue, open.ref);
+            ParseFields(*expr, true);
+            expr->ref = Span(open.ref, Expect(">", "Expected ',' or '>' after the fields").ref);
+            return expr;
+        }
+        const Token& angle = Advance();
+        return ParseAngle(angle);
     }
 
     std::unique_ptr<Expr> ParseCall(const Token& name) {
@@ -1449,9 +1556,10 @@ private:
                 Fail("This subscript has nothing before it: put a name in front, as in x_i.",
                      token.ref);
             case Shape::Graph:
+                Fail("A graph goes on a row of its own.", token.ref);
             case Shape::Table:
-                Fail("Graphs and tables can't be run yet: they're coming in a later version "
-                     "of M++.", token.ref);
+                Fail("Tables can't be run yet: they're coming in a later version of M++.",
+                     token.ref);
             case Shape::None: break;
         }
         Unexpected(token, "Expected a value");

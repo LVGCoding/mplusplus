@@ -15,6 +15,7 @@
 #include "math/TextNode.h"
 
 #include <array>
+#include <cstdio>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -269,6 +270,69 @@ private:
         }
     }
 
+    static std::string Number(double value) {
+        char text[32];
+        std::snprintf(text, sizeof text, "%.17g", value);
+        return text;
+    }
+
+    static std::string Trimmed(std::string text) {
+        const std::size_t first = text.find_first_not_of(' ');
+        if (first == std::string::npos) return "";
+        text.erase(0, first);
+        text.erase(text.find_last_not_of(' ') + 1);
+        return text;
+    }
+
+    // Math as plain text for a legend or title: x\exp{}{2} is "x^2".
+    static std::string PlainText(const EditorNode* node) {
+        if (!node) return "";
+        if (const auto* text = dynamic_cast<const TextNode*>(node)) {
+            return text->GetText();
+        }
+        if (const auto* line = dynamic_cast<const LineNode*>(node)) {
+            std::string out;
+            for (std::size_t i = 0; i < line->ChildCount(); ++i) {
+                out += PlainText(line->GetChild(i));
+            }
+            return out;
+        }
+        if (const auto* greek = dynamic_cast<const GreekNode*>(node)) {
+            return GlyphOf(*greek);
+        }
+        if (const auto* symbol = dynamic_cast<const SymbolNode*>(node)) {
+            return std::string(symbol->GetSymbol().glyph);
+        }
+        auto grouped = [](const std::string& text) {
+            return text.size() <= 1 ? text : "(" + text + ")";
+        };
+        if (const auto* power = dynamic_cast<const ExpoNode*>(node)) {
+            return PlainText(power->GetBase()) + "^" + grouped(PlainText(power->GetExponent()));
+        }
+        if (const auto* fraction = dynamic_cast<const FracNode*>(node)) {
+            auto [numerator, denominator] = fraction->GetChildren();
+            return grouped(PlainText(numerator)) + "/" + grouped(PlainText(denominator));
+        }
+        if (const auto* root = dynamic_cast<const SqrtNode*>(node)) {
+            auto [degree, argument] = root->GetChildren();
+            return (degree ? PlainText(degree) : "") + "√" + grouped(PlainText(argument));
+        }
+        if (const auto* subscript = dynamic_cast<const SubNode*>(node)) {
+            return "_" + grouped(PlainText(subscript->GetIndex()));
+        }
+        if (const auto* delimited = dynamic_cast<const DelimNode*>(node)) {
+            const std::string inner = PlainText(delimited->GetArgument());
+            switch (delimited->GetKind()) {
+                case DelimNode::Kind::FLOOR: return "⌊" + inner + "⌋";
+                case DelimNode::Kind::CEIL: return "⌈" + inner + "⌉";
+                case DelimNode::Kind::NORM: return "‖" + inner + "‖";
+                case DelimNode::Kind::ABS: break;
+            }
+            return "|" + inner + "|";
+        }
+        return node->ToText();
+    }
+
     // Tokens of the slot of a structure, at `slotPath` relative to the line.
     std::vector<Token> Slot(const EditorNode* node, std::initializer_list<std::size_t> slotPath) {
         std::vector<Token> tokens;
@@ -300,8 +364,21 @@ private:
             token.shape = Token::Shape::Power;
             token.slots.push_back(Slot(power->GetBase(), {index, 0}));
             token.slots.push_back(Slot(power->GetExponent(), {index, 1}));
-        } else if (dynamic_cast<const GraphNode*>(&node)) {
+        } else if (const auto* graph = dynamic_cast<const GraphNode*>(&node)) {
+            // pieces: id, title, x label, y label, x/y ranges and scales, then
+            // a legend per function; slots: the functions.
             token.shape = Token::Shape::Graph;
+            const GraphSettings& settings = graph->Settings();
+            token.pieces = {std::to_string(graph->GetId()), Trimmed(PlainText(graph->Title())),
+                            Trimmed(PlainText(graph->XLabel())),
+                            Trimmed(PlainText(graph->YLabel())),
+                            Number(settings.xMin), Number(settings.xMax), Number(settings.yMin),
+                            Number(settings.yMax), settings.xScale, settings.yScale};
+            for (std::size_t i = 0; i < graph->FunctionCount(); ++i) {
+                token.pieces.push_back(Trimmed(PlainText(graph->GetFunction(i))));
+                token.slots.push_back(
+                    Slot(graph->GetFunction(i), {index, GraphNode::FIRST_FUNCTION_SLOT + i}));
+            }
         } else if (dynamic_cast<const TableNode*>(&node)) {
             token.shape = Token::Shape::Table;
         } else if (const auto* delimited = dynamic_cast<const DelimNode*>(&node)) {

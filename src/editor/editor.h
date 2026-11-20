@@ -26,7 +26,12 @@ public:
                   std::string& error);
 
     // Returns nullptr when no tabs are open.
+    Tab* ActiveTab();
+    // The active tab if it holds a file, else nullptr.
     FileBase* ActiveFile();
+
+    // Add a tab that isn't a file (such as a graph) and make it active.
+    Tab* OpenTab(std::unique_ptr<Tab> tab);
 
     std::size_t ActiveTabIndex() const {
         return activeTab_;
@@ -35,16 +40,21 @@ public:
     // Make the file at `index` the active tab. Out-of-range indices are ignored.
     void SetActiveTab(std::size_t index);
 
+    // Make `tab` the active tab, if it is open.
+    void ActivateTab(const Tab* tab);
+
     // Call only after unsaved changes have been handled and rendering is done.
     void CloseActiveFile();
+    void CloseTab(const Tab* tab);
 
-    const std::vector<std::unique_ptr<FileBase>>& Files() const {
+    // Every open tab, files and others.
+    const std::vector<std::unique_ptr<Tab>>& Files() const {
         return files_;
     }
 
 private:
-    // Held by pointer so FileText/FileMpp aren't sliced down to FileBase.
-    std::vector<std::unique_ptr<FileBase>> files_;
+    // Held by pointer so FileText/FileMpp aren't sliced down to Tab.
+    std::vector<std::unique_ptr<Tab>> files_;
     // Paths created by NewTemporaryFile(), owned here and removed on editor destruction.
     std::vector<std::filesystem::path> temporaryFiles_;
     std::size_t activeTab_ = 0;

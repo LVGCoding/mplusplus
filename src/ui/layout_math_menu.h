@@ -123,7 +123,7 @@ inline void ProcessMathMenuTriggers() {
 }
 
 // Keyboard triggers. Called after the file has handled this frame's input.
-inline void CheckMathMenuKeyTriggers(FileBase& file,
+inline void CheckMathMenuKeyTriggers(Tab& file,
                                      const EditorView& view) {
     // Trigger: typing a backslash in an M++ file. Opens just below the cursor.
     auto* mpp = dynamic_cast<FileMpp*>(&file);

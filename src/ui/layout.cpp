@@ -88,7 +88,7 @@ bool HandleActiveFileInput(Editor& editor,
         }
         return false;
     }
-    FileBase* file = editor.ActiveFile();
+    Tab* file = editor.ActiveTab();
     if (!file) {
         return false;
     }
@@ -131,7 +131,7 @@ bool HandleActiveFileInput(Editor& editor,
 
 bool ScrollEditorCursorIntoView(Editor& editor,
                                 Font* fonts) {
-    const FileBase* file = editor.ActiveFile();
+    const Tab* file = editor.ActiveTab();
     auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
     const auto workspace = Clay_GetElementData(CLAY_ID("Workspace"));
     if (!file || !scroll.found || !workspace.found) {
@@ -178,11 +178,12 @@ bool ScrollEditorCursorIntoView(Editor& editor,
 }
 
 void Layout(Editor& editor) {
-    const FileBase* activeFile = editor.ActiveFile();
+    const Tab* activeFile = editor.ActiveTab();
     if (!activeFile) {
         ResetEditorCursorBlink();
     }
-    const bool canSave = activeFile && !activeFile->path.empty();
+    const auto* activeDocument = dynamic_cast<const FileBase*>(activeFile);
+    const bool canSave = activeDocument && !activeDocument->path.empty();
     if (IsKeyPressed(KEY_ESCAPE) ||
         (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !Clay_PointerOver(CLAY_ID("FileMenu")) &&
          !Clay_PointerOver(CLAY_ID("FileDropdown")))) {
@@ -271,17 +272,19 @@ void DrawActiveFileOverlay(Editor& editor,
     if (IsLayoutModalOpen() || IsAnyMenuOpen()) {
         return;
     }
-    const FileBase* file = editor.ActiveFile();
+    const Tab* file = editor.ActiveTab();
     if (!file) {
         return;
     }
 
     // Show the cursor solid for a moment after switching files.
-    static const FileBase* previousFile = nullptr;
+    static const Tab* previousFile = nullptr;
     static std::filesystem::path previousPath;
-    if (previousFile != file || previousPath != file->path) {
+    const auto* document = dynamic_cast<const FileBase*>(file);
+    const std::filesystem::path path = document ? document->path : std::filesystem::path();
+    if (previousFile != file || previousPath != path) {
         previousFile = file;
-        previousPath = file->path;
+        previousPath = path;
         ResetEditorCursorBlink();
     }
     file->DrawOverlay(MakeEditorView(fonts));

@@ -81,6 +81,11 @@ void Job::Wait() {
     }
 }
 
+std::vector<std::string> Job::TakeResults() {
+    std::lock_guard lock(mutex_);
+    return std::exchange(results_, {});
+}
+
 std::vector<OutputLine> Job::TakeOutput() {
     std::lock_guard lock(mutex_);
     return std::exchange(output_, {});
@@ -226,6 +231,16 @@ void Job::Work(std::string cppSource, Options options) {
         },
         status);
     const std::string elapsed = Seconds(Clock::now() - runStart);
+    {
+        // What the program sent to the editor, even if it stopped early.
+        std::ifstream in(results);
+        std::vector<std::string> lines;
+        for (std::string line; std::getline(in, line);) {
+            lines.push_back(std::move(line));
+        }
+        std::lock_guard lock(mutex_);
+        results_ = std::move(lines);
+    }
     switch (ran) {
     case Ending::NotStarted:
         break;

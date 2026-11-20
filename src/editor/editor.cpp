@@ -80,12 +80,47 @@ bool Editor::OpenFile(const std::filesystem::path& path,
     return true;
 }
 
-FileBase* Editor::ActiveFile() {
+Tab* Editor::ActiveTab() {
     if (files_.empty()) {
         return nullptr;
     }
 
     return files_[activeTab_].get();
+}
+
+FileBase* Editor::ActiveFile() {
+    return dynamic_cast<FileBase*>(ActiveTab());
+}
+
+Tab* Editor::OpenTab(std::unique_ptr<Tab> tab) {
+    files_.push_back(std::move(tab));
+    activeTab_ = files_.size() - 1;
+    return files_.back().get();
+}
+
+void Editor::ActivateTab(const Tab* tab) {
+    for (std::size_t i = 0; i < files_.size(); ++i) {
+        if (files_[i].get() == tab) {
+            activeTab_ = i;
+        }
+    }
+}
+
+void Editor::CloseTab(const Tab* tab) {
+    for (std::size_t i = 0; i < files_.size(); ++i) {
+        if (files_[i].get() == tab) {
+            const Tab* active = ActiveTab();
+            files_.erase(files_.begin() + static_cast<std::ptrdiff_t>(i));
+            if (files_.empty()) {
+                activeTab_ = 0;
+            } else if (active != tab) {
+                ActivateTab(active);
+            } else if (activeTab_ >= files_.size()) {
+                activeTab_ = files_.size() - 1;
+            }
+            return;
+        }
+    }
 }
 
 void Editor::SetActiveTab(std::size_t index) {

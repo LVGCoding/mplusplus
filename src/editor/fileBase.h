@@ -9,32 +9,21 @@
 #include <optional>
 #include <string>
 
-// The file base class for representing a file currently open in the M++ editor.
-// FileText (plain text) and FileMpp (.mpp math documents) derive from this.
+// One tab of the editor: a document, or a view such as a graph from a run.
 //
-// Each file type owns how it is drawn and edited. Every frame, for the active file,
+// Each tab owns how it is drawn and edited. Every frame, for the active tab,
 // the editor calls:
 //   1. HandleInput()    - before layout: keyboard and mouse
 //   2. LayoutContent()  - during the Clay layout, inside the "Editor" element
 //   3. CursorBounds()   - after layout, to scroll the cursor into view
 //   4. DrawOverlay()    - after Clay renders: cursor, selection, etc.
-struct FileBase {
-    std::filesystem::path path;
+struct Tab {
+    // Has changes that aren't saved (always false for tabs that aren't files).
     bool modified = false;
 
-    virtual ~FileBase() = default;
+    virtual ~Tab() = default;
 
-    // Read the file at `path`. On failure, preserve the open document and report `error`.
-    // On success, update `this->path` and clear the modified flag.
-    virtual bool Load(const std::filesystem::path& path,
-                      std::string& error) = 0;
-
-    // Write this object to `path`. Update the path and modified flag only on success;
-    // retain unsaved in-memory content and report `error` on failure.
-    virtual bool Save(const std::filesystem::path& path,
-                      std::string& error) = 0;
-
-    virtual const std::string& TabName() const;
+    virtual const std::string& TabName() const = 0;
 
     virtual bool Undo() {
         return false;
@@ -81,11 +70,11 @@ struct FileBase {
     // changed or the cursor/selection moved.
     virtual bool HandleInput(const EditorView& view) = 0;
 
-    // Emit the Clay elements for the document body. Anything referenced by Clay
+    // Emit the Clay elements for the tab's body. Anything referenced by Clay
     // (e.g. string data) must stay alive until the frame has rendered.
     virtual void LayoutContent() const = 0;
 
-    // Number of lines to show in the line-number gutter.
+    // Number of lines to show in the line-number gutter (0 for none).
     virtual std::size_t LineCount() const = 0;
 
     // A rendered row to anchor its gutter label to. Zero uses fixed-height text lines.
@@ -104,6 +93,24 @@ struct FileBase {
 protected:
     // Keep the label alive until Clay finishes rendering the frame.
     mutable std::string tabName_;
+};
+
+// A tab holding a file: FileText (plain text) and FileMpp (.mpp math
+// documents) derive from this.
+struct FileBase : Tab {
+    std::filesystem::path path;
+
+    // Read the file at `path`. On failure, preserve the open document and report `error`.
+    // On success, update `this->path` and clear the modified flag.
+    virtual bool Load(const std::filesystem::path& path,
+                      std::string& error) = 0;
+
+    // Write this object to `path`. Update the path and modified flag only on success;
+    // retain unsaved in-memory content and report `error` on failure.
+    virtual bool Save(const std::filesystem::path& path,
+                      std::string& error) = 0;
+
+    const std::string& TabName() const override;
 };
 
 // True if `path` should be opened as an M++ (.mpp) document.

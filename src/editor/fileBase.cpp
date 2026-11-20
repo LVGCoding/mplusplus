@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cctype>
 
-bool FileBase::CopyToClipboard() const {
+bool Tab::CopyToClipboard() const {
     const std::string selected = SelectedText();
     if (selected.empty()) {
         return false;
@@ -15,11 +15,11 @@ bool FileBase::CopyToClipboard() const {
     return true;
 }
 
-bool FileBase::CutToClipboard() {
+bool Tab::CutToClipboard() {
     return CopyToClipboard() && DeleteSelection();
 }
 
-bool FileBase::PasteFromClipboard() {
+bool Tab::PasteFromClipboard() {
     const char* pasted = GetClipboardText();
     return pasted && PasteText(pasted);
 }

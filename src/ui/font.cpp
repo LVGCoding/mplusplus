@@ -45,6 +45,8 @@ void LoadFontTable(Font fonts[]) {
                                 BigOpNode::Kind::UNION, BigOpNode::Kind::INTERSECTION}) {
             glyphs.push_back(BigOpNode::Glyph(kind));
         }
+        // Written out in plain-text math, such as graph legends (√x, ⌊x⌋).
+        glyphs.push_back("√⌊⌋⌈⌉‖");
         for (const std::string_view symbolGlyph : glyphs) {
             const std::string glyph(symbolGlyph);
             int length = 0;

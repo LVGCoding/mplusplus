@@ -15,7 +15,7 @@ inline constexpr float PADDING = 6;
 
 // What a file needs to know about the editor area to render and handle input.
 // Built by the layout each frame and passed to the active file's virtual
-// rendering/input methods (see FileBase).
+// rendering/input methods (see Tab).
 struct EditorView {
     // Loaded fonts, indexed by FontId (FONT_BODY, FONT_BOLD).
     Font* fonts = nullptr;

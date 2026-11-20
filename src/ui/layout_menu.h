@@ -130,7 +130,7 @@ inline void LayoutFileDropdown(bool canSave) {
     }
 }
 
-inline void LayoutEditDropdown(const FileBase* file) {
+inline void LayoutEditDropdown(const Tab* file) {
     CLAY(CLAY_ID("EditDropdown"),
          {.layout = {.sizing = {CLAY_SIZING_FIXED(200), CLAY_SIZING_FIT(0)},
                      .padding = {0, 0, 4, 4},
@@ -184,7 +184,7 @@ inline void LayoutInsertDropdown() {
 
 // Run dropdown. Run -> Run sets runRequested and Run -> Stop sets
 // stopRequested; ProcessRunRequest (layout_actions.h) handles both.
-inline void LayoutRunDropdown(const FileBase* file) {
+inline void LayoutRunDropdown(const Tab* file) {
     CLAY(CLAY_ID("RunDropdown"),
          {.layout = {.sizing = {CLAY_SIZING_FIXED(200), CLAY_SIZING_FIT(0)},
                      .padding = {0, 0, 4, 4},

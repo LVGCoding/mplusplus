@@ -20,6 +20,9 @@ struct GraphSettings {
     double xMax = 10;
     double yMin = -10;
     double yMax = 10;
+    // "linear" or "log".
+    std::string xScale = "linear";
+    std::string yScale = "linear";
     // key=value options this version doesn't understand, in their original order.
     std::vector<options::Option> unknown;
 

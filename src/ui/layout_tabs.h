@@ -16,7 +16,7 @@ namespace layout_internal {
 // Report tab clicks; switching/closing is deferred until after rendering.
 // `index` is the file's index in editor.Files(); `dragging` is true while this
 // tab is being dragged to a new position.
-inline void FileTab(const FileBase& file,
+inline void FileTab(const Tab& file,
                     std::size_t index,
                     bool active,
                     bool dragging) {
@@ -86,8 +86,8 @@ inline void FileTab(const FileBase& file,
 }
 
 // Index of `file` in editor.Files(), or SIZE_MAX if it is not open.
-inline std::size_t FileIndex(const std::vector<std::unique_ptr<FileBase>>& files,
-                             const FileBase* file) {
+inline std::size_t FileIndex(const std::vector<std::unique_ptr<Tab>>& files,
+                             const Tab* file) {
     for (std::size_t i = 0; i < files.size(); ++i) {
         if (files[i].get() == file) {
             return i;
@@ -98,9 +98,9 @@ inline std::size_t FileIndex(const std::vector<std::unique_ptr<FileBase>>& files
 
 // Bring tabOrder in line with the open files: drop closed ones and add newly
 // opened ones at the end, keeping the user's order for the rest.
-inline void SyncTabOrder(const std::vector<std::unique_ptr<FileBase>>& files) {
+inline void SyncTabOrder(const std::vector<std::unique_ptr<Tab>>& files) {
     std::erase_if(tabOrder,
-                  [&](const FileBase* file) { return FileIndex(files, file) == SIZE_MAX; });
+                  [&](const Tab* file) { return FileIndex(files, file) == SIZE_MAX; });
     for (const auto& file : files) {
         if (std::find(tabOrder.begin(), tabOrder.end(), file.get()) == tabOrder.end()) {
             tabOrder.push_back(file.get());
@@ -113,7 +113,7 @@ inline void SyncTabOrder(const std::vector<std::unique_ptr<FileBase>>& files) {
 
 // Move the dragged tab past a neighbour once the mouse crosses that
 // neighbour's middle. Uses last frame's tab positions.
-inline void UpdateTabDrag(const std::vector<std::unique_ptr<FileBase>>& files) {
+inline void UpdateTabDrag(const std::vector<std::unique_ptr<Tab>>& files) {
     if (!draggedTab) {
         return;
     }
@@ -166,7 +166,7 @@ inline void UpdateTabDrag(const std::vector<std::unique_ptr<FileBase>>& files) {
 // The row of open-file tabs under the menu bar.
 // See-through copy of the dragged tab that follows the mouse along the tab
 // bar. `tab` and `bar` are last frame's boxes of the tab and the tab bar.
-inline void TabDragPreview(const FileBase& file, Clay_BoundingBox tab, Clay_BoundingBox bar) {
+inline void TabDragPreview(const Tab& file, Clay_BoundingBox tab, Clay_BoundingBox bar) {
     const std::string& name = file.TabName();
     // Keep it within the tab bar's padding (where the tabs themselves sit).
     const float left = bar.x + GUTTER_WIDTH;
@@ -216,7 +216,7 @@ inline void LayoutFileBar(Editor& editor) {
           .clip = {.horizontal = true, .childOffset = Clay_GetScrollOffset()},
           .border = {.color = DIVIDER_COLOR, .width = {.bottom = 2}}}) {
         // Drawn in the user's order; clicks still report the Editor's index.
-        for (const FileBase* file : tabOrder) {
+        for (const Tab* file : tabOrder) {
             const std::size_t index = FileIndex(files, file);
             FileTab(*file, index, index == editor.ActiveTabIndex(),
                     file == draggedTab && tabDragMoved);
@@ -235,24 +235,24 @@ inline void SwitchTab(Editor& editor,
     }
     auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
     if (scroll.found) {
-        if (const FileBase* current = editor.ActiveFile()) {
+        if (const Tab* current = editor.ActiveTab()) {
             tabScroll[current] = *scroll.scrollPosition;
         }
     }
     editor.SetActiveTab(index);
     if (scroll.found) {
-        const auto saved = tabScroll.find(editor.ActiveFile());
+        const auto saved = tabScroll.find(editor.ActiveTab());
         *scroll.scrollPosition = saved != tabScroll.end() ? saved->second : Clay_Vector2{0, 0};
     }
 }
 
 inline void CloseActiveTab(Editor& editor) {
-    tabScroll.erase(editor.ActiveFile());
+    tabScroll.erase(editor.ActiveTab());
     editor.CloseActiveFile();
     // The next active file comes in with its own scroll position.
     auto scroll = Clay_GetScrollContainerData(CLAY_ID("Workspace"));
     if (scroll.found) {
-        const auto saved = tabScroll.find(editor.ActiveFile());
+        const auto saved = tabScroll.find(editor.ActiveTab());
         *scroll.scrollPosition = saved != tabScroll.end() ? saved->second : Clay_Vector2{0, 0};
     }
 }

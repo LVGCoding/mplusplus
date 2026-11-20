@@ -65,6 +65,13 @@ TEST(GraphSettings, RangesRoundTripAndUnknownOptionsAreKept) {
     EXPECT_EQ(settings.ToOptions(), "xmin=0, xmax=2.5, ymin=-1, style={a, b}");
 }
 
+TEST(GraphSettings, ScalesRoundTrip) {
+    const auto settings = GraphSettings::FromOptions(options::Parse("xscale=log, yscale=cubic"));
+    EXPECT_EQ(settings.xScale, "log");
+    EXPECT_EQ(settings.yScale, "linear");  // not a scale: kept as unknown
+    EXPECT_EQ(settings.ToOptions(), "xscale=log, yscale=cubic");
+}
+
 TEST(GraphSettings, BadValuesKeepDefaults) {
     const auto settings = GraphSettings::FromOptions(options::Parse("xmin=abc, ymax="));
     EXPECT_EQ(settings, GraphSettings());

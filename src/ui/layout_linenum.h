@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace layout_internal {
-inline void LayoutRowLineNumbers(const FileBase& file) {
+inline void LayoutRowLineNumbers(const Tab& file) {
     const std::size_t rowCount = file.LineCount();
     const std::size_t labelCount = std::max(rowCount, std::size_t(GUTTER_MIN_LINES));
     // Clay retains the label strings until rendering completes.
@@ -47,7 +47,7 @@ inline void LayoutRowLineNumbers(const FileBase& file) {
     }
 }
 
-inline void LayoutLineNumberGutter(const FileBase* activeFile,
+inline void LayoutLineNumberGutter(const Tab* activeFile,
                                    bool variableLineHeight) {
     // Line-number gutter from the mockup (same font size/line height as the editor text)
     static std::string lineNumbers;

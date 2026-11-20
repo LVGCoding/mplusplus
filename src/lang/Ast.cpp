@@ -90,6 +90,10 @@ std::unique_ptr<Stmt> Clone(const Stmt& statement) {
     copy->elseBody = Clone(statement.elseBody);
     copy->hasElse = statement.hasElse;
     copy->params = statement.params;
+    for (const auto& plot : statement.plots) {
+        copy->plots.push_back(plot ? Clone(*plot) : nullptr);
+    }
+    copy->graph = statement.graph;
     return copy;
 }
 
