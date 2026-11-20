@@ -83,6 +83,7 @@ add_library(mplusplus_core STATIC
   src/math/NodeStyle.cpp
   src/math/Options.cpp
   src/math/SqrtNode.cpp
+  src/math/SumNode.cpp
   src/math/TableNode.cpp
   src/math/TextNode.cpp
   src/parser/parser.cpp

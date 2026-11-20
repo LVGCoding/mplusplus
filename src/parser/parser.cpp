@@ -8,6 +8,7 @@
 #include "math/MatrixNode.h"
 #include "math/Options.h"
 #include "math/SqrtNode.h"
+#include "math/SumNode.h"
 #include "math/TableNode.h"
 #include "math/TextNode.h"
 
@@ -120,6 +121,8 @@ private:
                 node = ParseFrac();
             } else if (token == "\\sqrt") {
                 node = ParseSqrt();
+            } else if (token == "\\sum") {
+                node = ParseSum();
             } else if (token == "\\begin") {
                 node = ParseGraph();
                 if (!node) {
@@ -198,6 +201,43 @@ private:
             return nullptr;
         }
         return std::make_unique<ExpoNode>(std::move(base), std::move(exponent));
+    }
+
+    std::unique_ptr<EditorNode> ParseSum() {
+        const std::size_t start = position_;
+        ++position_;  // \sum
+
+        SkipWhitespace();
+        std::unique_ptr<EditorNode> index;
+        if (PeekIs("_")) {
+            ++position_;
+            index = ParseArgument();
+        }
+
+        SkipWhitespace();
+        std::unique_ptr<EditorNode> upperLimit;
+        if (PeekIs("^")) {
+            ++position_;
+            upperLimit = ParseArgument();
+        }
+
+        auto summand = ParseArgument();
+
+        // Also accept \sum{index}{upper}{summand} for the object created by
+        // the math menu, then normalize it to the canonical LaTeX form.
+        if (!index && !upperLimit && summand) {
+            index = ParseArgument();
+            if (index) {
+                upperLimit = ParseArgument();
+            }
+        }
+
+        if (!index || !upperLimit || !summand) {
+            position_ = start;
+            return nullptr;
+        }
+        return std::make_unique<SumNode>(
+            std::move(summand), std::move(index), std::move(upperLimit));
     }
 
     std::unique_ptr<EditorNode> ParseSqrt() {

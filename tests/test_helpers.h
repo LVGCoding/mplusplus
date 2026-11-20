@@ -9,6 +9,7 @@
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
+#include "math/SumNode.h"
 #include "math/TextNode.h"
 #include "parser/parser.h"
 
@@ -72,6 +73,11 @@ inline std::string Describe(const EditorNode* node) {
             description += "[" + Describe(root) + "]";
         }
         return description + "(" + Describe(argument) + ")";
+    }
+    if (auto* sum = dynamic_cast<const SumNode*>(node)) {
+        auto [summand, index, upperLimit] = sum->GetChildren();
+        return "sum(" + Describe(index) + ", " + Describe(upperLimit) +
+               ", " + Describe(summand) + ")";
     }
     if (auto* matrix = dynamic_cast<const MatrixNode*>(node)) {
         std::string description = matrix->GetEnvironment() + "[";

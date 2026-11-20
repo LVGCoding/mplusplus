@@ -97,6 +97,20 @@ TEST(Parser,
     EXPECT_EQ(ParseAndDescribe("\\exp x"), R"(text("\exp x"))");
 }
 
+// --- Sums -------------------------------------------------------------------
+
+TEST(Parser,
+     Sum) {
+    EXPECT_EQ(ParseAndDescribe("\\sum_{i=1}^{n}{x_i}"),
+              R"(sum(line(text("i=1")), line(text("n")), line(text("x_i"))))");
+}
+
+TEST(Parser,
+     SumWithEmptySlots) {
+    EXPECT_EQ(ParseAndDescribe("\\sum_{}^{}{}"),
+              R"(sum(line(), line(), line()))");
+}
+
 // --- Square roots -----------------------------------------------------------
 
 TEST(Parser,

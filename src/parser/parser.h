@@ -12,6 +12,7 @@
 //   \frac{a}{b}                        -> FracNode (children are LineNodes)
 //   \sqrt{x}, \sqrt[n]{x}              -> SqrtNode (children are LineNodes; root may be null)
 //   \exp{base}{exponent}               -> ExpoNode (children are LineNodes)
+//   \sum_{index}^{upper}{summand}      -> SumNode (children are LineNodes)
 //   \alpha ... \omega                  -> GreekNode
 //   \begin{matrix} a & b \\ c & d \end{matrix}
 //                                      -> MatrixNode (cells are LineNodes); also

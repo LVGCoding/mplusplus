@@ -16,6 +16,7 @@
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
+#include "math/SumNode.h"
 #include "math/TextNode.h"
 #include "raylib.h"
 #include "ui/clay_renderer_raylib.h"
@@ -132,6 +133,17 @@ CursorPath NodePositionAt(const EditorNode& node,
         }
         if (argument) {
             consider(argument, {1}, LastLayoutBounds(argument->GetClayId()));
+        }
+    } else if (const auto* sum = dynamic_cast<const SumNode*>(&node)) {
+        const auto [summand, index, upperLimit] = sum->GetChildren();
+        if (summand) {
+            consider(summand, {0}, LastLayoutBounds(summand->GetClayId()));
+        }
+        if (index) {
+            consider(index, {1}, LastLayoutBounds(index->GetClayId()));
+        }
+        if (upperLimit) {
+            consider(upperLimit, {2}, LastLayoutBounds(upperLimit->GetClayId()));
         }
     } else if (const auto* matrix = dynamic_cast<const MatrixNode*>(&node)) {
         for (std::size_t row = 0; row < matrix->RowCount(); ++row) {

@@ -9,6 +9,7 @@
 #include "math/LineNode.h"
 #include "math/MatrixNode.h"
 #include "math/SqrtNode.h"
+#include "math/SumNode.h"
 #include "math/TableNode.h"
 
 #include <functional>
@@ -45,6 +46,13 @@ inline std::unique_ptr<EditorNode> MakeMathFrac() {
 inline std::unique_ptr<EditorNode> MakeMathExpo() {
     return std::make_unique<ExpoNode>(
         std::make_unique<LineNode>(), std::make_unique<LineNode>());
+}
+
+inline std::unique_ptr<EditorNode> MakeMathSum() {
+    return std::make_unique<SumNode>(
+        std::make_unique<LineNode>(),
+        std::make_unique<LineNode>(),
+        std::make_unique<LineNode>());
 }
 
 inline std::unique_ptr<EditorNode> MakeMathSqrt() {
@@ -104,6 +112,7 @@ inline const std::vector<MathMenuItem>& MathMenuItems() {
             {"\\frac", MakeMathFrac},
             {"\\sqrt", MakeMathSqrt},
             {"\\sqrt[n]", MakeMathRoot},
+            {"\\sum", MakeMathSum},
             {"\\matrix", MakeMathMatrix("matrix")},
             {"\\pmatrix", MakeMathMatrix("pmatrix")},
             {"\\bmatrix", MakeMathMatrix("bmatrix")},

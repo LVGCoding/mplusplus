@@ -7,8 +7,8 @@ void LoadFontTable(Font fonts[]) {
     // Rasterize at the display's pixel density; layout sizes stay in logical pixels.
     const float dpi = std::max(1.0f, GetWindowScaleDPI().y);
     const int atlasSize = static_cast<int>(std::ceil(32 * dpi));
-    // Printable ASCII plus lowercase Greek (U+03B1..U+03C9) for GreekNode.
-    static int codepoints[95 + 25];
+    // Printable ASCII, lowercase Greek, and uppercase sigma for SumNode.
+    static int codepoints[95 + 25 + 1];
     int count = 0;
     for (int codepoint = 32; codepoint < 127; ++codepoint) {
         codepoints[count++] = codepoint;
@@ -16,6 +16,7 @@ void LoadFontTable(Font fonts[]) {
     for (int codepoint = 0x03B1; codepoint <= 0x03C9; ++codepoint) {
         codepoints[count++] = codepoint;
     }
+    codepoints[count++] = 0x03A3;
     fonts[FONT_BODY] =
         LoadFontEx("assets/font/LiberationSans-Regular.ttf", atlasSize, codepoints, count);
     fonts[FONT_BOLD] =
