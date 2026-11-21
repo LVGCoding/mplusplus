@@ -1,12 +1,11 @@
 # Project UML
 
-This class diagram shows the editor/runtime and math-node model, including the parser and `FileMpp` document path. Those two classes are not part of the current CMake executable target.
-
 ```mermaid
 
 classDiagram
     direction UD
     class Editor {
+        <<abstract>>
         -vector~FileBase~ files_
         -vector~path~ temporaryFiles_
         -size_t activeTab_
@@ -110,20 +109,13 @@ classDiagram
         +RemoveFunction(index) bool
     }
 
-    class TableNode {
-        -EditorNode* title_
-        -bool header_
-        +HasHeader() bool
-        +RunAction(action) bool
-    }
-
     class Parser {
         +ParseText(inputText) vector~EditorNode~
         +Tokenizer(inputText) vector~EditorNode~
     }
-    
 
-    
+
+
     FileBase <|-- File
     FileBase <|-- FileMpp
     Editor "1" o-- "0..*" FileBase : open files
@@ -137,17 +129,13 @@ classDiagram
     EditorNode <|-- SqrtNode
     EditorNode <|-- MatrixNode
     EditorNode <|-- GraphNode
-    MatrixNode <|-- TableNode
     LineNode "1" o-- "0..*" EditorNode : children
     FracNode --> EditorNode : numerator and denominator
     SqrtNode --> EditorNode : root and argument
     MatrixNode --> EditorNode : cells
     GraphNode --> EditorNode : title, axis labels and functions
-    TableNode --> EditorNode : title
 
     Parser ..> EditorNode : parses to nodes
     FileMpp "1" o-- "0..*" EditorNode : content
     FileMpp --> Parser : uses
 ```
-
-The math-node subclasses other than `LineNode` use private inheritance in the current C++ declarations. The diagram shows generalization while omitting that access detail.
