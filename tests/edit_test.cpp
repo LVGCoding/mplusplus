@@ -124,6 +124,54 @@ TEST(EditRows,
 }
 
 TEST(EditRows,
+     TabInsertsSpacesToTheNextStop) {
+    auto file = MakeDocument("ab", {0, 0, 0});
+    ASSERT_TRUE(file.PressKey(KEY_TAB, false, nullptr));
+    EXPECT_EQ(file.ContentText(), "    ab");
+    EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 4}));
+    // From column 6, the next stop is 8.
+    file = MakeDocument("x := 1", {0, 0, 6});
+    ASSERT_TRUE(file.PressKey(KEY_TAB, false, nullptr));
+    EXPECT_EQ(file.ContentText(), "x := 1  ");
+}
+
+TEST(EditRows,
+     ShiftTabOutdentsTheRowAndKeepsTheCursorOnItsText) {
+    auto file = MakeDocument("      ab", {0, 0, 7});
+    ASSERT_TRUE(file.PressKey(KEY_TAB, true, nullptr));
+    EXPECT_EQ(file.ContentText(), "  ab");
+    EXPECT_EQ(file.cursorPos, (CursorPath{0, 0, 3}));  // still between a and b
+    ASSERT_TRUE(file.PressKey(KEY_TAB, true, nullptr));
+    EXPECT_EQ(file.ContentText(), "ab");
+    // Nothing left to remove.
+    EXPECT_FALSE(file.PressKey(KEY_TAB, true, nullptr));
+}
+
+TEST(EditRows,
+     TabAndShiftTabMoveEverySelectedRow) {
+    auto file = MakeDocument("a\nb\nc", {2, 0, 0});
+    file.selectionStart = {0, 0, 1};
+    // The selection ends at the start of row 3, so only rows 1 and 2 move.
+    ASSERT_TRUE(file.PressKey(KEY_TAB, false, nullptr));
+    EXPECT_EQ(file.ContentText(), "    a\n    b\nc");
+    EXPECT_EQ(file.selectionStart, (CursorPath{0, 0, 5}));
+    ASSERT_TRUE(file.PressKey(KEY_TAB, true, nullptr));
+    EXPECT_EQ(file.ContentText(), "a\nb\nc");
+    // Each is one undo step.
+    ASSERT_TRUE(file.Undo());
+    EXPECT_EQ(file.ContentText(), "    a\n    b\nc");
+    ASSERT_TRUE(file.Undo());
+    EXPECT_EQ(file.ContentText(), "a\nb\nc");
+}
+
+TEST(EditRows,
+     TabInsideAFractionIndentsTheRow) {
+    auto file = MakeDocument("x := \\frac{1}{2}", {0, 1, 0, 0, 0});
+    ASSERT_TRUE(file.PressKey(KEY_TAB, false, nullptr));
+    EXPECT_EQ(file.ContentText(), "    x := \\frac{1}{2}");
+}
+
+TEST(EditRows,
      EnterBetweenBracesOpensAnIndentedRow) {
     auto file = MakeDocument("  f() \\{\\}", {0, 0, 7});
     ASSERT_TRUE(PressKey(file, KEY_ENTER));

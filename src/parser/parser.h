@@ -11,10 +11,11 @@
 // Supported constructs:
 //   \frac{a}{b}                        -> FracNode (children are LineNodes)
 //   \sqrt{x}, \sqrt[n]{x}              -> SqrtNode (children are LineNodes; root may be null)
-//   \exp{base}{exponent}               -> ExpoNode (children are LineNodes)
 //   \abs{x}, \floor{x}, \ceil{x},
 //   \norm{x}                           -> DelimNode (|x|, ⌊x⌋, ⌈x⌉, ‖x‖)
 //   _{i}                               -> SubNode (a subscript)
+//   ^{n}                               -> ExpoNode (an exponent; the old form
+//                                         \exp{base}{n} reads as base^{n})
 //   \sum_{k=1}^{n}, \prod, \bigcup, \bigcap
 //                                      -> BigOpNode
 //   \alpha ... \omega                  -> GreekNode
@@ -23,7 +24,7 @@
 //                                      -> MatrixNode (cells are LineNodes); also
 //                                         pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix, cases
 //   {...}                              -> LineNode with IsBraced() == true
-//   \{ \} \_                           -> the text "{" / "}" / "_" (typed as text)
+//   \{ \} \_ \^                        -> the text "{" / "}" / "_" / "^" (typed as text)
 //   anything else                      -> TextNode (adjacent text is merged)
 //
 // Parsing never fails: malformed input (e.g. "\frac{a}" or an unclosed "{") is
@@ -37,7 +38,7 @@ public:
     // Split source into tokens:
     //   - commands: a backslash plus its name ("\frac", "\alpha"), or a backslash
     //     plus one non-letter character ("\\", "\{")
-    //   - single-character delimiters: { } [ ] & _
+    //   - single-character delimiters: { } [ ] & _ ^
     //   - runs of whitespace
     //   - runs of any other text
     // Concatenating the tokens reproduces the input exactly.

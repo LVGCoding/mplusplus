@@ -15,14 +15,16 @@
 #include "math/TableNode.h"
 #include "math/TextNode.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <optional>
 #include <utility>
 
 namespace {
 bool IsDelimiter(char character) {
     return character == '{' || character == '}' || character == '[' || character == ']' ||
-           character == '&' || character == '_';
+           character == '&' || character == '_' || character == '^';
 }
 
 bool IsSpace(char character) {
@@ -121,13 +123,43 @@ private:
                     continue;
                 }
                 --position_;
+            } else if (token == "^") {
+                // ^{exponent}. A lone ^ stays text.
+                ++position_;
+                if (auto exponent = ParseBracedGroup()) {
+                    push(std::make_unique<ExpoNode>(
+                        std::make_unique<LineNode>(std::move(*exponent))));
+                    continue;
+                }
+                --position_;
             } else if (token == "{") {
                 if (auto group = ParseBracedGroup()) {
                     push(std::make_unique<LineNode>(std::move(*group), true));
                     continue;
                 }
             } else if (token == "\\exp") {
-                node = ParseExpo();
+                // The old form \exp{base}{exponent}: the base, then ^{exponent}.
+                if (auto parts = ParseOldExpo()) {
+                    if (!parts->base.empty()) {
+                        const bool wrap = !SingleTerm(parts->base);
+                        if (wrap) {
+                            pendingText += '(';
+                        }
+                        for (auto& part : parts->base) {
+                            if (auto* text = dynamic_cast<TextNode*>(part.get())) {
+                                pendingText += text->GetText();
+                            } else {
+                                push(std::move(part));
+                            }
+                        }
+                        if (wrap) {
+                            pendingText += ')';
+                        }
+                    }
+                    push(std::make_unique<ExpoNode>(
+                        std::make_unique<LineNode>(std::move(parts->exponent))));
+                    continue;
+                }
             } else if (token == "\\frac") {
                 node = ParseFrac();
             } else if (token == "\\sqrt") {
@@ -170,8 +202,8 @@ private:
 
             if (node) {
                 push(std::move(node));
-            } else if (token == "\\{" || token == "\\}" || token == "\\_") {
-                // A brace or underscore typed as text (see TextNode::ToText).
+            } else if (token == "\\{" || token == "\\}" || token == "\\_" || token == "\\^") {
+                // A brace, underscore or caret typed as text (see TextNode::ToText).
                 pendingText += token[1];
                 ++position_;
             } else {
@@ -287,16 +319,44 @@ private:
         return std::make_unique<DelimNode>(*kind, std::move(argument));
     }
 
-    std::unique_ptr<EditorNode> ParseExpo() {
+    struct OldExpo {
+        NodeList base;
+        NodeList exponent;
+    };
+
+    // \exp{base}{exponent}, how exponents were saved before ^{…}.
+    std::optional<OldExpo> ParseOldExpo() {
         const std::size_t start = position_;
         ++position_;  // \exp
-        auto base = ParseArgument();
-        auto exponent = base ? ParseArgument() : nullptr;
+        SkipWhitespace();
+        auto base = ParseBracedGroup();
+        std::unique_ptr<NodeList> exponent;
+        if (base) {
+            SkipWhitespace();
+            exponent = ParseBracedGroup();
+        }
         if (!base || !exponent) {
             position_ = start;
-            return nullptr;
+            return std::nullopt;
         }
-        return std::make_unique<ExpoNode>(std::move(base), std::move(exponent));
+        return OldExpo{std::move(*base), std::move(*exponent)};
+    }
+
+    // Whether an old \exp base can go before ^ as it is: a name or number, or
+    // one structure. Anything else (a+b) gets parentheses.
+    static bool SingleTerm(const NodeList& nodes) {
+        if (nodes.size() != 1) {
+            return false;
+        }
+        const auto* text = dynamic_cast<const TextNode*>(nodes[0].get());
+        if (!text) {
+            return true;
+        }
+        const std::string& value = text->GetText();
+        return !value.empty() && std::all_of(value.begin(), value.end(), [](char c) {
+            return std::isalnum(static_cast<unsigned char>(c)) || c == '.' ||
+                   static_cast<unsigned char>(c) >= 0x80;
+        });
     }
 
     std::unique_ptr<EditorNode> ParseSqrt() {

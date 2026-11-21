@@ -114,6 +114,7 @@ add_library(mplusplus_core STATIC
   src/lang/Checker.cpp
   src/lang/CodeGen.cpp
   src/lang/Compile.cpp
+  src/lang/Highlight.cpp
   src/lang/Lower.cpp
   src/lang/Parser.cpp
   src/parser/parser.cpp

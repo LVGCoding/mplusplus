@@ -1,12 +1,17 @@
 #include "LineNode.h"
 
+#include "ExpoNode.h"
 #include "NodeStyle.h"
+#include "SubNode.h"
+#include "Syntax.h"
 #include "TextNode.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <limits>
+#include <optional>
+#include <string>
 #include <utility>
 
 namespace {
@@ -149,9 +154,53 @@ void LineNode::Render(const RenderContext& context) {
 }
 
 // A child marked for deletion is drawn inside a red box.
-void LineNode::RenderChildren(const RenderContext& context) {
+void LineNode::RenderChildren(const RenderContext& outer) {
+    RenderContext context = outer;
     const DeleteHighlight& marked = context.deleteHighlight;
-    for (const auto& child : children_) {
+    // Subscripts and exponents attach to the last node before them that is
+    // neither one itself (b_{i}^{2} raises b) nor empty text (the cursor's
+    // spot between a fraction and its exponent). Heights are last frame's,
+    // read before any child is opened: an element opened this frame reads as 0.
+    std::vector<float> heights(children_.size(), 0.0f);
+    for (std::size_t i = 0; i < children_.size(); ++i) {
+        if (const auto bounds = LastLayoutBounds(children_[i]->GetClayId())) {
+            heights[i] = bounds->height;
+
+        }
+    }
+    context.baseHeight = 0;
+    // A % outside a string starts a comment that runs to the end of the line
+    // (see src/lang/Lower.cpp); it and everything after it is drawn grey.
+    bool inString = false;
+    std::optional<node_style::TextColorScope> commentColor;
+    for (std::size_t i = 0; i < children_.size(); ++i) {
+        const auto& child = children_[i];
+        context.commentFrom = std::string::npos;
+        if (commentColor) {
+            context.commentFrom = 0;
+        } else if (const auto* text = dynamic_cast<const TextNode*>(child.get())) {
+            const std::string& value = text->GetText();
+            for (std::size_t j = 0; j < value.size(); ++j) {
+                if (value[j] == '"') {
+                    inString = !inString;
+                } else if (value[j] == '%' && !inString) {
+                    context.commentFrom = j;
+                    break;
+                }
+            }
+        }
+        const auto* text = dynamic_cast<const TextNode*>(child.get());
+        const bool script = dynamic_cast<const SubNode*>(child.get()) ||
+                            dynamic_cast<const ExpoNode*>(child.get()) ||
+                            (text && text->GetText().empty());
+        // A Greek letter or symbol in a syntax color (a function name, ℝ, ∞).
+        std::optional<node_style::TextColorScope> syntaxColor;
+        if (context.syntax && !commentColor) {
+            const auto found = context.syntax->nodes.find(child.get());
+            if (found != context.syntax->nodes.end()) {
+                syntaxColor.emplace(SyntaxColor(found->second));
+            }
+        }
         if (marked.node == child.get() && marked.part == DeleteHighlight::Part::WHOLE) {
             CLAY_AUTO_ID(
                 {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(0)}},
@@ -161,6 +210,13 @@ void LineNode::RenderChildren(const RenderContext& context) {
             }
         } else {
             child->Render(context);
+        }
+        if (!script) {  // a base for the scripts after it
+            context.baseHeight = heights[i];
+        }
+        if (context.commentFrom != std::string::npos && !commentColor) {
+            syntaxColor.reset();  // scopes must end in reverse order
+            commentColor.emplace(node_style::COMMENT_COLOR);
         }
     }
 }

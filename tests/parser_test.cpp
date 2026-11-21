@@ -131,19 +131,40 @@ TEST(Parser,
 
 TEST(Parser,
      Exponent) {
-    EXPECT_EQ(ParseAndDescribe("\\exp{x}{2}"), R"(exp(line(text("x")), line(text("2"))))");
+    // Like LaTeX: the exponent alone; the base is what comes before it.
+    EXPECT_EQ(ParseAndDescribe("x^{2}"), R"(text("x"), sup(line(text("2"))))");
+    EXPECT_EQ(ParseAndDescribe("^{2}"), R"(sup(line(text("2"))))");
 }
 
 TEST(Parser,
-     ExponentAllowsSpaceBeforeArgument) {
-    EXPECT_EQ(ParseAndDescribe("\\exp {x} {2}"),
-              R"(exp(line(text("x")), line(text("2"))))");
+     ExponentWithoutBracesIsText) {
+    EXPECT_EQ(ParseAndDescribe("2^10"), R"(text("2^10"))");
+    EXPECT_EQ(ParseAndDescribe("a\\^{b}"), R"(text("a^"), group(text("b")))");
+}
+
+TEST(Parser,
+     OldExponentFormPutsTheBaseBefore) {
+    EXPECT_EQ(ParseAndDescribe("\\exp{}{2}"), R"(sup(line(text("2"))))");
+    EXPECT_EQ(ParseAndDescribe("y=\\exp{x}{2}"), R"(text("y=x"), sup(line(text("2"))))");
+    EXPECT_EQ(ParseAndDescribe("\\exp {x} {2}"), R"(text("x"), sup(line(text("2"))))");
+    // A base of more than one term keeps its meaning with parentheses.
+    EXPECT_EQ(ParseAndDescribe("\\exp{a+b}{2}"), R"x(text("(a+b)"), sup(line(text("2"))))x");
+    EXPECT_EQ(ParseAndDescribe("\\exp{\\frac{1}{2}}{n}"),
+              R"(frac(line(text("1")), line(text("2"))), sup(line(text("n"))))");
+}
+
+TEST(Parser,
+     ExponentRoundTrips) {
+    for (const std::string text : {"x^{2}", "e^{-x}+1", "2^3", "a_{i}^{2}", "a\\^{b}"}) {
+        EXPECT_EQ(RoundTrip(text), text);
+    }
 }
 
 TEST(Parser,
      ExponentMissingArgumentIsText) {
     EXPECT_EQ(ParseAndDescribe("\\exp"), R"(text("\exp"))");
     EXPECT_EQ(ParseAndDescribe("\\exp x"), R"(text("\exp x"))");
+    EXPECT_EQ(ParseAndDescribe("x^"), R"(text("x^"))");
 }
 
 // --- Square roots -----------------------------------------------------------
@@ -178,7 +199,7 @@ TEST(Parser,
 
 TEST(Parser,
      BareGroup) {
-    EXPECT_EQ(ParseAndDescribe("x^{2}"), R"(text("x^"), group(text("2")))");
+    EXPECT_EQ(ParseAndDescribe("x+{2}"), R"(text("x+"), group(text("2")))");
 }
 
 TEST(Parser,

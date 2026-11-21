@@ -14,6 +14,27 @@ namespace node_style {
 
 inline constexpr Clay_Color TEXT_COLOR = {20, 20, 20, 255};
 inline constexpr Clay_Color PLACEHOLDER_COLOR = {170, 170, 170, 255};
+// Text after a % (a comment, which the program skips).
+inline constexpr Clay_Color COMMENT_COLOR = {125, 125, 125, 255};
+
+// The color Text() draws in: TEXT_COLOR, except inside a TextColorScope.
+inline Clay_Color currentTextColor = TEXT_COLOR;
+
+// Draws the text of everything rendered while it exists in `color`.
+class TextColorScope {
+public:
+    explicit TextColorScope(Clay_Color color) : previous_(currentTextColor) {
+        currentTextColor = color;
+    }
+    ~TextColorScope() {
+        currentTextColor = previous_;
+    }
+    TextColorScope(const TextColorScope&) = delete;
+    TextColorScope& operator=(const TextColorScope&) = delete;
+
+private:
+    Clay_Color previous_;
+};
 
 // Font size multipliers for nested content.
 inline constexpr float FRACTION_SCALE = 0.85f;  // numerator and denominator

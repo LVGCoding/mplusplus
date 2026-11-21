@@ -11,6 +11,7 @@
 
 #include "clay.h"
 #include "FileMpp.h"
+#include "lang/Highlight.h"
 #include "math/ExpoNode.h"
 #include "math/FracNode.h"
 #include "math/LineNode.h"
@@ -126,12 +127,9 @@ CursorPath NodePositionAt(const EditorNode& node,
         if (denominator) {
             consider(denominator, {1}, LastLayoutBounds(denominator->GetClayId()));
         }
-    } else if (const auto* exponent = dynamic_cast<const ExpoNode*>(&node)) {
-        if (const auto* base = exponent->GetBase()) {
-            consider(base, {0}, LastLayoutBounds(base->GetClayId()));
-        }
-        if (const auto* exponentSlot = exponent->GetExponent()) {
-            consider(exponentSlot, {1}, LastLayoutBounds(exponentSlot->GetClayId()));
+    } else if (const auto* power = dynamic_cast<const ExpoNode*>(&node)) {
+        if (const auto* exponent = power->GetExponent()) {
+            consider(exponent, {0}, LastLayoutBounds(exponent->GetClayId()));
         }
     } else if (const auto* root = dynamic_cast<const SqrtNode*>(&node)) {
         const auto [index, argument] = root->GetChildren();
@@ -259,6 +257,10 @@ void FileMpp::LayoutContent() const {
     RenderContext context;
     context.fontSize = editor_style::FONT_SIZE;
     context.activeStructure = ActiveStructure();
+    // Lowering every row is quick (no compiler), so the colors are worked
+    // out fresh each frame and can never be stale after an edit or undo.
+    lang::HighlightDocument(content, syntax_);
+    context.syntax = &syntax_;
     if (pendingDelete_) {
         context.deleteHighlight.node = NodeAt(pendingDelete_->node);
         context.deleteHighlight.part = pendingDelete_->part;
@@ -402,7 +404,20 @@ bool FileMpp::HandleMouse(const EditorView& view,
     if (clicked) {
         dragging_ = true;
         if (!shift) {
-            return ClickAt(mouse.x, mouse.y, &measure);
+            const int count = clicks_.Press(GetTime(), mouse.x, mouse.y);
+            if (!ClickAt(mouse.x, mouse.y, &measure)) {
+                return false;
+            }
+            // A double click selects the word, a triple click the row; a
+            // drag after either would undo that, so it doesn't start one.
+            if (count == 2) {
+                SelectWordAtCursor();
+                dragging_ = false;
+            } else if (count == 3) {
+                SelectRow(cursorPos[0]);
+                dragging_ = false;
+            }
+            return true;
         }
         pendingDelete_.reset();
         insertWheel_.reset();

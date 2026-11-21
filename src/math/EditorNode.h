@@ -2,6 +2,7 @@
 
 #include "clay.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -51,6 +52,25 @@ struct RenderContext {
     const EditorNode* activeStructure = nullptr;
 
     DeleteHighlight deleteHighlight;
+
+    // For a subscript or exponent: how tall the thing it attaches to (the
+    // node before it in the line) was last frame, or 0 if unknown. A script
+    // after a tall base, such as a fraction, stretches to reach its corner.
+    float baseHeight = 0.0f;
+
+    // For a TextNode: the offset where a comment (%) starts in it, set by
+    // its line; npos when it has none. The comment part is drawn in grey.
+    std::size_t commentFrom = static_cast<std::size_t>(-1);
+
+    // Syntax colors of the document being drawn, or null (see Syntax.h).
+    const struct SyntaxColors* syntax = nullptr;
+
+    // The height of a script's box: as tall as its base, plus room to stick
+    // out above or below it. Lines centre their children, so a script drawn
+    // at the top (or bottom) of this box sits at the base's corner.
+    float ScriptBoxHeight() const {
+        return std::max(fontSize, baseHeight) + 0.45f * fontSize;
+    }
 
     RenderContext WithFontSize(float size) const {
         RenderContext context = *this;

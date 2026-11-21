@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ClickSelect.h"
 #include "fileBase.h"
 #include "TextBuffer.h"
 
@@ -61,6 +62,8 @@ protected:
 private:
     // True while a mouse drag that started in this file's editor is selecting text.
     bool dragging_ = false;
+    // Counts double and triple clicks.
+    ClickCounter clicks_;
 
     // The text last loaded or saved; nullopt for a file never saved.
     std::optional<std::string> savedText_;

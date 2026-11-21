@@ -81,7 +81,7 @@ TEST(GraphRun, AGraphInTheDocumentSendsItsFunctionsAndData) {
         "a := 2\n"
         "xs := [1, 2, 3]\n"
         "ys := [1, 4, 9]\n"
-        "\\begin{graph}[title=Parabolas, xmin=-1, xmax=1] y=a \\cdot x\\exp{}{2} \\\\ \\sqrt{x} \\\\ "
+        "\\begin{graph}[title=Parabolas, xmin=-1, xmax=1] y=a \\cdot x\^{2} \\\\ \\sqrt{x} \\\\ "
         "(xs, ys) \\end{graph}\n",
         output);
     EXPECT_EQ(output, "");

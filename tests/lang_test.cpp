@@ -5,6 +5,8 @@
 #include "editor/FileMpp.h"
 #include "lang/Checker.h"
 #include "lang/Compile.h"
+#include "lang/Highlight.h"
+#include "math/TextNode.h"
 #include "lang/Lower.h"
 #include "lang/Parser.h"
 #include "run/Run.h"
@@ -306,8 +308,64 @@ TEST(Lower, StructuresBecomeOneTokenWithSlots) {
     EXPECT_EQ(Lower("\\frac{1}{x+1}"), "frac[1 | x + 1] ⏎");
     EXPECT_EQ(Lower("\\sqrt{2}"), "root[2] ⏎");
     EXPECT_EQ(Lower("\\sqrt[3]{x}"), "root[x | 3] ⏎");
-    EXPECT_EQ(Lower("x\\exp{}{2}"), "x pow[ | 2] ⏎");
-    EXPECT_EQ(Lower("\\exp{x}{2}"), "pow[x | 2] ⏎");
+    EXPECT_EQ(Lower("x^{2}"), "x pow[2] ⏎");
+}
+
+TEST(Lower, PercentStartsAComment) {
+    EXPECT_EQ(Lower("x := 1 % the start"), "x := 1 ⏎");
+    EXPECT_EQ(Lower("% a whole row \\frac{1}{2}"), "⏎");
+    // Inside a string, % is text.
+    EXPECT_EQ(Lower("print(\"50% off\") % say it"), "print ( \"50% off\" ) ⏎");
+}
+
+namespace {
+
+// A row's text with each colored run marked: "<K:for> i ..." (K keyword,
+// N number, S string, F function, T type, C constant).
+std::string Highlighted(const std::string& source) {
+    FileMpp file = Document(source);
+    SyntaxColors colors;
+    lang::HighlightDocument(file.content, colors);
+    std::string out;
+    for (std::size_t i = 0; i < file.content[0]->ChildCount(); ++i) {
+        const EditorNode* child = file.content[0]->GetChild(i);
+        const auto* text = dynamic_cast<const TextNode*>(child);
+        if (!text) {
+            const auto found = colors.nodes.find(child);
+            out += found == colors.nodes.end() ? "[node]" : "[colored node]";
+            continue;
+        }
+        const std::string& value = text->GetText();
+        const auto found = colors.text.find(child);
+        SyntaxKind current = SyntaxKind::Plain;
+        for (std::size_t j = 0; j < value.size(); ++j) {
+            const SyntaxKind kind =
+                found == colors.text.end() ? SyntaxKind::Plain : found->second[j];
+            if (kind != current) {
+                if (current != SyntaxKind::Plain) out += ">";
+                if (kind != SyntaxKind::Plain) out += std::string("<") + "PKNSFTC"[int(kind)] + ":";
+                current = kind;
+            }
+            out += value[j];
+        }
+        if (current != SyntaxKind::Plain) out += ">";
+    }
+    return out;
+}
+
+}  // namespace
+
+TEST(Highlight, ColorsKeywordsNumbersStringsAndCalls) {
+    EXPECT_EQ(Highlighted("if x mod 2 = 0 \\{ print(\"even\") \\}"),
+              "<K:if> x <K:mod> <N:2> = <N:0> { <F:print>(<S:\"even\">) }");
+    // The code in ${…} isn't in the string's color.
+    EXPECT_EQ(Highlighted("print(\"a $\\{n + 1\\}\")"),
+              "<F:print>(<S:\"a ${>n + <N:1><S:}\">)");
+    // A comment has no colors (the editor draws it grey).
+    EXPECT_EQ(Highlighted("x := 1 % for 2"), "x := <N:1> % for 2");
+    // Built-in sets and constants are symbol nodes.
+    EXPECT_EQ(Highlighted("n \\in \\mathbb{N} := \\infty"),
+              "n [node] [colored node] := [colored node]");
 }
 
 TEST(Lower, RowsEndWithANewline) {
@@ -373,18 +431,18 @@ TEST(Parse, Structures) {
     EXPECT_EQ(ParseExpression("\\frac{a+1}{2}"), "(print (frac (+ a 1) 2))");
     EXPECT_EQ(ParseExpression("\\sqrt{x}"), "(print (√ x))");
     EXPECT_EQ(ParseExpression("\\sqrt[3]{x}"), "(print (√ x 3))");
-    EXPECT_EQ(ParseExpression("x\\exp{}{2} + 1"), "(print (+ (^ x 2) 1))");
-    EXPECT_EQ(ParseExpression("\\exp{x+1}{2}"), "(print (^ (+ x 1) 2))");
+    EXPECT_EQ(ParseExpression("x^{2} + 1"), "(print (+ (^ x 2) 1))");
+    EXPECT_EQ(ParseExpression("(x+1)^{2}"), "(print (^ (+ x 1) 2))");
 }
 
 TEST(Parse, ImplicitMultiplication) {
     EXPECT_EQ(ParseExpression("2x"), "(print (⋅ 2 x))");
     EXPECT_EQ(ParseExpression("2(x+1)"), "(print (⋅ 2 (+ x 1)))");
-    EXPECT_EQ(ParseExpression("2x\\exp{}{2}"), "(print (⋅ 2 (^ x 2)))");
+    EXPECT_EQ(ParseExpression("2x^{2}"), "(print (⋅ 2 (^ x 2)))");
     EXPECT_EQ(ParseExpression("x\\sqrt{2}"), "(print (⋅ x (√ 2)))");
     EXPECT_EQ(ParseExpression("\\frac{1}{2}x"), "(print (⋅ (frac 1 2) x))");
     EXPECT_EQ(ParseExpression("(a+b)(a-b)"), "(print (⋅ (+ a b) (− a b)))");
-    EXPECT_EQ(ParseExpression("x\\exp{}{2}y"), "(print (⋅ (^ x 2) y))");
+    EXPECT_EQ(ParseExpression("x^{2}y"), "(print (⋅ (^ x 2) y))");
 }
 
 TEST(Parse, NamesNextToEachOtherNeedAnOperator) {
@@ -429,12 +487,12 @@ TEST(Parse, VectorsAndMatrices) {
     EXPECT_EQ(ParseExpression("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}"),
               "(print (pmatrix 2×2 1 2 3 4))");
     EXPECT_EQ(ParseExpression("A_{i,*} + v_{2..n}"), "(print (+ (_ A i *) (_ v (.. 2 n))))");
-    EXPECT_EQ(ParseExpression("A\\exp{}{\\top} \\cdot x_{1}\\exp{}{2}"),
+    EXPECT_EQ(ParseExpression("A^{\\top} \\cdot x_{1}^{2}"),
               "(print (⋅ (⊤ A) (^ (_ x 1) 2)))");
     EXPECT_EQ(ParseExpression("A \\setminus b"), "(print (∖ A b))");
-    EXPECT_EQ(ParseStatements("v \\in \\mathbb{R}\\exp{}{3}"), "v ∈ ℝ^3");
+    EXPECT_EQ(ParseStatements("v \\in \\mathbb{R}^{3}"), "v ∈ ℝ^3");
     EXPECT_EQ(ParseStatements("A \\in \\exp{\\mathbb{R}}{n \\times m}"), "A ∈ ℝ^n×m");
-    EXPECT_EQ(ParseStatements("v \\in \\mathbb{R}\\exp{}{*}"), "v ∈ ℝ^*");
+    EXPECT_EQ(ParseStatements("v \\in \\mathbb{R}^{*}"), "v ∈ ℝ^*");
     EXPECT_EQ(ParseStatements("\\alpha_{n} := 1"), "α_{n} := 1");
     EXPECT_EQ(ParseExpression("\\begin{pmatrix}1&2\\\\3\\end{pmatrix}"),
               "error: Every row of a matrix needs the same number of entries.");
@@ -443,7 +501,7 @@ TEST(Parse, VectorsAndMatrices) {
 TEST(Check, VectorsAndMatrices) {
     const std::string setup = "A := \\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}\n"
                               "v := \\begin{pmatrix}1\\\\2\\end{pmatrix}\n";
-    EXPECT_EQ(FirstError(setup + "print(A \\cdot v, v \\cdot v, 2A, A\\exp{}{-1}, A_{1,*})"), "");
+    EXPECT_EQ(FirstError(setup + "print(A \\cdot v, v \\cdot v, 2A, A^{-1}, A_{1,*})"), "");
     EXPECT_EQ(FirstError(setup + "print(A + v)"), "Can't add a vector to a matrix.");
     EXPECT_EQ(FirstError(setup + "print(v \\cdot A)"),
               "A vector (a column) can't be multiplied by a matrix. Did you mean v^⊤⋅A?");
@@ -453,7 +511,7 @@ TEST(Check, VectorsAndMatrices) {
     EXPECT_EQ(FirstError(setup + "print(A < A)"),
               "< can't compare vectors or matrices; = ≠ and ≈ can.");
     EXPECT_EQ(FirstError(setup + "print(det(v))"), "det needs a matrix, but this is in ℝ^n.");
-    EXPECT_EQ(FirstError("n \\in \\mathbb{Z}\\exp{}{3}"),
+    EXPECT_EQ(FirstError("n \\in \\mathbb{Z}^{3}"),
               "Vectors and matrices hold real numbers: write ℝ^… .");
     EXPECT_EQ(FirstError("x := 2\nprint(x_{1})"), "x is a single value (ℤ), so it has no entries.");
     EXPECT_EQ(FirstError("print(I_{3} + 0_{3 \\times 3}, 1_{2})"), "");
@@ -470,7 +528,7 @@ TEST(Parse, Sets) {
               "(print (cmp x ∈ (∪ A (∩ B C))))");
     EXPECT_EQ(ParseExpression("\\forall x \\in S : x > 0 \\land x < 9"),
               "(print (∀ x ∈ S (∧ (cmp x > 0) (cmp x < 9))))");
-    EXPECT_EQ(ParseExpression("\\sum_{k=1}^{n} k\\exp{}{2} + 1"),
+    EXPECT_EQ(ParseExpression("\\sum_{k=1}^{n} k^{2} + 1"),
               "(print (+ (sum k ∈ (.. 1 n) (^ k 2)) 1))");
     EXPECT_EQ(ParseExpression("\\prod_{k \\in S}^{} 2k"), "(print (prod k ∈ S (⋅ 2 k)))");
     EXPECT_EQ(ParseExpression("\\sum_{k=1}^{} k"),
@@ -528,7 +586,7 @@ TEST(Check, Data) {
               "Point has no field called z.");
     EXPECT_EQ(FirstError("L := \\mathbb{Z}*\nL.push(\"a\")"), "L is in ℤ*, but this is in Σ*.");
     EXPECT_EQ(FirstError("L := \\mathbb{Z}*\nx := L.push(1)"), "push doesn't give a value.");
-    EXPECT_EQ(FirstError("m \\in \\mathbb{R}\\exp{}{\\Sigma *}\nm[1] \\leftarrow 2"),
+    EXPECT_EQ(FirstError("m \\in \\mathbb{R}^{\\Sigma *}\nm[1] \\leftarrow 2"),
               "The keys of m are in Σ*, but this is in ℤ.");
     EXPECT_EQ(FirstError("print(\"a\" + 1)"),
               "+ joins two strings. To join other values, use a template: \"x = ${x}\".");
@@ -544,7 +602,7 @@ TEST(Check, Data) {
 }
 
 TEST(Check, Graphs) {
-    EXPECT_EQ(FirstError("\\begin{graph} y=x\\exp{}{2} \\\\ sin(x) \\end{graph}"), "");
+    EXPECT_EQ(FirstError("\\begin{graph} y=x^{2} \\\\ sin(x) \\end{graph}"), "");
     // The x axis's label names the variable.
     EXPECT_EQ(FirstError("\\begin{graph}[xlabel=t] y=t + 1 \\end{graph}"), "");
     EXPECT_EQ(FirstError("\\begin{graph} y=\"a\" \\end{graph}"),

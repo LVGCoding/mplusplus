@@ -77,6 +77,21 @@ TEST_P(Programs, ProduceTheExpectedOutput) {
     EXPECT_EQ(RunDocument(source), ReadFile(ProgramsDir() / (GetParam() + ".out")));
 }
 
+// The help document (Docs menu) is runnable: its prose is % comments and
+// every example in it must compile and run.
+TEST(HelpDocument, RunsWithoutErrors) {
+    std::string error;
+    if (!run::FindToolchain(error)) {
+        GTEST_SKIP() << error;
+    }
+    const std::string output =
+        RunDocument(std::filesystem::path(MPP_SOURCE_DIR) / "assets" / "doc" / "help.mpp");
+    EXPECT_EQ(output.find("compile error"), std::string::npos) << output;
+    // Runtime errors are lines starting with "! ".
+    EXPECT_EQ(("\n" + output).find("\n! "), std::string::npos) << output;
+    EXPECT_NE(output.find("Hello Ada!"), std::string::npos) << output;
+}
+
 INSTANTIATE_TEST_SUITE_P(All, Programs, ::testing::ValuesIn([] {
                              std::vector<std::string> names;
                              for (const auto& entry :

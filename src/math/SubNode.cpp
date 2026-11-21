@@ -9,13 +9,14 @@ SubNode::SubNode(std::unique_ptr<EditorNode> index)
     : index_(std::move(index)) {}
 
 // The index in a smaller font, at the bottom of a box a little taller than
-// the text around it, so it sits below the line.
+// its base (lines center their children), so it sits at the base's bottom
+// right, below the line.
 void SubNode::Render(const RenderContext& context) {
     const float fontSize = context.fontSize;
     const float indexSize = node_style::Scaled(fontSize, node_style::INDEX_SCALE);
     const bool outlined = context.activeStructure == this;
     CLAY(GetClayId(),
-         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(std::round(fontSize * 1.45f))},
+         {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(std::round(context.ScriptBoxHeight()))},
                      .childAlignment = {.y = CLAY_ALIGN_Y_BOTTOM}}}) {
         node_style::Slot(outlined, [&] {
             if (index_) {

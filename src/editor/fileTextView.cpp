@@ -149,8 +149,12 @@ bool FileText::HandleMouse(const EditorView& view) {
     const Vector2 mouse = GetMousePosition();
     const bool clicked =
         IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mouse, view.viewport);
+    int count = 1;
     if (clicked) {
         dragging_ = true;
+        if (!IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT)) {
+            count = clicks_.Press(GetTime(), mouse.x, mouse.y);
+        }
     }
     if (!dragging_) {
         return false;
@@ -185,6 +189,18 @@ bool FileText::HandleMouse(const EditorView& view) {
     cursorPos = position;
     if (clicked && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT)) {
         selectionStart = position;
+    }
+    // A double click selects the word, a triple click the line (without its
+    // line break); a drag after either would undo that, so it doesn't start one.
+    if (count == 2) {
+        const auto [begin, wordEnd] = WordAt(text, position);
+        selectionStart = begin;
+        cursorPos = wordEnd;
+        dragging_ = false;
+    } else if (count == 3) {
+        selectionStart = start;
+        cursorPos = end;
+        dragging_ = false;
     }
     return clicked;
 }

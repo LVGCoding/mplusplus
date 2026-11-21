@@ -8,8 +8,8 @@
 // Shared look of the document area. Used by the layout (gutter) and by each
 // file type's rendering, so line numbers stay aligned with the text.
 namespace editor_style {
-inline constexpr uint16_t FONT_SIZE = 18;
-inline constexpr uint16_t LINE_HEIGHT = 23;
+inline constexpr uint16_t FONT_SIZE = 20;
+inline constexpr uint16_t LINE_HEIGHT = 25;
 inline constexpr float PADDING = 6;
 }  // namespace editor_style
 

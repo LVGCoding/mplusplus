@@ -181,9 +181,22 @@ bool GraphTab::HandleInput(const EditorView& /*view*/) {
 void GraphTab::LayoutContent() const {
     xButton_ = std::string("x axis: ") + (logX_ ? "log" : "linear");
     yButton_ = std::string("y axis: ") + (logY_ ? "log" : "linear");
-    const float width = std::max(320.0f, static_cast<float>(GetScreenWidth()) - 140.0f);
-    const float height = std::clamp(width * 0.6f, 240.0f,
-                                    std::max(240.0f, static_cast<float>(GetScreenHeight()) - 300));
+    // Fill the editor area as it was last frame (it shrinks when the terminal
+    // grows), down to a smallest size that still reads; below that it scrolls.
+    float width = 600;
+    float height = 360;
+    const auto workspace = Clay_GetElementData(CLAY_ID("Workspace"));
+    const auto editor = Clay_GetElementData(CLAY_ID("Editor"));
+    if (workspace.found && editor.found) {
+        // Editor padding 6 and this element's 8, on both sides; the buttons row.
+        constexpr float PADDING = 2 * (6 + 8);
+        constexpr float BUTTONS = 26 + 8;
+        width = workspace.boundingBox.x + workspace.boundingBox.width - editor.boundingBox.x -
+                PADDING;
+        height = workspace.boundingBox.height - PADDING - BUTTONS;
+    }
+    width = std::max(320.0f, std::floor(width));
+    height = std::max(220.0f, std::floor(height));
     auto button = [&](const std::string& label, std::uint32_t id, bool& toggle) {
         CLAY(CLAY_IDI("GraphScaleButton", index_ * 2 + id),
              {.layout = {.padding = {10, 10, 4, 4}},
@@ -312,8 +325,19 @@ void GraphTab::DrawOverlay(const EditorView& view) const {
     DrawLineEx({plot.x, axisY}, {plot.x + plot.width, axisY}, 1.5f, AXIS_COLOR);
 
     // The series, clipped to the plot.
-    BeginScissorMode(static_cast<int>(plot.x), static_cast<int>(plot.y),
-                     static_cast<int>(plot.width) + 1, static_cast<int>(plot.height) + 1);
+    // Scissor regions don't nest, so this one is cut to the editor's visible
+    // area too; otherwise the series would draw over the terminal and menus.
+    {
+        const float left = std::max(plot.x, view.viewport.x);
+        const float top = std::max(plot.y, view.viewport.y);
+        const float right =
+            std::min(plot.x + plot.width + 1, view.viewport.x + view.viewport.width);
+        const float bottom =
+            std::min(plot.y + plot.height + 1, view.viewport.y + view.viewport.height);
+        BeginScissorMode(static_cast<int>(std::ceil(left)), static_cast<int>(std::ceil(top)),
+                         static_cast<int>(std::max(0.0f, std::floor(right - left))),
+                         static_cast<int>(std::max(0.0f, std::floor(bottom - top))));
+    }
     auto drawable = [&](double x, double y) {
         return std::isfinite(x) && std::isfinite(y) && (!xAxis->log || x > 0) &&
                (!yAxis->log || y > 0);

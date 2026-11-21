@@ -9,7 +9,7 @@ v_{max} := 3
 v_{min} := -1
 print(v_{max} - v_{min})
 for i \in 1..3 \{
-    x_{i} := i\exp{}{2}
+    x_{i} := i^{2}
 \}
 x_{2} \leftarrow 0
 print(x, \norm{x})

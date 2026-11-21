@@ -139,6 +139,38 @@ void FileMpp::SelectAll() {
     cursorPos = JoinPath({content.size() - 1}, content.back()->LastPosition());
 }
 
+bool FileMpp::SelectWordAtCursor() {
+    if (cursorPos.size() < 2) {
+        return false;
+    }
+    const CursorPath node(cursorPos.begin(), cursorPos.end() - 1);
+    const auto* text = dynamic_cast<const TextNode*>(NodeAt(node));
+    if (!text) {
+        return false;
+    }
+    const auto [begin, end] = WordAt(text->GetText(), cursorPos.back());
+    if (begin == end) {
+        return false;
+    }
+    selectionStart = node;
+    selectionStart.push_back(begin);
+    cursorPos = node;
+    cursorPos.push_back(end);
+    goalX_.reset();
+    return true;
+}
+
+void FileMpp::SelectRow(std::size_t row) {
+    if (row >= content.size()) {
+        return;
+    }
+    pendingDelete_.reset();
+    insertWheel_.reset();
+    goalX_.reset();
+    selectionStart = JoinPath({row}, content[row]->FirstPosition());
+    cursorPos = JoinPath({row}, content[row]->LastPosition());
+}
+
 std::string FileMpp::SelectedText() const {
     const auto selection = GetSelection();
     if (!selection) {

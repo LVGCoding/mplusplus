@@ -79,7 +79,7 @@ public:
 
     void Lower(const LineNode& line) {
         line_ = &line;
-        for (std::size_t i = 0; i < line.ChildCount(); ++i) {
+        for (std::size_t i = 0; i < line.ChildCount() && !comment_; ++i) {
             const EditorNode* child = line.GetChild(i);
             if (const auto* text = dynamic_cast<const TextNode*>(child)) {
                 LowerText(i, text->GetText());
@@ -123,6 +123,8 @@ private:
     // A string still open at the end of the last text: it continues through
     // Greek letters and symbols (which become part of it) to its closing quote.
     std::optional<Token> string_;
+    // Set at a % outside a string: the rest of the line is a comment.
+    bool comment_ = false;
 
     CursorPath At(std::size_t child, std::size_t offset) const {
         CursorPath position = path_;
@@ -224,6 +226,10 @@ private:
             const char c = text[i];
             if (IsSpace(c)) {
                 ++i;
+            } else if (c == '%') {
+                // A comment, as in LaTeX: skip the rest of the line.
+                comment_ = true;
+                return;
             } else if (c == '"') {
                 string_ = Token{.kind = Kind::String};
                 string_->ref = {At(child, i), At(child, i + 1)};
@@ -307,7 +313,7 @@ private:
             return text.size() <= 1 ? text : "(" + text + ")";
         };
         if (const auto* power = dynamic_cast<const ExpoNode*>(node)) {
-            return PlainText(power->GetBase()) + "^" + grouped(PlainText(power->GetExponent()));
+            return "^" + grouped(PlainText(power->GetExponent()));
         }
         if (const auto* fraction = dynamic_cast<const FracNode*>(node)) {
             auto [numerator, denominator] = fraction->GetChildren();
@@ -361,9 +367,9 @@ private:
                 token.slots.push_back(Slot(degree, {index, 0}));
             }
         } else if (const auto* power = dynamic_cast<const ExpoNode*>(&node)) {
+            // Only the exponent: the base is whatever comes before it.
             token.shape = Token::Shape::Power;
-            token.slots.push_back(Slot(power->GetBase(), {index, 0}));
-            token.slots.push_back(Slot(power->GetExponent(), {index, 1}));
+            token.slots.push_back(Slot(power->GetExponent(), {index, 0}));
         } else if (const auto* graph = dynamic_cast<const GraphNode*>(&node)) {
             // pieces: id, title, x label, y label, x/y ranges and scales, then
             // a legend per function; slots: the functions.

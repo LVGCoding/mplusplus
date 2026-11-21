@@ -13,7 +13,7 @@ xs_{2} \leftarrow 9
 total := 0
 for v \in xs \{ total \leftarrow total + v \}
 print(xs, total)
-ages \in \mathbb{Z}\exp{}{\Sigma *}
+ages \in \mathbb{Z}^{\Sigma *}
 ages["Ada"] \leftarrow 36
 ages_{"Alan"} := 41
 print(ages, ages["Alan"], "Ada" \in ages, |ages|)

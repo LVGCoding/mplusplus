@@ -4,17 +4,17 @@ x := A \setminus b
 print("x =", x)
 print("check:", A \cdot x \approx b)
 print("det A =", det(A), \begin{vmatrix}1 & 2\\3 & 4\end{vmatrix})
-print("A^T =", A\exp{}{\top})
-B := A\exp{}{-1}
+print("A^T =", A^{\top})
+B := A^{-1}
 print(B \cdot A \approx I_{3})
-print("‖b‖ =", \norm{b}, "b·b =", b \cdot b, b\exp{}{\top} \cdot b)
+print("‖b‖ =", \norm{b}, "b·b =", b \cdot b, b^{\top} \cdot b)
 print("row 2:", A_{2,*}, "column 3:", A_{*,3}, "A\_\{1,2\} =", A_{1,2})
 x_{1} \leftarrow 0
 print(x, length(x), x_{2..3})
-v \in \mathbb{R}\exp{}{3}
+v \in \mathbb{R}^{3}
 v_{2} \leftarrow 5
 print(v, 2v + x, \frac{v}{5})
 S := \begin{pmatrix}2 & 1\\1 & 2\end{pmatrix}
 print("eigenvalues:", eigenvalues(S))
-print(S\exp{}{3}, trace(S), rank(S))
+print(S^{3}, trace(S), rank(S))
 print(A_{4,1})

@@ -1,0 +1,16 @@
+a := 2
+\begin{graph}[title=Parabolas and a root, xmin=-2, xmax=2, ymin=-1, ymax=4] y=a \cdot x^{2} \\ y=x^{2} - 1 \\ \sqrt{x} \end{graph}
+\begin{graph}[title=Waves, xlabel=t, ylabel=height, xmin=0, xmax=10] sin(t) \\ \frac{cos(t)}{2} \end{graph}
+\begin{graph}[title=One over x, xmin=-3, xmax=3, ymin=-5, ymax=5] y=\frac{1}{x} \end{graph}
+days := [1, 2, 3, 4, 5, 6, 7]
+cases := [3, 5, 9, 16, 30, 55, 101]
+\begin{graph}[title=Cases per day, xlabel=day, ylabel=cases, xmin=0, xmax=8, ymin=1, ymax=200, yscale=log] (days, cases) \\ y=3 \cdot 1.8^{day - 1} \end{graph}
+fig := Figure<title = "Growth", xlabel = "n", ylabel = "value", scaleY = "log">
+ns := [1, 2, 3, 4, 5, 6, 7, 8]
+fig.Line<x = ns, y = [2, 4, 8, 16, 32, 64, 128, 256], legend = "2^n">
+fig.Scatter<x = ns, y = [1, 4, 9, 16, 25, 36, 49, 64], legend = "n^2">
+rolls := Figure<title = "Dice rolls">
+rolls.Histogram<values = [1, 2, 2, 3, 3, 3, 4, 4, 5, 6, 6, 6], bins = 6>
+fruit := Figure<title = "Fruit sold">
+fruit.Bar<labels = ["apples", "pears", "plums"], values = [12, 7, 4], color = "green">
+print("Run this in the editor: each graph and figure opens in its own Graph tab.")

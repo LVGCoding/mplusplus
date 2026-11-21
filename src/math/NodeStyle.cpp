@@ -111,7 +111,7 @@ void Text(std::string_view text,
                                 .length = static_cast<int32_t>(text.size()),
                                 .chars = text.data()};
     CLAY_TEXT(string,
-              {.textColor = TEXT_COLOR,
+              {.textColor = currentTextColor,
                .fontId = fontId,
                .fontSize = static_cast<uint16_t>(fontSize),
                .wrapMode = CLAY_TEXT_WRAP_NONE});

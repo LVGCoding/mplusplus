@@ -4,19 +4,18 @@
 
 #include <memory>
 #include <string>
-#include <utility>
 
-// \exp or shift+^
+// An exponent, ^{…}, written after what it raises: x^{2}, e^{-x}, ℝ^{n}.
+// Like LaTeX, it holds only the exponent; the base is whatever comes before
+// it in the line. Typing ^ inserts one. The cursor path is [0, ...] into it.
+// Files from before this saved \exp{base}{exponent}; the parser still reads
+// those, as the base followed by ^{exponent}.
 class ExpoNode : public EditorNode {
 private:
-    std::unique_ptr<EditorNode> exponent;
-    std::unique_ptr<EditorNode> base;
+    std::unique_ptr<EditorNode> exponent_;
 
 public:
-    ExpoNode() = default;
-
-    ExpoNode(std::unique_ptr<EditorNode> base,
-             std::unique_ptr<EditorNode> exponent);
+    explicit ExpoNode(std::unique_ptr<EditorNode> exponent);
 
     ~ExpoNode() override = default;
 
@@ -33,9 +32,8 @@ public:
 
     bool HasChild() override;
 
-    // Left from the start of the argument goes to the index (if any) and Right
-    // from the end of the index goes to the argument; other exits are passed up.
-    // Backspace at the start of the first slot asks for the root to be deleted.
+    // Exits are passed up; Backspace at the start asks for the exponent to be
+    // deleted.
     KeyResult KeyPress(const KeyEvent& event) override;
     CursorPath FirstPosition() const override;
     CursorPath LastPosition() const override;
@@ -50,17 +48,7 @@ public:
     }
     void Normalize() override;
 
-    // {base, exponent}
-    std::pair<EditorNode*, EditorNode*> GetChildren() const;
-
-    EditorNode* GetBase() const {
-        return base.get();
-    }
-
     EditorNode* GetExponent() const {
-        return exponent.get();
+        return exponent_.get();
     }
-
-    void SetChildren(std::unique_ptr<EditorNode> base,
-                     std::unique_ptr<EditorNode> exponent);
 };

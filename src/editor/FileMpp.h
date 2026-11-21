@@ -1,10 +1,12 @@
 #pragma once
 
+#include "ClickSelect.h"
 #include "EditorSettings.h"
 #include "fileBase.h"
 #include "lang/Source.h"
 #include "math/EditorNode.h"
 #include "math/LineNode.h"
+#include "math/Syntax.h"
 
 #include <cstddef>
 #include <deque>
@@ -130,6 +132,12 @@ struct FileMpp : FileBase {
     // Select the whole document.
     void SelectAll();
 
+    // Double click: select the word (or run of spaces or symbols) at the
+    // cursor, in whatever text it is in. Returns false if there's none.
+    bool SelectWordAtCursor();
+    // Triple click: select all of `row`.
+    void SelectRow(std::size_t row);
+
     // Delete the selected range. Returns false if nothing was selected.
     bool DeleteSelection() override;
 
@@ -215,6 +223,12 @@ private:
 
     // Enter with the cursor directly in `row`: split it, keeping the
     // indentation (one level more after a "{").
+    // Tab and Shift+Tab: indent at the cursor, or indent/outdent the rows
+    // of the selection (Shift+Tab always works on whole rows).
+    bool PressTab(bool shift);
+    // Add `spaces` spaces at the start of `row` (or remove up to -spaces of
+    // its leading spaces), keeping the cursor and selection on the same text.
+    void ShiftRow(std::size_t row, int spaces);
     void SplitRow(std::size_t row);
     // True if the cursor is between the quotes of a string in its line.
     bool InsideString() const;
@@ -223,10 +237,14 @@ private:
     mutable std::optional<std::size_t> hoveredDiagnostic_;
     mutable Vector2 hoverPoint_ = {};
     std::optional<InsertWheel> insertWheel_;
+    // Syntax colors, worked out again each time the document is drawn.
+    mutable SyntaxColors syntax_;
     bool mathMenuRequested_ = false;
 
     // True while a mouse drag that started in this file is selecting.
     bool dragging_ = false;
+    // Counts double and triple clicks.
+    ClickCounter clicks_;
 
     // --- Undo history (fileMppHistory.cpp) ---
 

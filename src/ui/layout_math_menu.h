@@ -148,9 +148,20 @@ inline void HandleMathMenuKeys(Font* fonts) {
         return;
     }
     mathMenuSearch.HandleMouse(fonts);
-    // Item names have no spaces or backslashes.
-    const bool queryChanged =
-        mathMenuSearch.HandleKeyboard([](char32_t c) { return c != U' ' && c != U'\\'; });
+    // Item names have no spaces or backslashes. A second \ right after the
+    // first inserts ∖ (A ∖ b solves A⋅x = b), like typing A \ b in MATLAB.
+    bool backslash = false;
+    const bool emptySearch = mathMenuSearch.Text().empty();
+    const bool queryChanged = mathMenuSearch.HandleKeyboard([&](char32_t c) {
+        if (c == U'\\' && emptySearch) {
+            backslash = true;
+        }
+        return c != U' ' && c != U'\\';
+    });
+    if (backslash) {
+        mathMenuItemRequested = MathMenuItemIndex("\\backslash");
+        return;
+    }
     // New search results start at the top, where the selection is.
     if (queryChanged) {
         mathMenuSelected = 0;

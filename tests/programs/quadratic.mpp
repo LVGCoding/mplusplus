@@ -1,9 +1,9 @@
 a := 1
 b := -3
 c := 2
-D := b\exp{}{2} - 4 \cdot a \cdot c
+D := b^{2} - 4 \cdot a \cdot c
 x1 := \frac{-b + \sqrt{D}}{2a}
 x2 := \frac{-b - \sqrt{D}}{2a}
 print("x1 =", x1)
 print("x2 =", x2)
-print("check:", a \cdot x1\exp{}{2} + b \cdot x1 + c \approx 0)
+print("check:", a \cdot x1^{2} + b \cdot x1 + c \approx 0)

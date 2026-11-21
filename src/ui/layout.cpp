@@ -29,6 +29,7 @@
 #include "layout_style.h"
 #include "layout_tabs.h"
 #include "layout_unsaved_popup.h"
+#include "WheelScroll.h"
 
 using namespace layout_internal;
 
@@ -76,8 +77,16 @@ void UpdateLayoutScroll(float wheelX,
         interrupted = false;
     }
     const bool blocked = interrupted || IsLayoutModalOpen();
-    Clay_UpdateScrollContainers(
-        false, blocked ? Clay_Vector2{0, 0} : Clay_Vector2{wheelX, wheelY}, deltaTime);
+    // Accelerated, smoothed wheel scrolling (see WheelScroll.h). Typing or a
+    // popup stops a scroll still under way, so the cursor stays in view.
+    static WheelScroll scroller(EDITOR_LINE_HEIGHT);
+    if (blocked || cursorActivity) {
+        scroller.Stop();
+    }
+    const WheelScroll::Step step = blocked ? WheelScroll::Step{}
+                                           : scroller.Update(wheelX, wheelY, GetTime(), deltaTime);
+    // Clay moves 10 pixels per unit it is given.
+    Clay_UpdateScrollContainers(false, Clay_Vector2{step.x / 10.0f, step.y / 10.0f}, deltaTime);
 }
 
 bool HandleActiveFileInput(Editor& editor,

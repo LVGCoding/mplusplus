@@ -471,19 +471,11 @@ private:
             }
             // ℝ followed by a power typed after it.
             const Token& next = Peek();
-            if (next.kind == Kind::Structure && next.shape == Shape::Power &&
-                next.slots[0].empty()) {
+            if (next.kind == Kind::Structure && next.shape == Shape::Power) {
                 const Token& power = Advance();
-                ParseExponentOfType(type, power.slots[1], power);
+                ParseExponentOfType(type, power.slots[0], power);
                 type.ref = Span(token.ref, power.ref);
             }
-        } else if (token.kind == Kind::Structure && token.shape == Shape::Power &&
-                   !token.slots[0].empty() && IsBuiltinSet(token.slots[0][0])) {
-            // A power whose base is the set: \exp{ℝ}{n}.
-            Advance();
-            type.set = SetName(token.slots[0], 0);
-            type.ref = token.ref;
-            ParseExponentOfType(type, token.slots[1], token);
         } else if (token.kind == Kind::Word && !IsKeyword(token.text)) {
             Advance();
             type.set = token.text;  // a struct type, found by the checker
@@ -889,8 +881,7 @@ private:
             case Kind::Op:
                 return token.text == "(" || token.text == "∞" || token.text == "∅";
             case Kind::Structure:
-                return !(token.shape == Shape::Power && token.slots[0].empty()) &&
-                       token.shape != Shape::Subscript;
+                return token.shape != Shape::Power && token.shape != Shape::Subscript;
             default:
                 return false;
         }
@@ -976,7 +967,7 @@ private:
     // base^{exponent}, or base^⊤ (the transpose).
     std::unique_ptr<Expr> PowerOrTranspose(std::unique_ptr<Expr> base, const Token& power,
                                            const SourceRef& ref) {
-        const std::vector<Token>& exponent = power.slots[1];
+        const std::vector<Token>& exponent = power.slots[0];
         if (exponent.size() == 1 && exponent[0].IsOp("⊤")) {
             auto transpose = MakeExpr(Expr::Kind::Transpose, ref);
             transpose->opRef = exponent[0].ref;
@@ -990,8 +981,7 @@ private:
         auto expr = ParsePrimary();
         for (;;) {
             const Token& next = Peek();
-            if (next.kind == Kind::Structure && next.shape == Shape::Power &&
-                next.slots[0].empty()) {
+            if (next.kind == Kind::Structure && next.shape == Shape::Power) {
                 const Token& power = Advance();
                 const SourceRef ref = Span(expr->ref, power.ref);
                 expr = PowerOrTranspose(std::move(expr), power, ref);
@@ -1527,14 +1517,9 @@ private:
                 }
                 return expr;
             }
-            case Shape::Power: {
-                if (token.slots[0].empty()) {
-                    Fail("This power has nothing to raise: put something before it, or in its "
-                         "first box.", token.ref);
-                }
-                auto base = ParseSlot(token.slots[0], token, "base");
-                return PowerOrTranspose(std::move(base), token, token.ref);
-            }
+            case Shape::Power:
+                Fail("This exponent has nothing before it: put what it raises in front, as in "
+                     "x^2.", token.ref);
             case Shape::Group: {
                 auto inner = ParseSlot(token.slots[0], token, "group");
                 inner->ref = token.ref;

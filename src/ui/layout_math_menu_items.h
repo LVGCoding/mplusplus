@@ -47,8 +47,7 @@ inline std::unique_ptr<EditorNode> MakeMathFrac() {
 }
 
 inline std::unique_ptr<EditorNode> MakeMathExpo() {
-    return std::make_unique<ExpoNode>(
-        std::make_unique<LineNode>(), std::make_unique<LineNode>());
+    return std::make_unique<ExpoNode>(std::make_unique<LineNode>());
 }
 
 inline std::unique_ptr<EditorNode> MakeMathSqrt() {
@@ -174,9 +173,25 @@ inline const std::vector<MathMenuItem>& MathMenuItems() {
                                 return std::make_unique<SymbolNode>(i);
                             }});
         }
+        // \backslash: another name for ∖, which solves A⋅x = b (A ∖ b).
+        // Typing \ twice inserts it too (see HandleMathMenuKeys).
+        list.push_back({"\\backslash", [] () -> std::unique_ptr<EditorNode> {
+                            return std::make_unique<SymbolNode>(*SymbolNode::IndexOf("setminus"));
+                        }});
         return list;
     }();
     return items;
+}
+
+// Index in MathMenuItems() of the item labelled `label`, or SIZE_MAX.
+inline std::size_t MathMenuItemIndex(std::string_view label) {
+    const auto& items = MathMenuItems();
+    for (std::size_t i = 0; i < items.size(); ++i) {
+        if (items[i].label == label) {
+            return i;
+        }
+    }
+    return SIZE_MAX;
 }
 
 // The preview node for MathMenuItems()[index], built once and kept for the

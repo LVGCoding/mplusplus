@@ -27,7 +27,7 @@ struct Token {
         None,
         Fraction,  // slots: {numerator, denominator}
         Root,      // slots: {argument} or {argument, index}
-        Power,     // slots: {base, exponent}; an empty base raises what comes before
+        Power,     // slots: {exponent}; raises what comes before it
         Group,     // slots: {contents}, a bare {...} group from the source
         Matrix,    // slots: the cells, row by row (rowLengths: cells per row);
                    // text: the environment ("pmatrix", "vmatrix", ...)

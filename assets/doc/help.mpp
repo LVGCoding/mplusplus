@@ -1,45 +1,179 @@
-Welcome to M Plus Plus! 
-The visual math coding language
+% Welcome to M Plus Plus!
+% The visual math coding language: you write programs in math notation, and Run turns them into real programs.
 
-To get started you can click file and then new to make a new mpp file
-Or open an existing mpp file
-You can save this file using save (ctrl+s)
+% Contents
+%   1. Files and tabs
+%   2. Typing and editing
+%   3. The math menu
+%   4. Math you can type
+%   5. Matrices and cases
+%   6. Running a program
+%   7. Variables and numbers
+%   8. Decisions, loops and functions
+%   9. Vectors and matrices
+%   10. Sets, sums and logic
+%   11. Text, lists, maps and structs
+%   12. Graphs and figures
 
-To get started with math use := to assign variables
+% Rows starting with % are comments: the program skips them, and they are drawn in grey.
+% Everything else in this file is a real M++ example. Press Run to run them all, or copy a row into a new file.
 
-ex: a:=5+5
-a is stored with a value of 10
 
-you can then print using the print function
+% =====  1. Files and tabs  =====
+
+% File, then New makes a new .mpp file; File, then Open File opens one you already have.
+% Save with File, then Save File, or ctrl+s.
+% Every open file has a tab. A dot on a tab means it has unsaved changes; the cross closes it.
+% Drag a tab sideways to reorder your tabs.
+% Docs opens this help file.
+
+
+% =====  2. Typing and editing  =====
+
+% Type as you would in any text editor. Each row is one statement of your program.
+% ctrl+c copy, ctrl+x cut, ctrl+v paste, ctrl+a select all, ctrl+z undo, ctrl+y (or ctrl+shift+z) redo.
+% The Edit menu has the same commands.
+% Hold shift with the arrow keys to select. Click anywhere to move the cursor there.
+% Double click a word to select it; triple click to select the whole row.
+% Enter keeps the indentation of the row; after a \{ it indents one more level.
+% Typing \} on a blank indented row moves it back one level.
+% Tab indents (with several rows selected, it indents them all); Shift+Tab moves the row or rows back left.
+% Start a row (or the end of one) with % to write a comment; the program skips the rest of the row.
+% Backspace next to a math object (a fraction, a matrix...) first marks it in red; press Backspace again to delete it.
+
+
+% =====  3. The math menu  =====
+
+% Type a backslash to open the math menu, then type part of a name to search it.
+% Up and Down choose, Enter or Tab inserts, Escape (or Backspace with an empty search) closes it.
+% The names are the usual LaTeX ones, so LaTeX you paste in works too: frac, sqrt, pmatrix, sum, alpha, in, mathbb...
+% Two backslashes in a row insert the solve symbol \setminus (see section 9).
+% You can also open it from the Insert menu.
+
+
+% =====  4. Math you can type  =====
+
+% Fractions (frac):   \frac{1}{2}
+% Powers: type ^ after something to raise it:   x^{2}   e^{-x}   2^{10}
+% Subscripts: type \_ after a name:   x_{1}   v_{max}   A_{2,3}
+% Roots (sqrt, sqrt[n]):   \sqrt{2}   \sqrt[3]{27}
+% Absolute value, floor, ceiling and norm (abs, floor, ceil, norm):   \abs{-3}   \floor{2.7}   \ceil{2.1}   \norm{v}
+% Greek letters are names you can use:   \alpha   \beta   \theta   \pi
+% Symbols by their LaTeX names:   \in   \leftarrow   \leq   \neq   \approx   \cdot   \times   \mathbb{R}   \mathbb{N}
+% Move between the boxes of a math object with the arrow keys; Right at the end steps out of it.
+
+% These are all usable just how you would in Desmos or Symbolab, and you can assign them to variables:
+r := 3
+area := \pi \cdot r^{2}
+
+
+% =====  5. Matrices and cases  =====
+
+% Insert a matrix with pmatrix (round), bmatrix (square), matrix (no brackets) or vmatrix (a determinant).
+% In a cell, press Enter to open the insert wheel: an arrow key picks where the new row or column goes, then Enter adds it.
+% Backspace at the start of a cell marks its row in red; Tab switches to the column; Backspace again deletes it.
+A := \begin{bmatrix}1 & 2\\3 & 4\end{bmatrix}
+
+% cases makes a piecewise definition: each row is a value and its condition.
+f(x) := \begin{cases}-x & x < 0\\x^{2} & otherwise\end{cases}
+
+
+% =====  6. Running a program  =====
+
+% Run, then Run compiles your file and runs it. Run, then Stop stops a program that is taking too long.
+% What the program prints appears in the terminal at the bottom. Drag the terminal's top edge to resize it.
+% Mistakes are underlined in red; hover over one to read what is wrong.
+% An error in the terminal can be clicked to jump to the place it is about.
+% After the first run, the file is checked again a moment after each change you make.
+% Graphs open in their own tabs when the program runs (see section 12).
+
+
+% =====  7. Variables and numbers  =====
+
+% := makes a new variable, and \leftarrow (leftarrow, or type <-) changes it:
+a := 5 + 5
+a \leftarrow a + 1
 print(a)
+% print shows values in the terminal, separated by spaces:
+print("a is", a, "and a squared is", a^{2})
 
-printing also can function on its own
-print(5+5)
-
-Click run to display in the terminal!
-
-You can try this out with real and complex numbers with standard mathmatical operations (+,-,*,/)
-In all sorts of sets (\mathbb{R},\mathbb{Q},\mathbb{C},\mathbb{N})
-
-Use \ to Start a new math query.
-Press enter to confirm your selection
-
-You can use this to visualize all sorts of math symbols such as \frac{}{},\exp{}{},\sqrt[]{}
-These are all usable just how you would in Desmos or Symbolab
-The symbols are standard latex and can be pasted from latex documents
-And yes you can assign them to variables
-
-We also provide matrix support
-Start a matrix math query and you can do all sort of operations
-
-ex: a:=\begin{bmatrix}1&1\\2&2\end{bmatrix}\times\begin{bmatrix}4&2\\2&3\end{bmatrix}
-print(a)
-(note the times symbol can just be the standard * from your keyboard 
-but we also support the "times" symbol from query)
-
-And just like that the result is printed!
-
-Like any normal text editor we have standard editing commands 
-they are tied to standard keybinds ctrl+c (copy),ctrl+v (paste), ctrl+z (undo)...
+% Give a variable a type with \in (in):   n \in \mathbb{N} := 3   x \in \mathbb{R} := 0.5
+% \mathbb{N} is whole numbers from 0, \mathbb{Z} all whole numbers, \mathbb{R} real numbers.
+% = compares (there is no ==); also \neq, \leq, \geq, \approx, < and >.
+% Operators: + - \cdot (or *) / and mod. Writing 2x multiplies, but two names need a \cdot between them.
+% / and fractions always give a real number; use \floor{a/b} and mod for whole-number division.
+% Built in: sin cos tan ln exp sqrt abs round min max, and the constants \pi, e and \infty.
 
 
+% =====  8. Decisions, loops and functions  =====
+
+% Blocks go in braces. Type them with the \{ and \} keys:
+if a > 5 \{ print("big") \} else \{ print("small") \}
+for i \in 1..5 \{ print(i, i^{2}) \}
+for t \in 0..0.25..1 \{ print(t) \}
+% while and break and continue work as usual.
+
+% A function on one row:
+square(x) := x \cdot x
+% or with a block and return:
+grade(score) \{
+    if score \geq 90 \{ return "A" \}
+    return "B"
+\}
+print(square(3), grade(95))
+
+
+% =====  9. Vectors and matrices  =====
+
+% A one-column matrix is a vector. Vectors and matrices hold real numbers.
+M := \begin{pmatrix}2 & 1\\1 & 3\end{pmatrix}
+b := \begin{pmatrix}3\\5\end{pmatrix}
+% Solve M \cdot x = b with \setminus (two backslashes):
+sol := M \setminus b
+print(sol, M \cdot sol \approx b)
+% Also: M^{-1} (inverse), M^{\top} (transpose), M \cdot N, v \times w (cross), det(M), trace(M), rank(M), eigenvalues(M).
+% Pick entries with subscripts, counting from 1:   M_{1,2}   M_{2,*} (row 2)   M_{*,1} (column 1)   b_{1}
+
+
+% =====  10. Sets, sums and logic  =====
+
+S := \{1, 2, 3, 4\}
+print(S \cup \{5\}, S \cap \{2, 9\}, 3 \in S, |S|)
+% Build sets from others:   \{x \in S : x > 2\}   \{2k : k \in 1..5\}
+% Sums and products (sum, prod) take limits or a set:
+print(\sum_{k=1}^{100} k, \prod_{k=1}^{5} k)
+% For all and there exists (forall, exists):
+print(\forall x \in S : x > 0, \exists x \in S : x > 3)
+
+
+% =====  11. Text, lists, maps and structs  =====
+
+% Text goes in quotes; $\{...\} puts a value inside it:
+name := "Ada"
+print("Hello $\{name\}!", |name|)
+% Lists use square brackets and push:
+xs := [3, 1, 4]
+xs.push(1)
+print(xs, xs_{2})
+% A map looks values up by a key. \mathbb{Z}^{\Sigma *} maps text to whole numbers:
+ages \in \mathbb{Z}^{\Sigma *}
+ages["Ada"] \leftarrow 36
+print(ages["Ada"], "Ada" \in ages)
+% A struct (struct, or type < and >) describes a record; a list of them prints as a table:
+Person := \begin{angle}name \in \Sigma *\\age \in \mathbb{R}\end{angle}
+people := Person*
+people.push(<name = "Bob", age = 20>)
+print(people)
+
+
+% =====  12. Graphs and figures  =====
+
+% Insert a graph (graph) and type functions in it, one per line, like y = x^{2}.
+% Its title and axis labels are typed in place; the x axis label names the variable.
+% The settings button on the graph sets the x and y ranges and switches each axis between linear and log.
+\begin{graph}[title=Two curves, xmin=-2, xmax=2]y=x^{2}\\sin(x)\end{graph}
+% Each graph opens in a Graph tab when you run the file. Running again updates the tab.
+% Data from your program can be plotted too: a line (xs, ys) in a graph draws those points.
+% From code, make a Figure and add lines, points, histograms or bars:
+fig := Figure<title = "Growth">
+fig.Line<x = [1, 2, 3], y = [1, 4, 9], legend = "squares">

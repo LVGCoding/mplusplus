@@ -1,4 +1,4 @@
-f(x) := \begin{cases}-x & x < 0\\x\exp{}{2} & 0 \leq x \leq 1\\\sqrt{x} & otherwise\end{cases}
+f(x) := \begin{cases}-x & x < 0\\x^{2} & 0 \leq x \leq 1\\\sqrt{x} & otherwise\end{cases}
 print(f(-2), f(0.5), f(4))
 fib(n \in \mathbb{N}) := \begin{cases}n & n < 2\\fib(n - 1) + fib(n - 2) & otherwise\end{cases}
 print(fib(20))

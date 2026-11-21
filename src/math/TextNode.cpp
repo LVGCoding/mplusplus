@@ -1,10 +1,13 @@
 #include "TextNode.h"
 
 #include "NodeStyle.h"
+#include "Syntax.h"
 #include "raylib.h"
 
 #include <algorithm>
 #include <cmath>
+#include <string_view>
+#include <vector>
 #include <utility>
 
 namespace {
@@ -28,7 +31,40 @@ void TextNode::Render(const RenderContext& context) {
     CLAY(GetClayId(),
          {.layout = {.sizing = {CLAY_SIZING_FIT(0), CLAY_SIZING_FIT(context.fontSize)},
                      .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}}}) {
-        node_style::Text(text_, context.fontSize);
+        // Runs of one color each (syntax colors, then the comment in grey),
+        // side by side with no gap, so cursor positions measure the same.
+        const std::vector<SyntaxKind>* kinds = nullptr;
+        if (context.syntax) {
+            const auto found = context.syntax->text.find(this);
+            if (found != context.syntax->text.end() && found->second.size() == text_.size()) {
+                kinds = &found->second;
+            }
+        }
+        const std::string_view text = text_;
+        const std::size_t code = std::min(context.commentFrom, text_.size());
+        if (!kinds) {
+            node_style::Text(text.substr(0, code), context.fontSize);
+        } else {
+            std::size_t start = 0;
+            while (start < code) {
+                std::size_t stop = start + 1;
+                while (stop < code && (*kinds)[stop] == (*kinds)[start]) {
+                    ++stop;
+                }
+                const SyntaxKind kind = (*kinds)[start];
+                if (kind == SyntaxKind::Plain) {
+                    node_style::Text(text.substr(start, stop - start), context.fontSize);
+                } else {
+                    node_style::TextColorScope color(SyntaxColor(kind));
+                    node_style::Text(text.substr(start, stop - start), context.fontSize);
+                }
+                start = stop;
+            }
+        }
+        if (code < text_.size()) {
+            node_style::TextColorScope grey(node_style::COMMENT_COLOR);
+            node_style::Text(text.substr(code), context.fontSize);
+        }
     }
 }
 
@@ -88,7 +124,9 @@ TextNode::GetSize() {
 std::string TextNode::ToText() const {
     // Typed braces (blocks in M++ programs) and underscores (in strings) are
     // saved as \{ \} \_ so they aren't read back as a group or a subscript;
-    // the parser reads them back as text.
+    // the parser reads them back as text. A caret is only read as an exponent
+    // when "{" follows, and a typed "{" is escaped, so only a caret at the end
+    // (where the next node may start with "{") is saved as \^.
     std::string text;
     text.reserve(text_.size());
     for (char c : text_) {
@@ -96,6 +134,9 @@ std::string TextNode::ToText() const {
             text += '\\';
         }
         text += c;
+    }
+    if (!text.empty() && text.back() == '^') {
+        text.insert(text.size() - 1, 1, '\\');
     }
     return text;
 }

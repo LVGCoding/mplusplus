@@ -17,8 +17,8 @@ special functions, quadrature), and runs it. The original ideas are in
 - `name(…)` is always a function call.
 - Blocks use braces. One statement per row; `;` is optional, to put several
   on one row. A row ending in a binary operator, `,` or `{` continues on the next.
-- Subscripts are *indices* when they are numbers or use only declared names,
-  otherwise *labels* that are part of the name (`v_{max}`). Assigning to an
+- Subscripts are _indices_ when they are numbers or use only declared names,
+  otherwise _labels_ that are part of the name (`v_{max}`). Assigning to an
   index of an undeclared name creates an implicit array (`α_1 := 1`, `α_2 := 2`).
 - Arrays are 1-indexed. `x_{i,*}` is row i, `x_{*,j}` is column j.
 - Maps use the exponent form: `ℝ^{Σ*}` maps strings to reals (so `ℝⁿ` is a map
@@ -64,16 +64,16 @@ place in the editor.
 
 Walks each row's `LineNode` into tokens:
 
-| Source | Token |
-|---|---|
-| Digits in `TextNode` | `Number` (`12`, `3.5`, `.5`, `1e-3`) |
-| Letter runs | `Word`; keywords are reserved: `if else while for return break continue mod in` |
-| `GreekNode` / `SymbolNode` | `Word` (α) or `Symbol` (∈, ←, …) |
-| ASCII operators | `:=`, `<-`, `->`, `..`, `+ - * / ( ) [ ] , ; . { } \| <= >= !=` |
-| `"…"` | `String`, with `${…}` parts kept as nested token lists |
-| `FracNode`, `SqrtNode`, `ExpoNode`, `MatrixNode`, later Subscript/BigOp/Cases/Delim | `Structure` token: the node plus a lowered token list per slot |
-| `GraphNode`, `TableNode` | `Structure` tokens that are statements of their own |
-| End of row | `Newline`, skipped after `{`, `,` or a binary operator |
+| Source                                                                              | Token                                                                           |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Digits in `TextNode`                                                                | `Number` (`12`, `3.5`, `.5`, `1e-3`)                                            |
+| Letter runs                                                                         | `Word`; keywords are reserved: `if else while for return break continue mod in` |
+| `GreekNode` / `SymbolNode`                                                          | `Word` (α) or `Symbol` (∈, ←, …)                                                |
+| ASCII operators                                                                     | `:=`, `<-`, `->`, `..`, `+ - * / ( ) [ ] , ; . { } \| <= >= !=`                 |
+| `"…"`                                                                               | `String`, with `${…}` parts kept as nested token lists                          |
+| `FracNode`, `SqrtNode`, `ExpoNode`, `MatrixNode`, later Subscript/BigOp/Cases/Delim | `Structure` token: the node plus a lowered token list per slot                  |
+| `GraphNode`, `TableNode`                                                            | `Structure` tokens that are statements of their own                             |
+| End of row                                                                          | `Newline`, skipped after `{`, `,` or a binary operator                          |
 
 `ExpoNode` holds its own base, so `ℝ^n`, `A^T` and `x^2` arrive grouped.
 
@@ -93,19 +93,19 @@ block    := { statements }
 
 Precedence, lowest to highest:
 
-| Level | Operators |
-|---|---|
-| 1 | `∨ ⊕` |
-| 2 | `∧` |
-| 3 | `¬` (prefix) |
-| 4 | `= ≠ < ≤ > ≥ ≈ ∈ ∉ ⊂ ⊆`, chainable (`0 ≤ x < n`) |
-| 5 | `..` range, optional step `a..(s)..b` |
-| 6 | `∪ ∖ Δ` |
-| 7 | `∩` |
-| 8 | `+ −` |
-| 9 | `· * × / ⊙ mod`, implicit multiplication |
-| 10 | unary `−` |
-| 11 | postfix: power/structure, subscript, `ᵀ`, `!`, call, `.name`, `[key]` |
+| Level | Operators                                                             |
+| ----- | --------------------------------------------------------------------- |
+| 1     | `∨ ⊕`                                                                 |
+| 2     | `∧`                                                                   |
+| 3     | `¬` (prefix)                                                          |
+| 4     | `= ≠ < ≤ > ≥ ≈ ∈ ∉ ⊂ ⊆`, chainable (`0 ≤ x < n`)                      |
+| 5     | `..` range, optional step `a..(s)..b`                                 |
+| 6     | `∪ ∖ Δ`                                                               |
+| 7     | `∩`                                                                   |
+| 8     | `+ −`                                                                 |
+| 9     | `· * × / ⊙ mod`, implicit multiplication                              |
+| 10    | unary `−`                                                             |
+| 11    | postfix: power/structure, subscript, `ᵀ`, `!`, call, `.name`, `[key]` |
 
 Two names separated only by a space are an error: "write `A·B` to multiply".
 
@@ -132,20 +132,20 @@ Two names separated only by a space are an error: "write `A·B` to multiply".
 - Names: `α` → `u_alpha`, `v_{max}` → `u_v_max` (the `u_` prefix avoids C++ keywords).
 - 1-based indices: `x_i` → `mpp::at(x, i)` (bounds-checked).
 
-| M++ | C++ |
-|---|---|
-| ℤ, ℕ | `int64_t` |
-| ℝ | `double` |
-| ℂ | `std::complex<double>` |
-| 𝔹 | `bool` |
-| Σ* | `std::string` |
-| ℝⁿ (n known) | `Eigen::Vector<double,n>` |
-| ℝ^* | `Eigen::VectorXd` |
-| ℝ^{n×m} | `Eigen::Matrix<double,n,m>` / `MatrixXd` |
-| `T^*` (non-numeric T) | `std::vector<T>` |
-| `V^K` | `std::map<K,V>` |
-| finite sets | `mpp::Set<T>` |
-| structs | C++ structs with a static field table holding `@tags` |
+| M++                   | C++                                                   |
+| --------------------- | ----------------------------------------------------- |
+| ℤ, ℕ                  | `int64_t`                                             |
+| ℝ                     | `double`                                              |
+| ℂ                     | `std::complex<double>`                                |
+| 𝔹                     | `bool`                                                |
+| Σ*                    | `std::string`                                         |
+| ℝⁿ (n known)          | `Eigen::Vector<double,n>`                             |
+| ℝ^*                   | `Eigen::VectorXd`                                     |
+| ℝ^{n×m}               | `Eigen::Matrix<double,n,m>` / `MatrixXd`              |
+| `T^*` (non-numeric T) | `std::vector<T>`                                      |
+| `V^K`                 | `std::map<K,V>`                                       |
+| finite sets           | `mpp::Set<T>`                                         |
+| structs               | C++ structs with a static field table holding `@tags` |
 
 Σ/Π/∀/∃ become immediately invoked lambdas; piecewise becomes a `?:` chain;
 string templates become `mpp::format(…)`.
@@ -178,6 +178,7 @@ currently `FileBase`; split out a `Tab` base so `GraphView : Tab` needn't fake
 Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI work.
 
 ### Phase 0: infrastructure
+
 - Lang: FetchContent for Eigen and Boost.Math; runtime skeleton; `Toolchain`
   (find the compiler, build the PCH); `Driver` (compile and run on a
   background thread, stream output to the terminal); Stop and time limit.
@@ -186,6 +187,7 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 - Done when: Run shows output from a real compiled program without freezing the UI.
 
 **Status: done.** Notes:
+
 - `SymbolNode` is a separate class from `GreekNode`: Greek letters are names,
   symbols are operators and built-in sets, and lowering treats them differently.
   Each symbol has a kind (ordinary, operator, relation) used for spacing now
@@ -197,6 +199,7 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
   diagnostics with source locations first exist.
 
 ### Phase 1: scalars (vertical slice)
+
 - Lang: lowering, parser, checker, codegen for ℤ/ℝ/𝔹; `:=`, `∈ T :=`, `←`;
   `+ − · / mod`, fraction, √ and ⁿ√, powers; chained comparisons, ∧∨¬;
   `print`, strings; compile-time and runtime errors mapped to nodes.
@@ -204,6 +207,7 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 - Done when: `quadratic.mpp` computes roots with √ and fractions.
 
 **Status: done.** Notes:
+
 - `src/lang`: `Lower` → `Parse` → `Check` → `Generate`, wrapped by `Compile`.
   `SourceRef` is a pair of full cursor paths (like a selection), so the
   editor underlines with the same range code as selections.
@@ -227,12 +231,14 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 - Golden programs: `tests/programs/*.mpp` + `.out`, run by `programs_test.cpp`.
 
 ### Phase 2: control flow and functions
+
 - Lang: if/else, while, `for` over ranges with steps, break/continue,
   functions (one-line, block, recursive), piecewise.
 - Editor: Cases node; delimiters `|x|`, `⌊x⌋`, `⌈x⌉`.
 - Done when: `collatz.mpp`, `piecewise.mpp` pass.
 
 **Status: done.** Notes:
+
 - Braces are typed as text and saved escaped (`\{`, `\}`), so they never
   open a LaTeX group. Enter keeps a row's indentation (one level more after
   `{`, and `{|}` splits into three rows); typing `}` on a blank indented row
@@ -258,6 +264,7 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
   `|x|` typed with bars also works.
 
 ### Phase 3: vectors, matrices, families
+
 - Lang: ℝⁿ, ℝ^{n×m}, ℝ^*; matrix literals; subscripts and slices; implicit
   families; `A·B`, `⊙`, `ᵀ`, `⁻¹`, det, trace, rank, `A\b`, eigen, norms,
   sized I/1/0; matrix printing.
@@ -265,6 +272,7 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 - Done when: `linsolve.mpp`, `alpha_family.mpp` pass.
 
 **Status: done**, except drawing labels and indices differently. Notes:
+
 - Editor: typing `_` inserts a `SubNode`, saved as LaTeX `_{…}` (inside a
   string `_` stays text, saved as `\_`). `\norm{x}` draws ‖x‖. `cases` and
   the delimiters are in the math popup.
@@ -292,12 +300,14 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
   print as `(1, 2)`, matrices as bracketed rows starting on their own line.
 
 ### Phase 4: sets and big operators
+
 - Lang: set literals, ranges as sets, ∪ ∩ ∖ Δ ∈ ∉ ⊂; set-builder; Σ/Π/⋃/⋂ with
   limits or `x ∈ S`; ∀/∃ with one separator; `|S|`.
 - Editor: BigOp node.
 - Done when: `primes.mpp` passes.
 
 **Status: done.** Notes:
+
 - Editor: `BigOpNode` (∑ ∏ ⋃ ⋂), saved as standard LaTeX `\sum_{k=1}^{n}`; an
   empty upper limit is hidden unless the cursor is in the operator.
 - Types: sets of ℤ, ℝ or strings (`mpp::Set<T>`, kept sorted, printed as
@@ -317,6 +327,7 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
   only inside. `for x ∈ S` also goes through sets and vectors.
 
 ### Phase 5: data
+
 - Lang: Σ/Σ*, template strings, `in`, string `+`/`*`; structs `⟨…⟩`; lists
   with `push`; maps; enums; `@tags`; tables printed in the terminal.
 - Editor: angle-bracket struct node; TableNode connected to run results.
@@ -324,6 +335,7 @@ Each phase ends runnable and tested. **Lang** is compiler work, **Editor** is UI
 
 **Status: done**, except connecting TableNode to run results (it belongs
 with the results protocol in phase 6). Notes:
+
 - `Type` is now a struct: a kind plus details (struct fields, list
   element, map key/value). `==` compares kinds; `SameType` compares fully.
 - Strings: `Σ*` (Σ alone, a character, isn't supported); `+` joins, `s⋅3`
@@ -349,6 +361,7 @@ with the results protocol in phase 6). Notes:
   "Bob" padded to "Johnathon"'s 9 characters takes 6.
 
 ### Phase 6: graphs
+
 - Lang: GraphNode lowering, sampling, data series, results protocol;
   Figure with Line/Scatter/Histogram/Bar.
 - Editor: `Tab` refactor; Graph tab (axes, ticks, legend, linear/log); data
@@ -356,6 +369,7 @@ with the results protocol in phase 6). Notes:
 - Done when: running a document with a graph opens a Graph tab.
 
 **Status: done.** Notes:
+
 - Results protocol: the program appends one JSON line per plot to
   `MPP_RESULTS` (runtime/include/mpp/figure.hpp), again on every change;
   `run::Job::TakeResults` reads the file after the run, and
@@ -382,6 +396,7 @@ with the results protocol in phase 6). Notes:
 - The graph menu gained the x/y scales (stored as `xscale=log`).
 
 ### Phase 7: probability
+
 - Lang: `X ~ Normal(μ, σ²)` and other Boost distributions, `𝔼[X]`, `Var(X)`,
   `P(X ≤ a)`, sampling with `<random>`.
 - Editor: `~`, 𝔼, ℙ.
@@ -392,7 +407,7 @@ with the results protocol in phase 6). Notes:
 - Unit tests per stage. Inputs are written as LaTeX and turned into nodes
   with `Parser::ParseText`, so `Parse("x := \\frac{1}{2}")` is a test input.
 - Golden programs: `tests/programs/name.mpp` + `name.out`, compiled and run.
-  Labelled `slow` and skipped when no compiler is found.
+  Labeled `slow` and skipped when no compiler is found.
 - Each diagnostic has a test for its message and `SourceRef`.
 
 ## Later

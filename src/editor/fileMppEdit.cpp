@@ -198,6 +198,79 @@ std::string Indentation(const LineNode& row) {
 constexpr std::size_t INDENT = 4;
 }  // namespace
 
+bool FileMpp::PressTab(bool shift) {
+    EditScope scope(*this, EditKind::OTHER);
+    const auto selection = GetSelection();
+    if (!shift && !selection) {
+        // Spaces at the cursor up to the next multiple of INDENT, like a tab
+        // stop (counted in the row's first text; elsewhere a full INDENT).
+        const bool rowText = cursorPos.size() == 3;
+        const std::size_t column = rowText && cursorPos[1] == 0 ? cursorPos[2] : 0;
+        const std::string spaces(INDENT - column % INDENT, ' ');
+        auto* text = rowText ? dynamic_cast<TextNode*>(content[cursorPos[0]]->GetChild(cursorPos[1]))
+                             : nullptr;
+        if (!text) {
+            // Inside a fraction, matrix, ...: indent the row instead.
+            ShiftRow(cursorPos[0], static_cast<int>(INDENT));
+        } else {
+            std::string value = text->GetText();
+            value.insert(cursorPos[2], spaces);
+            text->SetText(value);
+            cursorPos[2] += spaces.size();
+            selectionStart = cursorPos;
+        }
+        MarkEdited();
+        return true;
+    }
+    // Whole rows: the cursor's, or every row the selection touches (not the
+    // row where it ends if it ends at that row's very start).
+    std::size_t first = cursorPos[0];
+    std::size_t last = cursorPos[0];
+    if (selection) {
+        first = selection->start[0];
+        last = selection->end[0];
+        const CursorPath& end = selection->end;
+        if (last > first && end.size() == 3 && end[1] == 0 && end[2] == 0) {
+            --last;
+        }
+    }
+    bool changed = false;
+    for (std::size_t row = first; row <= last && row < content.size(); ++row) {
+        const std::string before = content[row]->ToText();
+        ShiftRow(row, shift ? -static_cast<int>(INDENT) : static_cast<int>(INDENT));
+        changed |= content[row]->ToText() != before;
+    }
+    if (changed) {
+        MarkEdited();
+    }
+    return changed;
+}
+
+void FileMpp::ShiftRow(std::size_t row, int spaces) {
+    auto* text = dynamic_cast<TextNode*>(content[row]->GetChild(0));
+    if (!text) {
+        return;
+    }
+    std::string value = text->GetText();
+    std::size_t removed = 0;
+    if (spaces >= 0) {
+        value.insert(0, static_cast<std::size_t>(spaces), ' ');
+    } else {
+        const std::size_t leading = std::min(value.find_first_not_of(' '), value.size());
+        removed = std::min(leading, static_cast<std::size_t>(-spaces));
+        value.erase(0, removed);
+    }
+    text->SetText(value);
+    // Positions in that text move with it.
+    for (CursorPath* path : {&cursorPos, &selectionStart}) {
+        if (path->size() == 3 && (*path)[0] == row && (*path)[1] == 0) {
+            std::size_t& offset = (*path)[2];
+            offset = spaces >= 0 ? offset + static_cast<std::size_t>(spaces)
+                                 : offset - std::min(offset, removed);
+        }
+    }
+}
+
 // Enter at row level: the new row keeps the indentation, one level more
 // after a "{". Between "{" and "}" the "}" goes on a row of its own.
 void FileMpp::SplitRow(std::size_t row) {
@@ -263,7 +336,8 @@ bool FileMpp::PressKey(int key,
                        bool shift,
                        const TextMeasure* measure) {
     ResetCursorIfInvalid();
-    // Only these keys edit (arrows, Tab and Escape just move or toggle marks).
+    // Only these keys edit (arrows and Escape just move or toggle marks; Tab
+    // indents, see PressTab).
     // Deleting single characters groups into one undo step, like typing.
     std::optional<EditScope> scope;
     if (key == KEY_BACKSPACE || key == KEY_DELETE) {
@@ -320,7 +394,10 @@ bool FileMpp::PressKey(int key,
     if (shift && (key == KEY_LEFT || key == KEY_RIGHT)) {
         return ExtendSelection(key == KEY_RIGHT);
     }
-    if (key == KEY_ESCAPE || key == KEY_TAB) {
+    if (key == KEY_TAB) {
+        return PressTab(shift);
+    }
+    if (key == KEY_ESCAPE) {
         return false;
     }
 
@@ -453,8 +530,7 @@ bool FileMpp::TypeCharacter(char32_t codepoint) {
         return InsertNode(std::make_unique<SubNode>(std::make_unique<LineNode>()));
     }
     if (codepoint == U'^') {
-        return InsertNode(std::make_unique<ExpoNode>(
-            std::make_unique<LineNode>(), std::make_unique<LineNode>()));
+        return InsertNode(std::make_unique<ExpoNode>(std::make_unique<LineNode>()));
     }
     // A space ends the word, so each word (with its space) undoes in one go.
     EditScope scope(*this, EditKind::TYPING, codepoint == U' ');
